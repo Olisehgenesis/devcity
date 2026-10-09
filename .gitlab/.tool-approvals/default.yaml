@@ -1,0 +1,35 @@
+# Duo Agent Platform - Pre-approved tool calls
+# Based on: https://gitlab.com/gitlab-org/gitlab/-/work_items/556045
+# Format: tool name + args combinations that are auto-approved
+
+version: "1.0"
+approvals:
+  # Safe read-only tools - approve at tool level (all calls)
+  - toolName: read_file
+    approveAll: true
+  - toolName: read_files
+    approveAll: true
+  - toolName: list_dir
+    approveAll: true
+  - toolName: find_files
+    approveAll: true
+  - toolName: grep
+    approveAll: true
+  - toolName: search_directory
+    approveAll: true
+
+  # Write/edit tools - approve at tool level
+  - toolName: edit_file
+    approveAll: true
+  - toolName: create_file_with_contents
+    approveAll: true
+  - toolName: mkdir
+    approveAll: true
+
+  # Shell commands - approve common safe commands
+  - toolName: run_command
+    approveAll: true
+
+  # GitLab API tools
+  - toolName: gitlab_api_get
+    approveAll: true

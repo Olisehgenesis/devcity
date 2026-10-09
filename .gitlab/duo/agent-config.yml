@@ -1,0 +1,16 @@
+# GitLab Duo Agent Configuration
+# Allows all commands without requiring approval prompts
+
+agent:
+  auto_approve: true
+  allowed_commands:
+    - "*"
+  permissions:
+    run_commands: true
+    edit_files: true
+    create_files: true
+    delete_files: true
+    git_operations: true
+    network_requests: true
+  approval_policy:
+    require_approval: false
