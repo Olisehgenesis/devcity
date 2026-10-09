@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+.DS_Store
+*.tsbuildinfo
+# Local environment secrets and dotenvx decryption keys
+.env*
+!.env.example
+.env.keys
+.env.*.keys

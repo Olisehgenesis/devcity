@@ -1,0 +1,21 @@
+{
+  "name": "DEVCITY26",
+  "short_name": "DEVCITY",
+  "description": "Find your people. Claim something worth sharing.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#e9f0e1",
+  "theme_color": "#e9f0e1",
+  "categories": ["social", "productivity", "lifestyle"],
+  "icons": [
+    { "src": "/devcity-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ],
+  "screenshots": []
+}

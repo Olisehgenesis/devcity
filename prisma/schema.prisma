@@ -1,0 +1,365 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String                @id
+  name             String
+  email            String                @unique
+  emailVerified    Boolean               @default(false)
+  image            String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  accounts         Account[]
+  sessions         Session[]
+  passkeys         Passkey[]
+  profile          Profile?
+  messages         Message[]
+  memberships      ConversationMember[]
+  eventMemberships EventMember[]
+  claims           DropClaim[]
+  createdTokens    Token[]
+  createdDrops     Drop[]
+  broadcasts       Broadcast[]
+  broadcastLikes   BroadcastLike[]
+  broadcastComments BroadcastComment[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String   @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+model Passkey {
+  id           String   @id
+  name         String?
+  publicKey    String
+  userId       String
+  credentialID String   @unique
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime @default(now())
+  aaguid       String?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("passkeys")
+}
+
+model Profile {
+  id          String         @id @default(cuid())
+  userId      String         @unique
+  username    String         @unique
+  displayName String?
+  bio         String?        @db.VarChar(280)
+  avatarUrl   String?
+  visibility  VisibilityMode @default(APPROXIMATE)
+  privacy     ProfilePrivacy @default(PUBLIC)
+  presence    PresenceStatus @default(ONLINE)
+  presenceUntil DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallets     Wallet[]
+
+  @@map("profiles")
+}
+
+model Wallet {
+  id         String   @id @default(cuid())
+  profileId  String
+  address    String
+  chainId    Int
+  isPrimary  Boolean  @default(false)
+  verifiedAt DateTime?
+  createdAt  DateTime @default(now())
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([chainId, address])
+  @@index([profileId])
+  @@map("wallets")
+}
+
+model CityEvent {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  name        String
+  description String?
+  centerLat   Decimal       @db.Decimal(9, 6)
+  centerLng   Decimal       @db.Decimal(9, 6)
+  radiusM     Int?
+  startsAt    DateTime?
+  endsAt      DateTime?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  members     EventMember[]
+  drops       Drop[]
+  places      Place[]
+
+  @@index([isActive, startsAt])
+  @@map("city_events")
+}
+
+model EventMember {
+  eventId  String
+  userId   String
+  joinedAt DateTime  @default(now())
+  event    CityEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@index([userId])
+  @@map("event_members")
+}
+
+model Place {
+  id          String     @id @default(cuid())
+  eventId     String?
+  name        String
+  description String?
+  category    String
+  latitude    Decimal    @db.Decimal(9, 6)
+  longitude   Decimal    @db.Decimal(9, 6)
+  source      String     @default("organizer")
+  externalId  String?
+  createdAt   DateTime   @default(now())
+  event       CityEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  drops       Drop[]
+
+  @@unique([source, externalId])
+  @@index([latitude, longitude])
+  @@index([eventId])
+  @@map("places")
+}
+
+model Token {
+  id              String   @id @default(cuid())
+  creatorId       String
+  name            String
+  symbol          String
+  description     String?
+  iconUrl         String?
+  chainId         Int
+  contractAddress String?
+  maxSupply       Decimal  @db.Decimal(78, 0)
+  createdAt       DateTime @default(now())
+  creator         User     @relation(fields: [creatorId], references: [id], onDelete: Restrict)
+  drops           Drop[]
+
+  @@unique([chainId, contractAddress])
+  @@index([creatorId])
+  @@map("tokens")
+}
+
+model Drop {
+  id             String       @id @default(cuid())
+  creatorId      String
+  eventId        String?
+  placeId        String?
+  tokenId        String
+  name           String
+  amountPerClaim Decimal      @db.Decimal(78, 0)
+  maxClaims      Int
+  claimsCount    Int          @default(0)
+  startsAt       DateTime
+  endsAt         DateTime
+  status         DropStatus   @default(DRAFT)
+  latitude       Decimal?     @db.Decimal(9, 6)
+  longitude      Decimal?     @db.Decimal(9, 6)
+  qrPayloadHash  String?      @unique
+  qrExpiresAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  creator        User         @relation(fields: [creatorId], references: [id], onDelete: Restrict)
+  event          CityEvent?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  place          Place?       @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  token          Token        @relation(fields: [tokenId], references: [id], onDelete: Restrict)
+  claims         DropClaim[]
+
+  @@index([eventId, status, startsAt, endsAt])
+  @@index([latitude, longitude])
+  @@index([creatorId])
+  @@map("drops")
+}
+
+model DropClaim {
+  id        String      @id @default(cuid())
+  dropId    String
+  userId    String
+  amount    Decimal     @db.Decimal(78, 0)
+  status    ClaimStatus @default(PENDING)
+  txHash    String?     @unique
+  claimedAt DateTime    @default(now())
+  drop      Drop        @relation(fields: [dropId], references: [id], onDelete: Restrict)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([dropId, userId])
+  @@index([userId, claimedAt])
+  @@map("drop_claims")
+}
+
+model Conversation {
+  id        String               @id @default(cuid())
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  members   ConversationMember[]
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversationId String
+  userId         String
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId, joinedAt])
+  @@map("conversation_members")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String       @db.VarChar(4000)
+  createdAt      DateTime     @default(now())
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt, id])
+  @@index([senderId, createdAt])
+  @@map("messages")
+}
+
+model Broadcast {
+  id        String            @id @default(cuid())
+  userId    String
+  text      String            @db.VarChar(240)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes     BroadcastLike[]
+  comments  BroadcastComment[]
+
+  @@index([userId, createdAt])
+  @@map("broadcasts")
+}
+
+model BroadcastLike {
+  broadcastId String
+  userId      String
+  createdAt   DateTime  @default(now())
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([broadcastId, userId])
+  @@index([userId, createdAt])
+  @@map("broadcast_likes")
+}
+
+model BroadcastComment {
+  id          String    @id @default(cuid())
+  broadcastId String
+  userId      String
+  text        String    @db.VarChar(240)
+  createdAt   DateTime  @default(now())
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([broadcastId, createdAt])
+  @@index([userId, createdAt])
+  @@map("broadcast_comments")
+}
+
+enum VisibilityMode {
+  INVISIBLE
+  APPROXIMATE
+  EVENT_ONLY
+  FRIENDS_ONLY
+  VISIBLE
+}
+
+enum ProfilePrivacy {
+  PUBLIC
+  PRIVATE
+}
+
+enum PresenceStatus {
+  ONLINE
+  AWAY
+  OFFLINE
+}
+
+enum DropStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  ENDED
+  CLAIMED_OUT
+  CANCELLED
+}
+
+enum ClaimStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
