@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { getOrCreateUser, hasUserClaimed } from '@/lib/db-helpers';
+import { signClaimAuthorization } from '@/lib/signer';
 
-/**
- * POST /api/claims/authorize
- * Backend validates eligibility and signs claim authorization
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { dropId, userAddress, qrCode, location } = body;
+    const { dropId, userAddress } = body;
 
     if (!dropId || !userAddress) {
       return NextResponse.json(
@@ -16,9 +15,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const user = await getOrCreateUser(userAddress);
+    const alreadyClaimed = await hasUserClaimed(user.id, dropId);
+    
+    if (alreadyClaimed) {
+      return NextResponse.json(
+        { error: 'User has already claimed from this drop' },
+        { status: 400 }
+      );
+    }
+
+    const drop = await prisma.drop.findUnique({
+      where: { id: dropId },
+      include: { token: true },
+    });
+
+    if (!drop) {
+      return NextResponse.json(
+        { error: 'Drop not found or expired' },
+        { status: 404 }
+      );
+    }
+
+    if (drop.currentClaimants >= drop.maxClaimants) {
+      return NextResponse.json(
+        { error: 'Drop is full' },
+        { status: 400 }
+      );
+    }
+
     const nonce = 0;
     const expiresAt = Math.floor(Date.now() / 1000) + 300;
-    const signature = '0x' + '00'.repeat(65);
+
+    const signature = await signClaimAuthorization(
+      dropId,
+      userAddress,
+      nonce,
+      expiresAt
+    );
 
     return NextResponse.json(
       {
@@ -40,10 +74,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * GET /api/claims
- * Get claim history for a user
- */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -56,17 +86,33 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const claims = [
-      {
-        dropId: 'drop-1',
-        tokenSymbol: 'DEV26',
-        amount: '10',
-        claimedAt: Date.now() - 3600000,
-        txHash: '0x...',
-      },
-    ];
+    const user = await prisma.user.findUnique({
+      where: { walletAddress: userAddress },
+    });
 
-    return NextResponse.json({ claims }, { status: 200 });
+    if (!user) {
+      return NextResponse.json({ claims: [] }, { status: 200 });
+    }
+
+    const claims = await prisma.claim.findMany({
+      where: { userId: user.id },
+      include: { drop: true, token: true },
+      orderBy: { claimedAt: 'desc' },
+      take: 20,
+    });
+
+    return NextResponse.json(
+      {
+        claims: claims.map((c) => ({
+          dropId: c.dropId,
+          tokenSymbol: c.token.symbol,
+          amount: c.amount.toString(),
+          claimedAt: c.claimedAt.getTime(),
+          txHash: c.txHash,
+        })),
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Error fetching claims:', error);
     return NextResponse.json(

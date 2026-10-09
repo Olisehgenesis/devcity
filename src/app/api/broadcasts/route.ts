@@ -1,38 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { getOrCreateUser, createBroadcast, getBroadcasts } from '@/lib/db-helpers';
 
-/**
- * GET /api/broadcasts
- * Get city feed (broadcasts from nearby users)
- */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const eventId = searchParams.get('eventId');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const broadcasts = [
-      {
-        id: 'broadcast-1',
-        userAddress: '0x...',
-        username: 'genesis',
-        avatarUrl: 'https://api.dicebear.com/9.x/avataaars/svg?seed=genesis',
-        text: 'Just claimed DEV26! This event is amazing 🚀',
-        timestamp: Date.now() - 300000,
-        likes: 12,
-        liked: false,
-        comments: [
-          {
-            id: 'comment-1',
-            username: 'alice',
-            text: 'Nice! See you at the next drop',
-            timestamp: Date.now() - 60000,
-          },
-        ],
-      },
-    ];
+    const broadcasts = await getBroadcasts(limit, offset);
 
-    return NextResponse.json({ broadcasts, total: 1 }, { status: 200 });
+    return NextResponse.json(
+      {
+        broadcasts: broadcasts.map((b) => ({
+          id: b.id,
+          username: b.user.username,
+          avatarUrl: b.user.avatarUrl,
+          text: b.text,
+          timestamp: b.createdAt.getTime(),
+          likes: b.broadcastLikes.length,
+          comments: b.broadcastComments.map((c) => ({
+            id: c.id,
+            username: c.user.username,
+            text: c.text,
+            timestamp: c.createdAt.getTime(),
+          })),
+        })),
+        total: broadcasts.length,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Error fetching broadcasts:', error);
     return NextResponse.json(
@@ -42,14 +39,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * POST /api/broadcasts
- * Create a new broadcast
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userAddress, text, eventId } = body;
+    const { userAddress, text } = body;
 
     if (!userAddress || !text) {
       return NextResponse.json(
@@ -58,17 +51,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const broadcast = {
-      id: `broadcast-${Date.now()}`,
-      userAddress,
-      text: text.slice(0, 240),
-      eventId,
-      timestamp: Date.now(),
-      likes: 0,
-      comments: [],
-    };
+    const user = await getOrCreateUser(userAddress);
+    const broadcast = await createBroadcast(user.id, text);
 
-    return NextResponse.json({ broadcast }, { status: 201 });
+    return NextResponse.json(
+      {
+        id: broadcast.id,
+        username: broadcast.user.username,
+        text: broadcast.text,
+        timestamp: broadcast.createdAt.getTime(),
+        likes: 0,
+        comments: [],
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Error creating broadcast:', error);
     return NextResponse.json(

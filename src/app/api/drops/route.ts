@@ -1,33 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { listActiveDrops } from '@/lib/db-helpers';
 
-/**
- * GET /api/drops
- * List all active drops with optional filtering
- */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const eventId = searchParams.get('eventId');
-    const status = searchParams.get('status');
 
-    const drops = [
+    let drops;
+    if (eventId) {
+      drops = await prisma.drop.findMany({
+        where: {
+          eventId,
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+        include: { token: true, event: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else {
+      drops = await listActiveDrops();
+    }
+
+    return NextResponse.json(
       {
-        id: 'drop-1',
-        tokenId: 'token-dev26',
-        tokenSymbol: 'DEV26',
-        tokenIconUrl: 'https://api.dicebear.com/9.x/identicon/svg?seed=dev26',
-        totalAmount: '1000',
-        amountPerClaim: '10',
-        maxClaimants: 100,
-        currentClaimants: 45,
-        location: { lat: -1.2921, lng: 36.8219 },
-        expiresAt: Date.now() + 86400000,
-        qrCode: 'https://example.com/qr/drop-1',
-        eligibility: 'qr',
+        drops: drops.map((d) => ({
+          id: d.id,
+          tokenSymbol: d.token.symbol,
+          amount: d.amount.toString(),
+          maxClaimants: d.maxClaimants,
+          currentClaimants: d.currentClaimants,
+          expiresAt: d.expiresAt.getTime(),
+          location: {
+            lat: d.latitude,
+            lng: d.longitude,
+          },
+          radius: d.radius,
+        })),
       },
-    ];
-
-    return NextResponse.json({ drops }, { status: 200 });
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Error fetching drops:', error);
     return NextResponse.json(
@@ -37,28 +50,48 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * POST /api/drops
- * Create a new drop (admin only)
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { tokenId, amountPerClaim, maxClaimants, expiresAt, location, eligibility } = body;
+    const { tokenId, amount, maxClaimants, location, radius, expiresAt } = body;
 
-    const drop = {
-      id: `drop-${Date.now()}`,
-      tokenId,
-      amountPerClaim,
-      maxClaimants,
-      currentClaimants: 0,
-      expiresAt,
-      location,
-      eligibility,
-      createdAt: Date.now(),
-    };
+    if (!tokenId || !amount || !maxClaimants || !location) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({ drop }, { status: 201 });
+    const drop = await prisma.drop.create({
+      data: {
+        tokenId,
+        amount: BigInt(amount),
+        maxClaimants,
+        currentClaimants: 0,
+        latitude: location.lat,
+        longitude: location.lng,
+        radius: radius || 0.5,
+        expiresAt: new Date(expiresAt || Date.now() + 3600000),
+      },
+      include: { token: true },
+    });
+
+    return NextResponse.json(
+      {
+        id: drop.id,
+        tokenSymbol: drop.token.symbol,
+        amount: drop.amount.toString(),
+        maxClaimants: drop.maxClaimants,
+        currentClaimants: drop.currentClaimants,
+        expiresAt: drop.expiresAt.getTime(),
+        location: {
+          lat: drop.latitude,
+          lng: drop.longitude,
+        },
+        radius: drop.radius,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('Error creating drop:', error);
     return NextResponse.json(
