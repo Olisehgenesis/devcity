@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Button } from '@/components/ui/Button';
 import { Separator } from '@/components/ui/Separator';
 import { AvatarDisplay } from '@/components/avatar/AvatarComponents';
+import { AvatarPicker } from '@/components/social/AvatarPicker';
 import { formatDistanceToNow, formatTimeAgo, formatTokenAmount } from '@/lib/utils';
 import type { MapMarker, Drop, Token, Event, Place, Quest, User } from '@/types';
 import { useAppStore } from '@/lib/store';
@@ -38,7 +39,20 @@ function getPerson(userId: string): any {
 
 export function BottomSheets() {
   const { activeBottomSheet, selectedMarkerId, setActiveBottomSheet, mapMarkers } = useAppStore();
-  
+
+  if (activeBottomSheet === 'avatar') {
+    return (
+      <Sheet open={true} onOpenChange={() => setActiveBottomSheet('none')}>
+        <SheetContent side="bottom" className="max-h-[85vh]">
+          <SheetHeader>
+            <SheetTitle className="text-center">Your avatar</SheetTitle>
+          </SheetHeader>
+          <AvatarPicker />
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   if (activeBottomSheet === 'none' || !selectedMarkerId) return null;
   
   const marker = mapMarkers.find(m => m.id === selectedMarkerId);

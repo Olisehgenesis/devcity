@@ -22,6 +22,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
+import { eventMarkerSvg } from "./components/EventMapMarker";
 import { YouSheet } from "./components/YouSheet";
 import { TipSheet, type TipTarget } from "./components/TipSheet";
 import { StoryViewer } from "./components/StoryViewer";
@@ -44,6 +45,8 @@ type CityMarker = {
   initials?: string;
   amount?: string;
   avatar?: string;
+  url?: string;
+  category?: string;
 };
 type FilterKind = "all" | MarkerKind;
 type NavTab = "map" | "feed" | "chat" | "wallet" | "people";
@@ -57,6 +60,44 @@ const markers: CityMarker[] = [
   { id: "drop-2", kind: "drop", name: "FIRST ROUND", detail: "10 DEV · 6 left", distance: "near Flora Fountain", latitude: 18.9321, longitude: 72.8347, color: "orange", amount: "10" },
   { id: "place-2", kind: "place", name: "Oval Maidan", detail: "Open green · Churchgate", distance: "Churchgate", latitude: 18.9297, longitude: 72.8258, color: "mint", initials: "O" },
 ];
+
+type EventApiItem = {
+  id: string;
+  slug: string;
+  name: string;
+  summary: string | null;
+  location: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  startDate: string;
+  startTime: string | null;
+  url: string | null;
+  category?: string | null;
+};
+
+function eventToMarker(event: EventApiItem): CityMarker | null {
+  if (typeof event.latitude !== "number" || typeof event.longitude !== "number") return null;
+  const start = new Date(event.startDate);
+  const dateLabel = Number.isNaN(start.getTime())
+    ? ""
+    : start.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const summary = event.summary?.trim() ?? "";
+  const detail = summary
+    ? summary.length > 110 ? `${summary.slice(0, 109)}…` : summary
+    : [dateLabel, event.startTime].filter(Boolean).join(" · ") || "Devcon week event";
+  return {
+    id: `event-${event.slug}`,
+    kind: "event",
+    name: event.name,
+    detail,
+    distance: event.location?.trim() || "Mumbai",
+    latitude: event.latitude,
+    longitude: event.longitude,
+    color: "blue",
+    url: event.url ?? undefined,
+    category: event.category ?? undefined,
+  };
+}
 
 const MUMBAI_CENTER: [number, number] = [72.833, 18.932];
 const MUMBAI_PILOT_AREA: [number, number][] = [
@@ -97,6 +138,7 @@ export default function CityHome() {
   const mapMarkersRef = useRef(new globalThis.Map<string, MapLibreMarker>());
   const [filter, setFilter] = useState<FilterKind>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [cardClosed, setCardClosed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<NavTab>("map");
@@ -107,6 +149,7 @@ export default function CityHome() {
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
+  const introMount = useRef(Date.now());
   const [locationState, setLocationState] = useState<"checking" | "inside" | "outside" | "denied" | "unavailable">("checking");
   const [locationPromptOpen, setLocationPromptOpen] = useState(false);
   const [requestingLocation, setRequestingLocation] = useState(false);
@@ -114,6 +157,9 @@ export default function CityHome() {
   const [outsidePromptOpen, setOutsidePromptOpen] = useState(false);
   const [dropSheetOpen, setDropSheetOpen] = useState(false);
   const [dropClaimed, setDropClaimed] = useState(false);
+  const [eventMarkers, setEventMarkers] = useState<CityMarker[]>([]);
+  const didFitEventsRef = useRef(false);
+  const locationStateRef = useRef(locationState);
 
   useEffect(() => {
     if (!notice) return;
@@ -121,32 +167,9 @@ export default function CityHome() {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const noticeRef = useRef(notice);
   useEffect(() => {
-    noticeRef.current = notice;
-  }, [notice]);
-
-  useEffect(() => {
-    const feed = [
-      "Amina claimed 20 DEV at The Foundry",
-      "Kai went live at the Courtyard stage",
-      "Tobi joined the Dev meetup",
-      "Mara pinned a table at The Foundry",
-      "First Round drop has 6 left",
-    ];
-    let i = 0;
-    const id = setInterval(() => {
-      if (noticeRef.current) return;
-      const mine = useCityStore.getState().activity[0];
-      if (mine && Math.random() < 0.4) {
-        setNotice(mine.text);
-      } else {
-        setNotice(feed[i % feed.length]);
-        i += 1;
-      }
-    }, 7500);
-    return () => clearInterval(id);
-  }, []);
+    locationStateRef.current = locationState;
+  }, [locationState]);
   const [tipTarget, setTipTarget] = useState<TipTarget | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -171,18 +194,23 @@ export default function CityHome() {
     if (!avatarSeed) shuffleAvatar();
   }, [avatarSeed, shuffleAvatar]);
 
+  const allMarkers = useMemo(() => [...markers, ...eventMarkers], [eventMarkers]);
+  const kindById = useMemo(() => new globalThis.Map(allMarkers.map((item) => [item.id, item.kind] as const)), [allMarkers]);
+
   const visibleMarkers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-    return markers.filter((marker) => {
+    return allMarkers.filter((marker) => {
       const matchesFilter = filter === "all" || marker.kind === filter;
       const matchesSearch = !normalizedSearch || `${marker.name} ${marker.detail}`.toLowerCase().includes(normalizedSearch);
       return matchesFilter && matchesSearch;
     });
-  }, [filter, searchTerm]);
+  }, [allMarkers, filter, searchTerm]);
 
-  const selected = selectedId
-    ? visibleMarkers.find((marker) => marker.id === selectedId) ?? visibleMarkers[0]
-    : undefined;
+  const selected = cardClosed
+    ? undefined
+    : selectedId
+      ? visibleMarkers.find((marker) => marker.id === selectedId) ?? visibleMarkers[0]
+      : visibleMarkers[0];
   const isClaimed = hydrated && selected ? Boolean(claimedMap[selected.id]) : false;
   const connected = hydrated && isConnected;
 
@@ -249,6 +277,7 @@ export default function CityHome() {
         element.addEventListener("click", (event) => {
           event.stopPropagation();
           setSelectedId(marker.id);
+          setCardClosed(false);
           if (marker.kind === "drop") {
             setDropClaimed(Boolean(claimedMap[marker.id]));
             setDropSheetOpen(true);
@@ -280,8 +309,80 @@ export default function CityHome() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch("/api/events")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { events?: EventApiItem[] } | null) => {
+        if (cancelled || !data?.events) return;
+        const mapped = data.events
+          .map(eventToMarker)
+          .filter((item): item is CityMarker => item !== null);
+        setEventMarkers(mapped);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || eventMarkers.length === 0) return;
+    const registry = mapMarkersRef.current;
+    for (const [id, marker] of registry) {
+      if (id.startsWith("event-")) {
+        marker.remove();
+        registry.delete(id);
+      }
+    }
+    for (const marker of eventMarkers) {
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "map-marker event-pin-marker";
+      element.setAttribute("aria-label", `${marker.name}, ${marker.distance}`);
+      element.innerHTML = eventMarkerSvg({ title: marker.name, category: marker.category });
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setSelectedId(marker.id);
+        setCardClosed(false);
+      });
+      const mapMarker = new maplibregl.Marker({ element, anchor: "bottom" })
+        .setLngLat([marker.longitude, marker.latitude])
+        .addTo(map);
+      registry.set(marker.id, mapMarker);
+    }
+    if (!didFitEventsRef.current && locationStateRef.current !== "inside") {
+      didFitEventsRef.current = true;
+      const points = [...markers, ...eventMarkers].filter((item) => isInsideMumbai(item.longitude, item.latitude));
+      if (points.length > 1) {
+        const bounds = new maplibregl.LngLatBounds();
+        for (const point of points) bounds.extend([point.longitude, point.latitude]);
+        map.fitBounds(bounds, { padding: 80, maxZoom: 13.5, duration: 900 });
+      }
+    }
+  }, [eventMarkers, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const revealLabels = () => {
+      const visible = map.getZoom() >= 13.5;
+      for (const [id, marker] of mapMarkersRef.current) {
+        if (id.startsWith("event-")) marker.getElement().classList.toggle("event-label-visible", visible);
+      }
+    };
+    revealLabels();
+    map.on("zoom", revealLabels);
+    return () => {
+      map.off("zoom", revealLabels);
+    };
+  }, [mapReady, eventMarkers]);
+
+  useEffect(() => {
     if (mapReady || mapError) {
-      const timer = window.setTimeout(() => setShowIntro(false), mapReady ? 420 : 1200);
+      const elapsed = Date.now() - introMount.current;
+      const wait = Math.max(0, 1800 - elapsed);
+      const timer = window.setTimeout(() => setShowIntro(false), (mapReady ? 420 : 1200) + wait);
       return () => window.clearTimeout(timer);
     }
     const timer = window.setTimeout(() => {
@@ -319,7 +420,7 @@ export default function CityHome() {
 
   useEffect(() => {
     mapMarkersRef.current.forEach((marker, id) => {
-      const visible = filter === "all" || markers.find((item) => item.id === id)?.kind === filter;
+      const visible = filter === "all" || kindById.get(id) === filter;
       marker.getElement().classList.toggle("marker-filtered-out", !visible);
       marker.getElement().classList.toggle("marker-selected", selected?.id === id);
     });
@@ -329,7 +430,7 @@ export default function CityHome() {
     if (selected && mapReady) {
       mapRef.current?.flyTo({ center: [selected.longitude, selected.latitude], zoom: 15, duration: 650 });
     }
-  }, [filter, mapReady, selected]);
+  }, [filter, kindById, mapReady, selected]);
 
   useEffect(() => {
     if (!mapReady || !myPosition) return;
@@ -390,7 +491,8 @@ export default function CityHome() {
 
   function chooseFilter(nextFilter: FilterKind) {
     setFilter(nextFilter);
-    const firstVisible = markers.find((marker) => nextFilter === "all" || marker.kind === nextFilter);
+    setCardClosed(false);
+    const firstVisible = allMarkers.find((marker) => nextFilter === "all" || marker.kind === nextFilter);
     if (firstVisible) setSelectedId(firstVisible.id);
   }
 
@@ -483,7 +585,7 @@ export default function CityHome() {
       <section className="city-stage" id="city" aria-label="Live Mumbai city map">
         <div ref={mapContainer} className="real-city-map" aria-label="Map of Mumbai with city activity" />
         {showIntro && <div className={`city-intro${mapReady ? " is-leaving" : ""}`} aria-live="polite">
-          <Image className="city-loader-art" src="/devcity-mark.svg" alt="DEVCITY26" width={104} height={104} priority unoptimized />
+          <Image className="city-loader-art" src="/assets/loading.svg" alt="DEVCITY26" width={104} height={104} priority unoptimized />
           <strong>DEVCITY26</strong>
           <span className="intro-beta">[BETA]</span>
           <span className="intro-edition">MUMBAI EDITION</span>
@@ -520,6 +622,7 @@ export default function CityHome() {
             <span className={`card-icon tone-${selected.color}`}><MarkerIcon kind={selected.kind} size={17} /></span>
             <span className="card-kind">{selected.kind === "drop" ? "TOKEN DROP" : selected.kind.toUpperCase()}</span>
             <button className="card-more" onClick={() => setNotice(`${selected.name} · ${selected.distance} away`)} aria-label="More details"><ArrowUpRight size={17} /></button>
+            <button className="card-close" onClick={() => setCardClosed(true)} aria-label="Close details"><X size={17} /></button>
           </div>
           <h2>{selected.name}</h2>
           <p className="card-description">{selected.detail}</p>
@@ -547,6 +650,10 @@ export default function CityHome() {
                 <MessageCircle size={15} /> Say hello
               </button>
             </div>
+          ) : selected.kind === "event" && selected.url ? (
+            <a className="secondary-action" href={selected.url} target="_blank" rel="noreferrer">
+              View event <ArrowUpRight size={15} />
+            </a>
           ) : (
             <button className="secondary-action" onClick={() => setNotice(`Opening ${selected.name}`)}>
               See what&apos;s happening <ArrowUpRight size={15} />

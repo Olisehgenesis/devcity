@@ -177,6 +177,17 @@ export interface DropMarkerData {
   isEligible: boolean;
 }
 
+export interface EventTimetableSlotData {
+  id: string;
+  date: string;
+  dayNumber: number | null;
+  label: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  allDay: boolean;
+  title: string | null;
+}
+
 export interface EventMarkerData {
   eventId: string;
   name: string;
@@ -184,6 +195,13 @@ export interface EventMarkerData {
   tokenSymbol?: string;
   distance: number;
   isActive: boolean;
+  slug?: string;
+  organizer?: string;
+  summary?: string | null;
+  category?: string | null;
+  region?: string | null;
+  location?: string | null;
+  timetable?: EventTimetableSlotData[];
 }
 
 export interface PlaceMarkerData {
@@ -303,4 +321,114 @@ export interface GeohashCell {
     west: number;
   };
   center: Position;
+}
+
+// ─── Social / presence ────────────────────────────────────────────────
+
+export type AvatarMode = 'dicebear' | 'initials' | 'upload';
+export type ProfilePrivacy = 'public' | 'private';
+export type PresenceStatus = 'online' | 'away' | 'offline';
+
+export interface Claim {
+  id: string;
+  dropId: string;
+  dropName?: string;
+  tokenSymbol: string;
+  amount: string;
+  status: 'pending' | 'confirmed' | 'failed';
+  txHash?: string;
+  claimedAt: number;
+}
+
+export interface BroadcastComment {
+  id: string;
+  text: string;
+  at: number;
+  userAddress?: string;
+  username?: string;
+}
+
+export interface Broadcast {
+  id: string;
+  text: string;
+  at: number;
+  userAddress?: string;
+  username?: string;
+  avatarUrl?: string;
+  likes: number;
+  liked: boolean;
+  comments: BroadcastComment[];
+}
+
+export interface Story {
+  id: string;
+  userAddress?: string;
+  username: string;
+  avatarUrl?: string;
+  content: string;
+  createdAt: number;
+  place?: string;
+}
+
+export interface ActivityItem {
+  id: string;
+  kind: 'claim' | 'tip' | 'join' | 'broadcast' | 'story';
+  text: string;
+  at: number;
+  userAddress?: string;
+  username?: string;
+}
+
+export interface Presence {
+  status: PresenceStatus;
+  lat?: number;
+  lng?: number;
+  visibility: VisibilityMode;
+  updatedAt: number;
+}
+
+export interface NearbyUser {
+  id: string;
+  username: string;
+  walletAddress?: string;
+  avatarUrl?: string;
+  status: PresenceStatus;
+  distance: number;
+  lat?: number;
+  lng?: number;
+  lastActive: number;
+  tokenSymbol?: string;
+}
+
+export interface MeResponse {
+  user: User;
+  avatar: {
+    mode: AvatarMode;
+    seed: string;
+    imageData: string | null;
+  };
+  visibility: VisibilityMode;
+  presence: Presence;
+}
+
+export interface CreateDropInput {
+  name: string;
+  description: string;
+  tokenAddress: string;
+  amount: string;
+  maxClaimants: number;
+  startsAt: number;
+  endsAt: number;
+  lat: number;
+  lng: number;
+  creatorAddress: string;
+}
+
+export interface UpdateMeInput {
+  userAddress: string;
+  avatarMode?: AvatarMode;
+  avatarSeed?: string;
+  avatarImageData?: string | null;
+  visibility?: VisibilityMode;
+  presenceStatus?: PresenceStatus;
 }

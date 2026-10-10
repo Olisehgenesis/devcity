@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { AvatarDisplay } from '@/components/avatar/AvatarComponents';
 import { useAppStore } from '@/lib/store';
 import { useWallet } from '@/hooks/useWallet';
-import { Home, MapPin, Plus, Wallet, User, QrCode, Scan } from 'lucide-react';
+import { Home, MapPin, Plus, Wallet, User, QrCode, Scan, Users } from 'lucide-react';
 
 export function BottomNav() {
   const { activeBottomSheet, setActiveBottomSheet } = useAppStore();
@@ -17,6 +17,7 @@ export function BottomNav() {
     { id: 'map', icon: Home, label: 'City', badge: null },
     { id: 'drops', icon: MapPin, label: 'Drops', badge: '3' },
     { id: 'create', icon: Plus, label: '', badge: null, isCenter: true },
+    { id: 'social', icon: Users, label: 'Social', badge: null },
     { id: 'wallet', icon: Wallet, label: 'Wallet', badge: isConnected ? null : '!' },
     { id: 'profile', icon: User, label: 'Profile', badge: null },
   ];
@@ -96,6 +97,9 @@ function handleNavClick(id: string) {
       break;
     case 'drops':
       store.setActiveBottomSheet('drop' as any);
+      break;
+    case 'social':
+      store.setActiveBottomSheet('social');
       break;
     case 'wallet':
       store.setActiveBottomSheet('wallet');

@@ -15,12 +15,12 @@ export interface MapBounds {
 }
 
 export const DEFAULT_MAP_CENTER: Position = {
-  lat: -1.2921,
-  lng: 36.8219,
+  lat: 19.076,
+  lng: 72.8356,
   timestamp: Date.now(),
 };
 
-export const DEFAULT_MAP_ZOOM = 15;
+export const DEFAULT_MAP_ZOOM = 12;
 
 export const MAP_STYLES = {
   light: 'https://api.maptiler.com/maps/streets/style.json?key={key}',

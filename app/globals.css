@@ -940,6 +940,22 @@ h1, h2, h3, p { margin: 0; }
   transform: rotate(8deg);
 }
 
+.card-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  transition: background .15s ease, color .15s ease, transform .15s ease;
+}
+.card-close:hover {
+  background: var(--ink);
+  color: var(--paper);
+  transform: rotate(90deg);
+}
+
 .activity-card h2 {
   font-size: 23px;
   font-weight: 800;
@@ -2005,6 +2021,25 @@ h1, h2, h3, p { margin: 0; }
   color: #14241f;
   animation: marker-pop .36s cubic-bezier(.23, 1, .32, 1) both, event-glow 3.4s ease-in-out infinite;
 }
+.maplibregl-marker.map-marker.event-pin-marker,
+.map-marker.event-pin-marker {
+  width: 44px;
+  height: 60px;
+  min-width: 44px;
+  min-height: 60px;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.event-pin-marker svg { display: block; overflow: visible; filter: drop-shadow(0 3px 5px rgba(28, 41, 37, .24)); }
+.event-pin-marker .event-label { opacity: 0; translate: 0 5px; transition: opacity .22s ease, translate .22s ease; }
+.event-pin-marker.event-label-visible .event-label,
+.event-pin-marker.marker-selected .event-label { opacity: 1; translate: 0 0; }
+.event-pin-marker.marker-selected .event-pin-ring { opacity: 1; }
+.event-pin-marker.marker-selected svg { filter: drop-shadow(0 5px 9px rgba(28, 41, 37, .32)); }
 .maplibregl-marker.map-marker.marker-drop {
   min-height: 46px;
   padding: 4px 12px 4px 9px;

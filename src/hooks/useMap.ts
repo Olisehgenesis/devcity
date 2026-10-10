@@ -31,7 +31,7 @@ export function useMap(options: UseMapOptions): UseMapReturn {
     container,
     center = DEFAULT_MAP_CENTER,
     zoom = DEFAULT_MAP_ZOOM,
-    style = 'https://api.maptiler.com/maps/streets/style.json?key=demo',
+    style = 'https://tiles.openfreemap.org/styles/liberty',
     onLoad,
     onMove,
     onClick,

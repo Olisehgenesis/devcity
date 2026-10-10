@@ -1,10 +1,46 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
 .next/
 out/
-.DS_Store
+build/
+dist/
 *.tsbuildinfo
-# Local environment secrets and dotenvx decryption keys
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/coverage/
+contracts/coverage.json
+
+# IDE & OS
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+*.log
+
+# Environment
 .env*
 !.env.example
 .env.keys
 .env.*.keys
+
+# Turbo
+.turbo/
+
+# Prisma
+prisma/migrations/.migration_lock.toml
+
+# Test coverage
+coverage/
+.nyc_output/
+# Code graph tooling output
+graphify-out/
+# Nested foundry repo (managed separately)
+contracts/

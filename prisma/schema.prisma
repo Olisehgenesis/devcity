@@ -8,26 +8,34 @@ datasource db {
 }
 
 model User {
-  id               String                @id
-  name             String
-  email            String                @unique
-  emailVerified    Boolean               @default(false)
-  image            String?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  accounts         Account[]
-  sessions         Session[]
-  passkeys         Passkey[]
-  profile          Profile?
-  messages         Message[]
-  memberships      ConversationMember[]
-  eventMemberships EventMember[]
-  claims           DropClaim[]
-  createdTokens    Token[]
-  createdDrops     Drop[]
-  broadcasts       Broadcast[]
-  broadcastLikes   BroadcastLike[]
+  id                String               @id
+  walletAddress     String               @unique
+  username          String
+  email             String?              @unique
+  emailVerified     Boolean              @default(false)
+  image             String?
+  avatarUrl         String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  accounts          Account[]
+  sessions          Session[]
+  passkeys          Passkey[]
+  profile           Profile?
+  presence          Presence?
+  messages          Message[]
+  memberships       ConversationMember[]
+  eventMemberships  EventMember[]
+  claims            DropClaim[]
+  createdTokens     Token[]
+  createdDrops      Drop[]
+  broadcasts        Broadcast[]
+  broadcastLikes    BroadcastLike[]
   broadcastComments BroadcastComment[]
+  tipsSent          Tip[]                @relation("TipFrom")
+  tipsReceived      Tip[]                @relation("TipTo")
+  stories           Story[]
+  activity          Activity[]
+  avatarSettings    AvatarSettings?
 
   @@map("users")
 }
@@ -48,7 +56,7 @@ model Session {
 }
 
 model Account {
-  id                    String   @id
+  id                    String    @id
   accountId             String
   providerId            String
   userId                String
@@ -59,9 +67,9 @@ model Account {
   refreshTokenExpiresAt DateTime?
   scope                 String?
   password              String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, accountId])
   @@index([userId])
@@ -99,33 +107,33 @@ model Passkey {
 }
 
 model Profile {
-  id          String         @id @default(cuid())
-  userId      String         @unique
-  username    String         @unique
-  displayName String?
-  bio         String?        @db.VarChar(280)
-  avatarUrl   String?
-  visibility  VisibilityMode @default(APPROXIMATE)
-  privacy     ProfilePrivacy @default(PUBLIC)
-  presence    PresenceStatus @default(ONLINE)
+  id            String         @id @default(cuid())
+  userId        String         @unique
+  username      String         @unique
+  displayName   String?
+  bio           String?        @db.VarChar(280)
+  avatarUrl     String?
+  visibility    VisibilityMode @default(APPROXIMATE)
+  privacy       ProfilePrivacy @default(PUBLIC)
+  presence      PresenceStatus @default(ONLINE)
   presenceUntil DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  wallets     Wallet[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallets       Wallet[]
 
   @@map("profiles")
 }
 
 model Wallet {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   profileId  String
   address    String
   chainId    Int
-  isPrimary  Boolean  @default(false)
+  isPrimary  Boolean   @default(false)
   verifiedAt DateTime?
-  createdAt  DateTime @default(now())
-  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  profile    Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([chainId, address])
   @@index([profileId])
@@ -185,8 +193,57 @@ model Place {
   @@map("places")
 }
 
+model Event {
+  id         String          @id @default(cuid())
+  slug       String          @unique
+  name       String
+  organizer  String
+  summary    String?
+  category   String?
+  kind       String?
+  region     String?
+  location   String?
+  latitude    Float?
+  longitude   Float?
+  online     Boolean         @default(false)
+  startDate  DateTime?       @db.Date
+  endDate    DateTime?       @db.Date
+  startTime  String?
+  endTime    String?
+  url        String?
+  source     String          @default("krew3")
+  externalId String?
+  isActive   Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  timetable  TimetableSlot[]
+
+  @@unique([source, externalId])
+  @@index([startDate])
+  @@index([region, category])
+  @@map("events")
+}
+
+model TimetableSlot {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  dayNumber Int      @default(1)
+  label     String?
+  startTime String?
+  endTime   String?
+  allDay    Boolean  @default(false)
+  title     String?
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, date])
+  @@index([date])
+  @@map("timetable_slots")
+}
+
 model Token {
-  id              String   @id @default(cuid())
+  id              String      @id @default(cuid())
   creatorId       String
   name            String
   symbol          String
@@ -194,10 +251,12 @@ model Token {
   iconUrl         String?
   chainId         Int
   contractAddress String?
-  maxSupply       Decimal  @db.Decimal(78, 0)
-  createdAt       DateTime @default(now())
-  creator         User     @relation(fields: [creatorId], references: [id], onDelete: Restrict)
+  maxSupply       Decimal     @db.Decimal(78, 0)
+  createdAt       DateTime    @default(now())
+  creator         User        @relation(fields: [creatorId], references: [id], onDelete: Restrict)
   drops           Drop[]
+  claims          DropClaim[]
+  tips            Tip[]
 
   @@unique([chainId, contractAddress])
   @@index([creatorId])
@@ -205,31 +264,33 @@ model Token {
 }
 
 model Drop {
-  id             String       @id @default(cuid())
-  creatorId      String
-  eventId        String?
-  placeId        String?
-  tokenId        String
-  name           String
-  amountPerClaim Decimal      @db.Decimal(78, 0)
-  maxClaims      Int
-  claimsCount    Int          @default(0)
-  startsAt       DateTime
-  endsAt         DateTime
-  status         DropStatus   @default(DRAFT)
-  latitude       Decimal?     @db.Decimal(9, 6)
-  longitude      Decimal?     @db.Decimal(9, 6)
-  qrPayloadHash  String?      @unique
-  qrExpiresAt    DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  creator        User         @relation(fields: [creatorId], references: [id], onDelete: Restrict)
-  event          CityEvent?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  place          Place?       @relation(fields: [placeId], references: [id], onDelete: SetNull)
-  token          Token        @relation(fields: [tokenId], references: [id], onDelete: Restrict)
-  claims         DropClaim[]
+  id               String      @id @default(cuid())
+  creatorId        String
+  eventId          String?
+  placeId          String?
+  tokenId          String
+  name             String
+  description      String?
+  amount           Decimal     @db.Decimal(78, 0)
+  maxClaimants     Int
+  currentClaimants Int         @default(0)
+  radius           Float       @default(0.5)
+  startsAt         DateTime
+  expiresAt        DateTime
+  status           DropStatus  @default(DRAFT)
+  latitude         Decimal?    @db.Decimal(9, 6)
+  longitude        Decimal?    @db.Decimal(9, 6)
+  qrPayloadHash    String?     @unique
+  qrExpiresAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  creator          User        @relation(fields: [creatorId], references: [id], onDelete: Restrict)
+  event            CityEvent?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  place            Place?      @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  token            Token       @relation(fields: [tokenId], references: [id], onDelete: Restrict)
+  claims           DropClaim[]
 
-  @@index([eventId, status, startsAt, endsAt])
+  @@index([eventId, status, startsAt, expiresAt])
   @@index([latitude, longitude])
   @@index([creatorId])
   @@map("drops")
@@ -239,12 +300,14 @@ model DropClaim {
   id        String      @id @default(cuid())
   dropId    String
   userId    String
+  tokenId   String?
   amount    Decimal     @db.Decimal(78, 0)
   status    ClaimStatus @default(PENDING)
   txHash    String?     @unique
   claimedAt DateTime    @default(now())
   drop      Drop        @relation(fields: [dropId], references: [id], onDelete: Restrict)
   user      User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  token     Token?      @relation(fields: [tokenId], references: [id], onDelete: SetNull)
 
   @@unique([dropId, userId])
   @@index([userId, claimedAt])
@@ -291,14 +354,14 @@ model Message {
 }
 
 model Broadcast {
-  id        String            @id @default(cuid())
-  userId    String
-  text      String            @db.VarChar(240)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  likes     BroadcastLike[]
-  comments  BroadcastComment[]
+  id                String             @id @default(cuid())
+  userId            String
+  text              String             @db.VarChar(240)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  broadcastLikes    BroadcastLike[]
+  broadcastComments BroadcastComment[]
 
   @@index([userId, createdAt])
   @@map("broadcasts")
@@ -328,6 +391,85 @@ model BroadcastComment {
   @@index([broadcastId, createdAt])
   @@index([userId, createdAt])
   @@map("broadcast_comments")
+}
+
+model Presence {
+  id          String         @id @default(cuid())
+  userId      String         @unique
+  latitude    Decimal        @db.Decimal(9, 6)
+  longitude   Decimal        @db.Decimal(9, 6)
+  visibility  VisibilityMode @default(APPROXIMATE)
+  status      PresenceStatus @default(OFFLINE)
+  lastUpdated DateTime       @default(now())
+  expiresAt   DateTime
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("presence")
+}
+
+model Tip {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  tokenId    String
+  amount     Decimal  @db.Decimal(78, 0)
+  message    String?  @db.VarChar(280)
+  txHash     String?  @unique
+  createdAt  DateTime @default(now())
+  fromUser   User     @relation("TipFrom", fields: [fromUserId], references: [id], onDelete: Restrict)
+  toUser     User     @relation("TipTo", fields: [toUserId], references: [id], onDelete: Restrict)
+  token      Token    @relation(fields: [tokenId], references: [id], onDelete: Restrict)
+
+  @@index([fromUserId, createdAt])
+  @@index([toUserId, createdAt])
+  @@map("tips")
+}
+
+model Story {
+  id        String   @id @default(cuid())
+  userId    String
+  content   String   @db.VarChar(1000)
+  mediaUrl  String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("stories")
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String   @db.VarChar(32)
+  text      String   @db.VarChar(280)
+  refId     String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("activity")
+}
+
+model AvatarSettings {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  mode      AvatarMode @default(DICEBEAR)
+  seed      String?
+  imageData String?    @db.Text
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("avatar_settings")
+}
+
+enum AvatarMode {
+  DICEBEAR
+  INITIALS
+  UPLOAD
 }
 
 enum VisibilityMode {

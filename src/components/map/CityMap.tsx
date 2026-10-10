@@ -20,7 +20,7 @@ interface CityMapProps {
 
 export function CityMap({
   className,
-  style = 'https://api.maptiler.com/maps/streets/style.json?key=demo',
+  style = 'https://tiles.openfreemap.org/styles/liberty',
   onMarkerClick,
   onMapClick,
   showUserLocation = true,

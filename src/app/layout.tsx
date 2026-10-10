@@ -111,6 +111,32 @@ export default function RootLayout({
         <link rel="preconnect" href="https://api.maptiler.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://sepolia.base.org" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://api.dicebear.com" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'WebApplication',
+              name: 'DEVCITY26',
+              url: 'https://devcity26.xyz',
+              applicationCategory: 'SocialApplication',
+              operatingSystem: 'Web',
+              description: 'Enter the city. Find your people. Claim something worth sharing.',
+              offers: {
+                '@type': 'Offer',
+                price: '0',
+                priceCurrency: 'USD',
+              },
+              featureList: [
+                'Live onchain city map',
+                'Token drops and claims',
+                'Social feed and broadcasts',
+                'Stories',
+                'Nearby people and presence',
+              ],
+            }),
+          }}
+        />
       </head>
       <body className="h-full bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 antialiased">
         <Providers>{children}</Providers>

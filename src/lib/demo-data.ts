@@ -464,3 +464,85 @@ export function getDemoData() {
     markers: demoMarkers,
   };
 }
+
+// ─── Demo social data (fallback until backend API is live) ───────────
+const now = Date.now();
+
+export const demoBroadcasts = [
+  {
+    id: 'bc-1',
+    text: 'KICC drop is live — 500 tokens up for grabs. Be there in the next 20 minutes!',
+    at: now - 4 * 60_000,
+    userAddress: demoPeople[0]?.id,
+    username: demoPeople[0]?.username ?? 'alice',
+    avatarUrl: demoPeople[0]?.avatarUrl,
+    likes: 12,
+    liked: false,
+    comments: [
+      { id: 'bc1-c1', text: 'On my way 🏃', at: now - 3 * 60_000, userAddress: demoPeople[1]?.id, username: demoPeople[1]?.username },
+      { id: 'bc1-c2', text: 'Just claimed mine! 🎁', at: now - 2 * 60_000, userAddress: demoPeople[2]?.id, username: demoPeople[2]?.username },
+    ],
+  },
+  {
+    id: 'bc-2',
+    text: 'Anyone up for a meetup at the amphitheater after the keynote?',
+    at: now - 15 * 60_000,
+    userAddress: demoPeople[2]?.id,
+    username: demoPeople[2]?.username ?? 'carol',
+    avatarUrl: demoPeople[2]?.avatarUrl,
+    likes: 8,
+    liked: false,
+    comments: [
+      { id: 'bc2-c1', text: 'Count me in!', at: now - 12 * 60_000, userAddress: demoPeople[3]?.id, username: demoPeople[3]?.username },
+    ],
+  },
+  {
+    id: 'bc-3',
+    text: 'The new token launch is live on the exchange — check the wallet tab.',
+    at: now - 40 * 60_000,
+    userAddress: demoPeople[1]?.id,
+    username: demoPeople[1]?.username ?? 'bob',
+    avatarUrl: demoPeople[1]?.avatarUrl,
+    likes: 25,
+    liked: true,
+    comments: [],
+  },
+];
+
+export const demoStories = [
+  {
+    id: 'st-1',
+    userAddress: demoPeople[0]?.id,
+    username: demoPeople[0]?.username ?? 'alice',
+    avatarUrl: demoPeople[0]?.avatarUrl,
+    content: 'Sunrise over the city — the KICC drop is live! 🌅🎁',
+    createdAt: now - 30 * 60_000,
+    place: 'KICC',
+  },
+  {
+    id: 'st-2',
+    userAddress: demoPeople[1]?.id,
+    username: demoPeople[1]?.username ?? 'bob',
+    avatarUrl: demoPeople[1]?.avatarUrl,
+    content: 'Found a hidden quest near the amphitheater 🗺️',
+    createdAt: now - 2 * 60 * 60_000,
+    place: 'Amphitheater',
+  },
+  {
+    id: 'st-3',
+    userAddress: demoPeople[2]?.id,
+    username: demoPeople[2]?.username ?? 'carol',
+    avatarUrl: demoPeople[2]?.avatarUrl,
+    content: 'Coffee + code at the hub. Who is joining? ☕💻',
+    createdAt: now - 5 * 60 * 60_000,
+    place: 'The Hub',
+  },
+];
+
+export const demoActivity = [
+  { id: 'act-1', kind: 'claim', text: 'alice claimed 500 TOKEN at KICC', at: now - 2 * 60_000, userAddress: demoPeople[0]?.id, username: demoPeople[0]?.username },
+  { id: 'act-2', kind: 'join', text: 'bob joined the city', at: now - 5 * 60_000, userAddress: demoPeople[1]?.id, username: demoPeople[1]?.username },
+  { id: 'act-3', kind: 'broadcast', text: 'carol broadcast a city signal', at: now - 15 * 60_000, userAddress: demoPeople[2]?.id, username: demoPeople[2]?.username },
+  { id: 'act-4', kind: 'tip', text: 'david tipped alice 10 TOKEN', at: now - 20 * 60_000, userAddress: demoPeople[3]?.id, username: demoPeople[3]?.username },
+  { id: 'act-5', kind: 'story', text: 'eve posted a story from the amphitheater', at: now - 25 * 60_000, userAddress: demoPeople[4]?.id, username: demoPeople[4]?.username },
+];

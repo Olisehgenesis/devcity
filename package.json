@@ -10,7 +10,8 @@
     "db:generate": "dotenvx run -- prisma generate",
     "db:migrate": "dotenvx run -- prisma migrate dev",
     "db:deploy": "dotenvx run -- prisma migrate deploy",
-    "db:studio": "dotenvx run -- prisma studio"
+    "db:studio": "dotenvx run -- prisma studio",
+    "db:seed": "dotenvx run -- node scripts/seed-events.mjs"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.7",
@@ -44,6 +45,7 @@
     "better-auth": "^1.7.7",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "iconoir-react": "^7.12.1",
     "lucide-react": "^0.468.0",
     "maplibre-gl": "^6.13.0",
     "next": "^15.2.0",

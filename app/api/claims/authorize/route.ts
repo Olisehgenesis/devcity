@@ -1,0 +1,19 @@
+import { NextResponse } from 'next/server';
+import { authorizeClaim, ApiError } from '@/lib/db-helpers';
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { signature, dropId, dropIdBytes32, claimer, nonce, amount, expiresAt } = await authorizeClaim(
+      body.dropId,
+      body.userAddress,
+    );
+    return NextResponse.json({ signature, dropId, dropIdBytes32, claimer, nonce, amount, expiresAt });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    console.error('POST /api/claims/authorize', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
