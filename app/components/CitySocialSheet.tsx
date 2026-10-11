@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Heart, MapPin, MessageCircle, Paperclip, Search, Send, Sparkles } from 'lucide-react';
+import { ArrowLeft, Gift, Hand, Heart, MapPin, MessageCircle, Paperclip, Search, Send, Sparkles } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { timeAgo, type ActivityItem, type Broadcast } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
@@ -27,23 +27,34 @@ interface CitySocialSheetProps {
   onTip: (name: string, initials: string, color: string) => void;
 }
 
-const PEOPLE = [
-  { name: 'Genesis', initials: 'G', color: 'coral', detail: 'Looking for the rooftop set', place: 'Kala Ghoda', live: true },
-  { name: 'Amina', initials: 'A', color: 'yellow', detail: 'Just claimed 20 DEV', place: 'Churchgate', live: true },
-  { name: 'Kai', initials: 'K', color: 'blue', detail: 'Live at the Courtyard stage', place: 'Fort', live: true },
-  { name: 'Mara', initials: 'M', color: 'pink', detail: 'Pinned a table for friends', place: 'Kala Ghoda', live: false },
-  { name: 'Tobi', initials: 'T', color: 'mint', detail: 'Joined the Dev meetup', place: 'Fort', live: true },
-];
+type PresenceUser = {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  status: string;
+  distance: number;
+};
 
-const COMMUNITY_ACTIVITY = [
-  { id: 'live-1', kind: 'claim', text: 'Amina claimed 20 DEV at The Foundry', at: Date.now() - 3 * 60_000, place: 'Kala Ghoda' },
-  { id: 'live-2', kind: 'join', text: 'Kai went live at the Courtyard stage', at: Date.now() - 8 * 60_000, place: 'Fort' },
-  { id: 'live-3', kind: 'join', text: 'Tobi joined the Dev meetup', at: Date.now() - 14 * 60_000, place: 'Fort' },
-  { id: 'live-4', kind: 'tip', text: 'First Round drop has 6 left', at: Date.now() - 21 * 60_000, place: 'Flora Fountain' },
-];
+const TONES = ['coral', 'yellow', 'blue', 'pink', 'mint', 'lime', 'orange'];
+
+function toneForUsername(username: string) {
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) hash = (hash * 31 + username.charCodeAt(i)) >>> 0;
+  return TONES[hash % TONES.length];
+}
+
+function initialsFor(username: string) {
+  return username
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('') || username.slice(0, 2).toUpperCase();
+}
 
 export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, onBroadcast, onLikeBroadcast, onCommentBroadcast, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
+  const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
   const [broadcastDraft, setBroadcastDraft] = useState('');
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [commentingId, setCommentingId] = useState<string | null>(null);
@@ -53,8 +64,22 @@ export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, o
   const fileInput = useRef<HTMLInputElement>(null);
   const xmtp = useXmtpChat(open && view === 'chat', onNotify);
 
-  const filteredPeople = useMemo(() => PEOPLE.filter((person) =>
-    `${person.name} ${person.detail} ${person.place}`.toLowerCase().includes(query.toLowerCase())), [query]);
+  useEffect(() => {
+    if (!open || view !== 'people') return;
+    let cancelled = false;
+    fetch('/api/presence/nearby?lat=19.0662&lng=72.8697&radius=50')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { users?: PresenceUser[] } | null) => {
+        if (!cancelled && data?.users) setNearbyPeople(data.users);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, view]);
+
+  const filteredPeople = useMemo(() => nearbyPeople.filter((person) =>
+    `${person.username} ${person.status}`.toLowerCase().includes(query.toLowerCase())), [nearbyPeople, query]);
   const thread = xmtp.threads.find((item) => item.id === xmtp.activeThreadId);
   const title = view === 'feed' ? 'Around the city' : view === 'people' ? 'People nearby' : thread ? shortInbox(thread.peerInboxId) : 'Your chats';
 
@@ -135,12 +160,16 @@ export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, o
               </form>}
             </article>
           ))}
-          {[...activity.map((item) => ({ ...item, place: 'Mumbai' })), ...COMMUNITY_ACTIVITY]
+          {broadcasts.length === 0 && activity.length === 0 && (
+            <p className="social-empty">Nothing happening yet. Share the first broadcast.</p>
+          )}
+          {activity
+            .map((item) => ({ ...item, place: 'Mumbai' }))
             .sort((a, b) => b.at - a.at)
             .map((item) => (
               <article className="feed-item" key={item.id}>
                 <span className={`feed-item-icon feed-${item.kind}`}>
-                  {item.kind === 'claim' ? '🎁' : item.kind === 'tip' ? '✨' : '👋'}
+                  {item.kind === 'claim' ? <Gift size={15} /> : item.kind === 'tip' ? <Sparkles size={15} /> : <Hand size={15} />}
                 </span>
                 <div className="feed-item-copy">
                   <p>{item.text}</p>
@@ -157,13 +186,16 @@ export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, o
         <div className="social-people">
           <label className="social-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find someone in the city" /></label>
           <p className="social-section-label">IN THE CITY <span>{filteredPeople.length}</span></p>
-          {filteredPeople.map((person) => (
-            <article className="people-item" key={person.name}>
-              <span className={`people-avatar tone-${person.color}`}><img src={dicebearAvatarUrl(person.name, avatarBackgroundForColor(person.color))} alt={`${person.name}'s avatar`} />{person.live && <i />}</span>
-              <div className="people-copy"><strong>{person.name}</strong><span>{person.detail}</span><small><MapPin size={11} /> {person.place} · approximate</small></div>
-              <button className="people-message" onClick={() => onTip(person.name, person.initials, person.color)} aria-label={`Tip ${person.name}`} title={`Tip ${person.name}`}><Sparkles size={17} /></button>
-            </article>
-          ))}
+          {filteredPeople.map((person) => {
+            const tone = toneForUsername(person.username);
+            return (
+              <article className="people-item" key={person.userId}>
+                <span className={`people-avatar tone-${tone}`}><img src={person.avatarUrl ?? dicebearAvatarUrl(person.username, avatarBackgroundForColor(tone))} alt={`${person.username}'s avatar`} /><i /></span>
+                <div className="people-copy"><strong>{person.username}</strong><span>{person.status}</span><small><MapPin size={11} /> {person.distance} km away</small></div>
+                <button className="people-message" onClick={() => onTip(person.username, initialsFor(person.username), tone)} aria-label={`Tip ${person.username}`} title={`Tip ${person.username}`}><Sparkles size={17} /></button>
+              </article>
+            );
+          })}
           {filteredPeople.length === 0 && <p className="social-empty">No one by that name is in this part of the city yet.</p>}
         </div>
       )}

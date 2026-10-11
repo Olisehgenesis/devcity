@@ -1,8 +1,8 @@
 import { createConfig, http } from 'wagmi';
-import { base, baseSepolia } from 'wagmi/chains';
+import { celo, celoSepolia } from 'wagmi/chains';
 import { injected, coinbaseWallet, walletConnect } from 'wagmi/connectors';
 
-export const SUPPORTED_CHAINS = [baseSepolia, base] as const;
+export const SUPPORTED_CHAINS = [celoSepolia, celo] as const;
 
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo-project-id';
 
@@ -17,8 +17,8 @@ export const wagmiConfig = createConfig({
     walletConnect({ projectId }),
   ],
   transports: {
-    [baseSepolia.id]: http(),
-    [base.id]: http(),
+    [celoSepolia.id]: http(),
+    [celo.id]: http(),
   },
 });
 
@@ -26,18 +26,18 @@ export const PAYMASTER_URL = process.env.NEXT_PUBLIC_PAYMASTER_URL || '';
 export const BUNDLER_URL = process.env.NEXT_PUBLIC_BUNDLER_URL || '';
 
 export const CONTRACT_ADDRESSES = {
-  [baseSepolia.id]: {
+  [celoSepolia.id]: {
     tokenFactory: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS_SEPOLIA || '0x0000000000000000000000000000000000000000',
     dropManager: process.env.NEXT_PUBLIC_DROP_MANAGER_ADDRESS_SEPOLIA || '0x0000000000000000000000000000000000000000',
   },
-  [base.id]: {
+  [celo.id]: {
     tokenFactory: process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS || '0x0000000000000000000000000000000000000000',
     dropManager: process.env.NEXT_PUBLIC_DROP_MANAGER_ADDRESS || '0x0000000000000000000000000000000000000000',
   },
 } as const;
 
 export function getContractAddresses(chainId: number) {
-  return CONTRACT_ADDRESSES[chainId as keyof typeof CONTRACT_ADDRESSES] || CONTRACT_ADDRESSES[baseSepolia.id];
+  return CONTRACT_ADDRESSES[chainId as keyof typeof CONTRACT_ADDRESSES] || CONTRACT_ADDRESSES[celoSepolia.id];
 }
 
 export const TOKEN_FACTORY_ABI = [
@@ -45,10 +45,7 @@ export const TOKEN_FACTORY_ABI = [
     inputs: [
       { name: 'name', type: 'string' },
       { name: 'symbol', type: 'string' },
-      { name: 'maxSupply', type: 'uint256' },
-      { name: 'initialSupply', type: 'uint256' },
-      { name: 'description', type: 'string' },
-      { name: 'iconURI', type: 'string' },
+      { name: 'tokenURI', type: 'string' },
     ],
     name: 'createToken',
     outputs: [{ name: 'tokenAddress', type: 'address' }],
@@ -64,8 +61,7 @@ export const TOKEN_FACTORY_ABI = [
       { name: 'maxSupply', type: 'uint256' },
       { name: 'totalSupply', type: 'uint256' },
       { name: 'creator', type: 'address' },
-      { name: 'description', type: 'string' },
-      { name: 'iconURI', type: 'string' },
+      { name: 'tokenURI', type: 'string' },
     ],
     stateMutability: 'view',
     type: 'function',
@@ -77,6 +73,7 @@ export const TOKEN_FACTORY_ABI = [
       { indexed: true, name: 'creator', type: 'address' },
       { name: 'name', type: 'string' },
       { name: 'symbol', type: 'string' },
+      { name: 'tokenURI', type: 'string' },
     ],
     name: 'TokenCreated',
     type: 'event',
@@ -94,6 +91,8 @@ export const DROP_MANAGER_ABI = [
       { name: 'startTime', type: 'uint256' },
       { name: 'endTime', type: 'uint256' },
       { name: 'claimAuthority', type: 'address' },
+      { name: 'eventId', type: 'bytes32' },
+      { name: 'placeId', type: 'bytes32' },
     ],
     name: 'createDrop',
     outputs: [],
@@ -144,6 +143,13 @@ export const DROP_MANAGER_ABI = [
       { indexed: true, name: 'dropId', type: 'bytes32' },
       { indexed: true, name: 'token', type: 'address' },
       { name: 'totalAmount', type: 'uint256' },
+      { name: 'amountPerClaim', type: 'uint256' },
+      { name: 'maxClaimants', type: 'uint256' },
+      { name: 'startTime', type: 'uint256' },
+      { name: 'endTime', type: 'uint256' },
+      { name: 'claimAuthority', type: 'address' },
+      { name: 'eventId', type: 'bytes32' },
+      { name: 'placeId', type: 'bytes32' },
     ],
     name: 'DropCreated',
     type: 'event',

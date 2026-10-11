@@ -25,10 +25,8 @@ import {
 import { eventMarkerSvg } from "./components/EventMapMarker";
 import { YouSheet } from "./components/YouSheet";
 import { TipSheet, type TipTarget } from "./components/TipSheet";
-import { StoryViewer } from "./components/StoryViewer";
 import { Sheet } from "./components/Sheet";
 import { CitySocialSheet, type SocialView } from "./components/CitySocialSheet";
-import { stories } from "./lib/stories";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
 
@@ -44,22 +42,14 @@ type CityMarker = {
   color: string;
   initials?: string;
   amount?: string;
+  tokenSymbol?: string;
+  claimedCount?: number;
   avatar?: string;
   url?: string;
   category?: string;
 };
 type FilterKind = "all" | MarkerKind;
 type NavTab = "map" | "feed" | "chat" | "wallet" | "people";
-
-const markers: CityMarker[] = [
-  { id: "drop-1", kind: "drop", name: "ETHHOUSE DROP", detail: "50 ETHHOUSE · 18 left", distance: "near Gateway", latitude: 18.9221, longitude: 72.8347, color: "lime", amount: "50" },
-  { id: "person-1", kind: "person", name: "Genesis", detail: "Looking for the rooftop set", distance: "near Kala Ghoda", latitude: 18.9282, longitude: 72.8314, color: "coral", initials: "G", avatar: "https://api.dicebear.com/9.x/notionists/svg?seed=genesis-mumbai&backgroundColor=ff795f" },
-  { id: "event-1", kind: "event", name: "Dev meetup", detail: "Talks start at 7:00", distance: "at Fort", latitude: 18.9352, longitude: 72.8371, color: "blue", initials: "D" },
-  { id: "place-1", kind: "place", name: "Kala Ghoda", detail: "Art district · cafés and galleries", distance: "Fort district", latitude: 18.9273, longitude: 72.8318, color: "pink", initials: "K" },
-  { id: "person-2", kind: "person", name: "Amina", detail: "Just claimed 20 DEV", distance: "near Churchgate", latitude: 18.9326, longitude: 72.8262, color: "yellow", initials: "A", avatar: "https://api.dicebear.com/9.x/notionists/svg?seed=amina-mumbai&backgroundColor=ffd75e" },
-  { id: "drop-2", kind: "drop", name: "FIRST ROUND", detail: "10 DEV · 6 left", distance: "near Flora Fountain", latitude: 18.9321, longitude: 72.8347, color: "orange", amount: "10" },
-  { id: "place-2", kind: "place", name: "Oval Maidan", detail: "Open green · Churchgate", distance: "Churchgate", latitude: 18.9297, longitude: 72.8258, color: "mint", initials: "O" },
-];
 
 type EventApiItem = {
   id: string;
@@ -99,7 +89,45 @@ function eventToMarker(event: EventApiItem): CityMarker | null {
   };
 }
 
+type DropApiItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  tokenSymbol: string | null;
+  amount: string;
+  maxClaimants: number;
+  currentClaimants: number;
+  lat: number | null;
+  lng: number | null;
+};
+
+function dropToMarker(drop: DropApiItem): CityMarker | null {
+  if (typeof drop.lat !== "number" || typeof drop.lng !== "number") return null;
+  const token = drop.tokenSymbol ?? "TOKENS";
+  return {
+    id: `drop-${drop.id}`,
+    kind: "drop",
+    name: drop.name,
+    detail: drop.description?.trim() || `${drop.amount} ${token} · live drop`,
+    distance: "Mumbai",
+    latitude: drop.lat,
+    longitude: drop.lng,
+    color: "lime",
+    amount: drop.amount,
+    tokenSymbol: token,
+    claimedCount: drop.currentClaimants,
+  };
+}
+
+// Inline lucide icon SVG for imperative DOM markers (no React needed).
+function lucideSvg(paths: string, size = 18): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+const LUCIDE_GIFT = '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>';
+
 const MUMBAI_CENTER: [number, number] = [72.833, 18.932];
+// Jio World Centre, BKC — the Devcon venue the map opens on.
+const DEVCON_VENUE: [number, number] = [72.8697, 19.0662];
 const MUMBAI_PILOT_AREA: [number, number][] = [
   [72.79, 18.88], [72.88, 18.88], [72.96, 18.94], [73.01, 19.02],
   [73.00, 19.12], [72.96, 19.20], [72.88, 19.27], [72.78, 19.27],
@@ -145,7 +173,6 @@ export default function CityHome() {
   const [notice, setNotice] = useState("");
   const [youOpen, setYouOpen] = useState(false);
   const [socialView, setSocialView] = useState<SocialView | null>(null);
-  const [storyName, setStoryName] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
@@ -158,7 +185,8 @@ export default function CityHome() {
   const [dropSheetOpen, setDropSheetOpen] = useState(false);
   const [dropClaimed, setDropClaimed] = useState(false);
   const [eventMarkers, setEventMarkers] = useState<CityMarker[]>([]);
-  const didFitEventsRef = useRef(false);
+  const [dropMarkers, setDropMarkers] = useState<CityMarker[]>([]);
+  const [cityCount, setCityCount] = useState(0);
   const locationStateRef = useRef(locationState);
 
   useEffect(() => {
@@ -194,7 +222,7 @@ export default function CityHome() {
     if (!avatarSeed) shuffleAvatar();
   }, [avatarSeed, shuffleAvatar]);
 
-  const allMarkers = useMemo(() => [...markers, ...eventMarkers], [eventMarkers]);
+  const allMarkers = useMemo(() => [...dropMarkers, ...eventMarkers], [dropMarkers, eventMarkers]);
   const kindById = useMemo(() => new globalThis.Map(allMarkers.map((item) => [item.id, item.kind] as const)), [allMarkers]);
 
   const visibleMarkers = useMemo(() => {
@@ -221,76 +249,12 @@ export default function CityHome() {
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style: "https://tiles.openfreemap.org/styles/liberty",
-      center: MUMBAI_CENTER,
-      zoom: 14.1,
+      center: DEVCON_VENUE,
+      zoom: 14.6,
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     map.on("load", () => {
-      const crowdPoints = markers.filter((marker) => marker.kind === 'person').map((marker) => ({
-        type: 'Feature' as const,
-        properties: { weight: 1 },
-        geometry: { type: 'Point' as const, coordinates: [Number(marker.longitude.toFixed(3)), Number(marker.latitude.toFixed(3))] },
-      }));
-      map.addSource('city-presence-density', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: crowdPoints },
-      });
-      const firstLabelLayer = map.getStyle().layers?.find((layer) => layer.type === 'symbol' && Boolean(layer.layout?.['text-field']))?.id;
-      map.addLayer({
-        id: 'city-presence-warmth',
-        type: 'heatmap',
-        source: 'city-presence-density',
-        maxzoom: 17,
-        paint: {
-          'heatmap-weight': ['get', 'weight'],
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 10, 0.45, 16, 0.9],
-          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 10, 24, 16, 48],
-          'heatmap-opacity': 0.42,
-          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(255, 213, 94, 0)', 0.2, 'rgba(255, 213, 94, 0.32)', 0.55, 'rgba(255, 155, 74, 0.48)', 1, 'rgba(255, 121, 95, 0.62)'],
-        },
-      }, firstLabelLayer);
-      for (const marker of markers) {
-        const element = document.createElement("button");
-        element.type = "button";
-        element.className = `map-marker marker-${marker.kind} tone-${marker.color}${selectedId === marker.id ? " marker-selected" : ""}`;
-        element.setAttribute("aria-label", `${marker.name}, ${marker.distance}`);
-        if (marker.kind === "person" && marker.avatar) {
-          const avatar = document.createElement("img");
-          avatar.src = marker.avatar;
-          avatar.alt = "";
-          avatar.className = "marker-avatar-image";
-          element.append(avatar);
-          const live = document.createElement("span");
-          live.className = "avatar-live";
-          element.append(live);
-        } else {
-          const icon = document.createElement("span");
-          icon.className = "marker-icon-content";
-          if (marker.kind === "drop" && marker.amount) {
-            icon.innerHTML = `<span class="marker-drop-gift">🎁</span><span class="marker-token">${marker.amount}<small>${marker.id === "drop-1" ? "ETHHOUSE" : "DEV"}</small></span>`;
-          } else {
-            icon.textContent = marker.kind === "event" ? "🎟️" : marker.kind === "place" ? "📍" : marker.initials ?? "•";
-          }
-          element.append(icon);
-        }
-        element.addEventListener("click", (event) => {
-          event.stopPropagation();
-          setSelectedId(marker.id);
-          setCardClosed(false);
-          if (marker.kind === "drop") {
-            setDropClaimed(Boolean(claimedMap[marker.id]));
-            setDropSheetOpen(true);
-          }
-        });
-        const publicPosition = marker.kind === "person"
-          ? [Number(marker.longitude.toFixed(3)), Number(marker.latitude.toFixed(3))] as [number, number]
-          : [marker.longitude, marker.latitude] as [number, number];
-        const mapMarker = new maplibregl.Marker({ element, anchor: "center" })
-          .setLngLat(publicPosition)
-          .addTo(map);
-        mapMarkersRef.current.set(marker.id, mapMarker);
-      }
       setMapReady(true);
       setMapError(false);
     });
@@ -326,6 +290,33 @@ export default function CityHome() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch("/api/drops")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { drops?: DropApiItem[] } | null) => {
+        if (cancelled || !data?.drops) return;
+        setDropMarkers(data.drops.map(dropToMarker).filter((item): item is CityMarker => item !== null));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/presence/nearby?lat=${DEVCON_VENUE[1]}&lng=${DEVCON_VENUE[0]}&radius=50`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { users?: unknown[] } | null) => {
+        if (!cancelled && data?.users) setCityCount(data.users.length);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map || eventMarkers.length === 0) return;
     const registry = mapMarkersRef.current;
@@ -351,16 +342,40 @@ export default function CityHome() {
         .addTo(map);
       registry.set(marker.id, mapMarker);
     }
-    if (!didFitEventsRef.current && locationStateRef.current !== "inside") {
-      didFitEventsRef.current = true;
-      const points = [...markers, ...eventMarkers].filter((item) => isInsideMumbai(item.longitude, item.latitude));
-      if (points.length > 1) {
-        const bounds = new maplibregl.LngLatBounds();
-        for (const point of points) bounds.extend([point.longitude, point.latitude]);
-        map.fitBounds(bounds, { padding: 80, maxZoom: 13.5, duration: 900 });
+  }, [eventMarkers, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || dropMarkers.length === 0) return;
+    const registry = mapMarkersRef.current;
+    for (const [id, marker] of registry) {
+      if (id.startsWith("drop-")) {
+        marker.remove();
+        registry.delete(id);
       }
     }
-  }, [eventMarkers, mapReady]);
+    for (const marker of dropMarkers) {
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = `map-marker marker-drop tone-${marker.color}`;
+      element.setAttribute("aria-label", `${marker.name}, ${marker.detail}`);
+      const icon = document.createElement("span");
+      icon.className = "marker-icon-content";
+      icon.innerHTML = `<span class="marker-drop-gift">${lucideSvg(LUCIDE_GIFT, 20)}</span><span class="marker-token">${marker.amount}<small>${marker.tokenSymbol}</small></span>`;
+      element.append(icon);
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setSelectedId(marker.id);
+        setCardClosed(false);
+        setDropClaimed(Boolean(claimedMap[marker.id]));
+        setDropSheetOpen(true);
+      });
+      const mapMarker = new maplibregl.Marker({ element, anchor: "center" })
+        .setLngLat([marker.longitude, marker.latitude])
+        .addTo(map);
+      registry.set(marker.id, mapMarker);
+    }
+  }, [dropMarkers, mapReady, claimedMap]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -424,9 +439,6 @@ export default function CityHome() {
       marker.getElement().classList.toggle("marker-filtered-out", !visible);
       marker.getElement().classList.toggle("marker-selected", selected?.id === id);
     });
-    if (mapReady && mapRef.current?.getLayer('city-presence-warmth')) {
-      mapRef.current.setLayoutProperty('city-presence-warmth', 'visibility', filter === 'all' || filter === 'person' ? 'visible' : 'none');
-    }
     if (selected && mapReady) {
       mapRef.current?.flyTo({ center: [selected.longitude, selected.latitude], zoom: 15, duration: 650 });
     }
@@ -461,10 +473,10 @@ export default function CityHome() {
   }, [avatarImageData, avatarMode, avatarSeed, broadcasts.length, mapReady, myPosition, presenceStatus]);
 
   function tokenFor(marker: CityMarker) {
-    return marker.id === "drop-1" ? "ETHHOUSE" : "DEV";
+    return marker.tokenSymbol ?? "TOKENS";
   }
 
-  function handleClaim() {
+  async function handleClaim() {
     if (!selected || selected.kind !== "drop") return;
     if (!isConnected) {
       setYouOpen(true);
@@ -472,12 +484,21 @@ export default function CityHome() {
       return;
     }
     setClaiming(true);
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/claims/authorize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dropId: selected.id.replace(/^drop-/, "") }),
+      });
+      if (!response.ok) throw new Error("Claim could not be authorized.");
       claim(selected.id, selected.name, tokenFor(selected), selected.amount ?? "1");
-      setClaiming(false);
       setDropClaimed(true);
       setNotice(`Claimed ${selected.amount} ${tokenFor(selected)} — added to your tokens.`);
-    }, 900);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Claim failed. Try again.");
+    } finally {
+      setClaiming(false);
+    }
   }
 
   function chooseTab(tab: NavTab) {
@@ -600,7 +621,7 @@ export default function CityHome() {
           <div className="location-heading">
             <span className="eyebrow"><span className="live-dot" /> MUMBAI IS LIVE</span>
             <h1>Fort, Mumbai <span>⌄</span></h1>
-            <p>South Mumbai <b>·</b> 286 in the city</p>
+            <p>South Mumbai{cityCount > 0 && <> <b>·</b> {cityCount} in the city</>}</p>
           </div>
           <div className="top-actions">
             {searchOpen && <label className="search-field"><Search size={16} /><input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Find a person or place" /><button onClick={() => { setSearchOpen(false); setSearchTerm(""); }} aria-label="Close search"><X size={16} /></button></label>}
@@ -626,7 +647,7 @@ export default function CityHome() {
           </div>
           <h2>{selected.name}</h2>
           <p className="card-description">{selected.detail}</p>
-          <div className="card-meta"><span><MapPin size={13} /> {selected.distance}</span>{selected.kind === "drop" && <span className="claim-count">18 people claimed</span>}</div>
+          <div className="card-meta"><span><MapPin size={13} /> {selected.distance}</span>{selected.kind === "drop" && typeof selected.claimedCount === "number" && <span className="claim-count">{selected.claimedCount} claimed</span>}</div>
           {selected.kind === "drop" ? (
             <button
               className={`claim-button ${isClaimed ? "is-claimed" : ""}`}
@@ -673,7 +694,6 @@ export default function CityHome() {
         </nav>
       </section>
 
-      <StoryViewer key={storyName ?? "none"} story={storyName ? stories[storyName] ?? null : null} onClose={() => setStoryName(null)} />
       <YouSheet open={youOpen} onClose={() => { setYouOpen(false); if (activeTab === "wallet") setActiveTab("map"); }} notify={setNotice} />
       <CitySocialSheet
         open={socialView !== null}
@@ -728,13 +748,13 @@ export default function CityHome() {
         </div>
       )}
       {dropSheetOpen && selected?.kind === "drop" && (
-        <Sheet open={dropSheetOpen} onClose={() => setDropSheetOpen(false)} eyebrow="Mumbai · live drop" title={dropClaimed ? "✨ Claimed" : selected.name}>
+        <Sheet open={dropSheetOpen} onClose={() => setDropSheetOpen(false)} eyebrow="Mumbai · live drop" title={dropClaimed ? "Claimed" : selected.name}>
           <div className="drop-sheet-content">
-            <div className="drop-sheet-art"><span>🎁</span><i /><i /><i /></div>
+            <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
             <p className="drop-sheet-amount">{selected.amount} <span>{tokenFor(selected)}</span></p>
-            <p className="drop-sheet-copy">{dropClaimed ? "Your tokens are in your city stash. Keep exploring Mumbai." : "A little something from the community, waiting near Gateway of India."}</p>
-            <div className="drop-sheet-meta"><span><MapPin size={14} /> Gateway of India</span><span><UsersRound size={14} /> 18 claimed · 6 left</span></div>
-            {!dropClaimed ? <button className="claim-button" disabled={claiming} onClick={handleClaim}>{claiming ? <><span className="spinner" /> Claiming…</> : <>Claim {selected.amount} {tokenFor(selected)}<ArrowUpRight size={16} /></>}</button> : <button className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}>✨ Claimed · Back to city</button>}
+            <p className="drop-sheet-copy">{dropClaimed ? "Your tokens are in your city stash. Keep exploring Mumbai." : selected.detail}</p>
+            <div className="drop-sheet-meta"><span><MapPin size={14} /> {selected.distance}</span><span><UsersRound size={14} /> {selected.claimedCount ?? 0} claimed</span></div>
+            {!dropClaimed ? <button className="claim-button" disabled={claiming} onClick={() => void handleClaim()}>{claiming ? <><span className="spinner" /> Claiming…</> : <>Claim {selected.amount} {tokenFor(selected)}<ArrowUpRight size={16} /></>}</button> : <button className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}><Sparkles size={15} /> Claimed · Back to city</button>}
             <p className="prototype-note">Community token · no market value implied</p>
           </div>
         </Sheet>

@@ -3,6 +3,8 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { signClaimAuthorization, dropIdToBytes32, CLAIM_CHAIN } from './signer';
 import { getNonce } from '../../contracts/interact';
 import type { Hex } from 'viem';
+import { rateLimit, RATE_LIMITS, getClientIdentifier } from './rate-limit';
+import { NextRequest } from 'next/server';
 
 export class ApiError extends Error {
   status: number;
@@ -28,6 +30,20 @@ function toNumber(value: Decimal | null | undefined): number | null {
 function toIso(value: Date | null | undefined): string | null {
   if (value == null) return null;
   return value.toISOString();
+}
+
+function roundCoordinates(lat: number | null, lng: number | null, visibility: string): { lat: number | null; lng: number | null } {
+  if (lat == null || lng == null) return { lat, lng };
+  
+  if (visibility === 'VISIBLE') {
+    return { lat, lng };
+  }
+  
+  const precision = 1000;
+  return {
+    lat: Math.round(lat * precision) / precision,
+    lng: Math.round(lng * precision) / precision,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +160,15 @@ export async function createDrop(input: {
 // Claims
 // ---------------------------------------------------------------------------
 
-export async function authorizeClaim(dropId: string, userAddress: string) {
+export async function authorizeClaim(dropId: string, userAddress: string, request?: NextRequest) {
+  if (request) {
+    const clientId = getClientIdentifier(request);
+    const rlResult = rateLimit(`claim:${clientId}:${dropId}`, RATE_LIMITS.claimAuthorize);
+    if (!rlResult.allowed) {
+      throw new ApiError(429, 'Rate limit exceeded. Please wait before requesting another claim authorization.');
+    }
+  }
+
   const user = await getOrCreateUser(userAddress);
   const drop = await prisma.drop.findUnique({
     where: { id: dropId },
@@ -158,41 +182,56 @@ export async function authorizeClaim(dropId: string, userAddress: string) {
   }
   if (now < drop.startsAt) throw new ApiError(400, 'Drop has not started yet');
   if (now > drop.expiresAt) throw new ApiError(400, 'Drop has expired');
-  if (drop.currentClaimants >= drop.maxClaimants) {
-    throw new ApiError(409, 'Drop is claimed out');
-  }
 
   const existing = await prisma.dropClaim.findUnique({
     where: { dropId_userId: { dropId, userId: user.id } },
   });
   if (existing) throw new ApiError(409, 'Already claimed this drop');
 
-  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 60 * 15); // 15 minutes
-  // Nonce must match the on-chain nonces[claimer] value. Before the DropClaim
-  // contract is deployed there is no chain to read from, so default to 0.
+  const claimAmount = toDecimal(drop.amount);
+  const maxSupply = toDecimal(drop.token.maxSupply || 0);
+  if (claimAmount.gt(maxSupply)) {
+    throw new ApiError(400, 'Claim amount exceeds token supply');
+  }
+
+  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 60 * 15);
+  
   let nonce = BigInt(0);
   if (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS) {
     try {
       nonce = await getNonce(user.walletAddress as Hex);
-    } catch {
-      nonce = BigInt(0);
+    } catch (e) {
+      throw new ApiError(503, 'Unable to read chain nonce. Please try again.');
     }
   }
+
+  const amountWei = claimAmount.mul(10 ** 18);
+  
   const signature = await signClaimAuthorization({
     dropId: dropIdToBytes32(dropId),
     claimer: user.walletAddress as Hex,
+    amount: amountWei,
     nonce,
-    expiresAt,
+    deadline: expiresAt,
   });
 
-  await prisma.dropClaim.create({
-    data: {
-      dropId,
-      userId: user.id,
-      tokenId: drop.tokenId,
-      amount: drop.amount,
-      status: 'PENDING',
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.dropClaim.create({
+      data: {
+        dropId,
+        userId: user.id,
+        tokenId: drop.tokenId,
+        amount: drop.amount,
+        status: 'PENDING',
+      },
+    });
+
+    await tx.drop.update({
+      where: { id: dropId },
+      data: {
+        currentClaimants: { increment: 1 },
+      },
+    });
   });
 
   return {
@@ -201,7 +240,7 @@ export async function authorizeClaim(dropId: string, userAddress: string) {
     dropIdBytes32: dropIdToBytes32(dropId),
     claimer: user.walletAddress,
     nonce: nonce.toString(),
-    amount: drop.amount.toString(),
+    amount: amountWei.toString(),
     expiresAt: expiresAt.toString(),
   };
 }
@@ -251,10 +290,19 @@ export async function updatePresence(input: {
   lat?: number;
   lng?: number;
   visibility?: string;
+  request?: NextRequest;
 }) {
+  if (input.request) {
+    const clientId = getClientIdentifier(input.request);
+    const rlResult = rateLimit(`presence:${clientId}`, RATE_LIMITS.updatePresence);
+    if (!rlResult.allowed) {
+      throw new ApiError(429, 'Rate limit exceeded for presence updates.');
+    }
+  }
+
   const user = await getOrCreateUser(input.userAddress);
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 30 * 60 * 1000); // 30 minutes
+  const expiresAt = new Date(now.getTime() + 30 * 60 * 1000);
 
   const presence = await prisma.presence.upsert({
     where: { userId: user.id },
@@ -295,23 +343,30 @@ export async function nearbyPresence(lat: number, lng: number, radiusKm: number)
     })
     .filter(({ distance }) => distance <= radius)
     .sort((a, b) => a.distance - b.distance)
-    .map(({ presence, distance }) => ({
-      userId: presence.userId,
-      username: presence.user.username,
-      avatarUrl: presence.user.avatarUrl,
-      status: presence.status,
-      visibility: presence.visibility,
-      lat: Number(presence.latitude),
-      lng: Number(presence.longitude),
-      distance: Math.round(distance * 1000) / 1000,
-      lastUpdated: toIso(presence.lastUpdated),
-    }));
+    .map(({ presence, distance }) => {
+      const coords = roundCoordinates(
+        Number(presence.latitude),
+        Number(presence.longitude),
+        presence.visibility
+      );
+      return {
+        userId: presence.userId,
+        username: presence.user.username,
+        avatarUrl: presence.user.avatarUrl,
+        status: presence.status,
+        visibility: presence.visibility,
+        lat: coords.lat,
+        lng: coords.lng,
+        distance: Math.round(distance * 1000) / 1000,
+        lastUpdated: toIso(presence.lastUpdated),
+      };
+    });
 
   return users;
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371; // Earth radius in km
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
@@ -366,7 +421,15 @@ export async function listBroadcasts(viewerAddress?: string) {
   return broadcasts.map((b) => serializeBroadcast(b, viewerAddress));
 }
 
-export async function createBroadcast(userAddress: string, text: string) {
+export async function createBroadcast(userAddress: string, text: string, request?: NextRequest) {
+  if (request) {
+    const clientId = getClientIdentifier(request);
+    const rlResult = rateLimit(`broadcast:${clientId}`, RATE_LIMITS.createBroadcast);
+    if (!rlResult.allowed) {
+      throw new ApiError(429, 'Rate limit exceeded for broadcasts.');
+    }
+  }
+
   const user = await getOrCreateUser(userAddress);
   const trimmed = text.trim().slice(0, 240);
   if (!trimmed) throw new ApiError(400, 'text is required');
@@ -470,7 +533,15 @@ export async function listStories() {
   return stories.map(serializeStory);
 }
 
-export async function createStory(userAddress: string, content: string) {
+export async function createStory(userAddress: string, content: string, request?: NextRequest) {
+  if (request) {
+    const clientId = getClientIdentifier(request);
+    const rlResult = rateLimit(`story:${clientId}`, RATE_LIMITS.createStory);
+    if (!rlResult.allowed) {
+      throw new ApiError(429, 'Rate limit exceeded for stories.');
+    }
+  }
+
   const user = await getOrCreateUser(userAddress);
   const trimmed = content.trim().slice(0, 1000);
   if (!trimmed) throw new ApiError(400, 'content is required');
@@ -479,7 +550,7 @@ export async function createStory(userAddress: string, content: string) {
     data: {
       userId: user.id,
       content: trimmed,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     include: { user: true },
   });

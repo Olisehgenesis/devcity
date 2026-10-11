@@ -1,6 +1,6 @@
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useChainId } from 'wagmi';
-import { base, baseSepolia } from 'wagmi/chains';
-import { useCallback, useState } from 'react';
+import { celo, celoSepolia } from 'wagmi/chains';
+import { useCallback, useEffect, useState } from 'react';
 import type { WalletState } from '@/types';
 import { SUPPORTED_CHAINS } from '@/lib/wallet';
 
@@ -64,7 +64,7 @@ export function useWalletConnectors() {
 export function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
 
-  useCallback(() => {
+  useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };

@@ -167,6 +167,14 @@ const DEFAULT_VIEWPORT = {
 
 const DEMO_ADDRESS = '0x742d35Cc6634C0532925a3b8D4C0532925a3b8D4';
 
+function toEpoch(value: any): number {
+  if (value == null) return Date.now();
+  const num = Number(value);
+  if (!isNaN(num) && num > 0) return num;
+  const parsed = Date.parse(String(value));
+  return isNaN(parsed) ? Date.now() : parsed;
+}
+
 async function api<T>(path: string, options?: RequestInit): Promise<T | null> {
   try {
     const res = await fetch(path, {
