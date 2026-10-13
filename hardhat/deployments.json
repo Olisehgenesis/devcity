@@ -1,0 +1,7 @@
+{
+  "deployerProxy": "0x30490BD7d4fDD9F7Ca4CbAdA5770f48a32A9278b",
+  "deployerImpl": "0xf81508dEd268b941fa414255ffdfF310eAA61F01",
+  "dropClaim": "0xDC202478bA251eDac1999f16cC7187Cc2770d03e",
+  "profileTokenFactory": "0x4836f61AC443d16F3Bf3c6acfd8140Adfe11E3ee",
+  "devcityToken": "0xe6B9a110c3Ce4a46DcEC6092871D21AC2b0c02Cb"
+}
