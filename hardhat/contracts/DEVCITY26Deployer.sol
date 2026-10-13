@@ -98,28 +98,34 @@ contract DEVCITY26Deployer is
         permit2 = _permit2;
         usdtToken = _usdtToken;
 
-        // Deploy DropClaim behind a proxy.
-        dropClaim = DropClaim(address(new ERC1967Proxy(address(new DropClaim()), "")));
-        dropClaim.initialize();
+        // Deploy DropClaim behind a proxy, initializing via constructor calldata.
+        dropClaim = DropClaim(
+            address(new ERC1967Proxy(address(new DropClaim()), abi.encodeCall(DropClaim.initialize, ())))
+        );
         emit ContractWired("DropClaim", address(dropClaim));
 
-        // Deploy ProfileTokenFactory behind a proxy.
+        // Deploy ProfileTokenFactory behind a proxy, initializing via constructor calldata.
         profileTokenFactory = ProfileTokenFactory(
-            address(new ERC1967Proxy(address(new ProfileTokenFactory()), ""))
+            address(
+                new ERC1967Proxy(
+                    address(new ProfileTokenFactory()),
+                    abi.encodeCall(ProfileTokenFactory.initialize, (_poolManager, _positionManager, _permit2, _usdtToken))
+                )
+            )
         );
-        profileTokenFactory.initialize(_poolManager, _positionManager, _permit2, _usdtToken);
         emit ContractWired("ProfileTokenFactory", address(profileTokenFactory));
 
-        // Deploy DEVCITY26Token behind a proxy.
+        // Deploy DEVCITY26Token behind a proxy, initializing via constructor calldata.
         devcityToken = DEVCITY26Token(
-            address(new ERC1967Proxy(address(new DEVCITY26Token()), ""))
-        );
-        devcityToken.initialize(
-            "DEVCITY26",
-            "DEV26",
-            devcityMaxSupply,
-            devcityTokenURI,
-            _usdtToken
+            address(
+                new ERC1967Proxy(
+                    address(new DEVCITY26Token()),
+                    abi.encodeCall(
+                        DEVCITY26Token.initialize,
+                        ("DEVCITY26", "DEV26", devcityMaxSupply, devcityTokenURI, _usdtToken)
+                    )
+                )
+            )
         );
         emit ContractWired("DEVCITY26Token", address(devcityToken));
 
@@ -137,6 +143,30 @@ contract DEVCITY26Deployer is
         require(address(devcityToken) != address(0), "DEVCITY26 not deployed");
         devcityToken.setV4Contracts(poolManager, positionManager, permit2);
         emit ContractWired("DEVCITY26Token.V4", poolManager);
+    }
+
+    /**
+     * @dev Add a backend signer to DropClaim (admin only).
+     */
+    function addBackendSigner(address signer) external onlyOwner {
+        require(address(dropClaim) != address(0), "DropClaim not deployed");
+        dropClaim.addSigner(signer);
+    }
+
+    /**
+     * @dev Remove a backend signer from DropClaim (admin only).
+     */
+    function removeBackendSigner(address signer) external onlyOwner {
+        require(address(dropClaim) != address(0), "DropClaim not deployed");
+        dropClaim.removeSigner(signer);
+    }
+
+    /**
+     * @dev List authorized backend signers.
+     */
+    function getBackendSigners() external view returns (address[] memory) {
+        require(address(dropClaim) != address(0), "DropClaim not deployed");
+        return dropClaim.getSigners();
     }
 
     /**

@@ -30,17 +30,16 @@ async function main() {
   const deployerImplAddr = await deployerImpl.getAddress();
   console.log("Deployer implementation:", deployerImplAddr);
 
-  // 2. Deploy ERC1967Proxy pointing at the implementation
+  // 2. Deploy ERC1967Proxy pointing at the implementation, with encoded initialize() calldata
   const Proxy = await ethers.getContractFactory("ERC1967Proxy");
-  const proxy = await Proxy.deploy(deployerImplAddr, "0x");
+  const initData = Deployer.interface.encodeFunctionData("initialize");
+  const proxy = await Proxy.deploy(deployerImplAddr, initData);
   await proxy.waitForDeployment();
   const proxyAddr = await proxy.getAddress();
   console.log("Deployer proxy:", proxyAddr);
 
-  // 3. Attach and initialize
+  // 3. Attach (already initialized via constructor data)
   const deployer = Deployer.attach(proxyAddr);
-  const initTx = await deployer.initialize();
-  await initTx.wait();
   console.log("Initialized");
 
   // 4. deployAll
@@ -54,36 +53,24 @@ async function main() {
     tokenURI
   );
   const receipt = await deployAllTx.wait();
+  console.log("deployAll tx:", receipt.hash);
 
-  // Extract deployed contract addresses from event
-  const iface = new ethers.Interface(Deployer.interface.format("full") as any);
-  let dropClaimAddr, factoryAddr, tokenAddr;
-  for (const log of receipt.logs) {
-    try {
-      const parsed = iface.parseLog({ topics: log.topics, data: log.data });
-      if (parsed && parsed.name === "ContractsDeployed") {
-        dropClaimAddr = parsed.args.dropClaim;
-        factoryAddr = parsed.args.profileTokenFactory;
-        tokenAddr = parsed.args.devcityToken;
-      }
-    } catch {}
-  }
+  // Read deployed child contract addresses from public getters
+  const dropClaimAddr = await deployer.dropClaim();
+  const factoryAddr = await deployer.profileTokenFactory();
+  const tokenAddr = await deployer.devcityToken();
   console.log("DropClaim:", dropClaimAddr);
   console.log("ProfileTokenFactory:", factoryAddr);
   console.log("DEVCITY26Token:", tokenAddr);
 
-  // 5. Authorize backend signer (admin wallet) on DropClaim
-  if (dropClaimAddr) {
-    const DropClaim = await ethers.getContractFactory("DropClaim");
-    const dropClaim = DropClaim.attach(dropClaimAddr);
-    const existing = await dropClaim.getSigners();
-    if (!existing.includes(admin.address)) {
-      const addTx = await dropClaim.addSigner(admin.address);
-      await addTx.wait();
-      console.log("Added admin as backend signer");
-    }
-    console.log("Signers:", await dropClaim.getSigners());
+  // 5. Authorize backend signer (admin wallet) on DropClaim via the deployer
+  const signers = await deployer.getBackendSigners();
+  if (!signers.includes(admin.address)) {
+    const addTx = await deployer.addBackendSigner(admin.address);
+    await addTx.wait();
+    console.log("Added admin as backend signer:", admin.address);
   }
+  console.log("Signers:", await deployer.getBackendSigners());
 
   console.log("\n=== DEPLOYMENT SUMMARY ===");
   console.log("Deployer proxy:", proxyAddr);
