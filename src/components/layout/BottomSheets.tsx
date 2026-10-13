@@ -251,7 +251,15 @@ function EventSheet({ marker, onClose }: { marker: MapMarker; onClose: () => voi
               <img src={data.imageUrl} alt={data.name} className="h-full w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
             </div>
-          ) : null}
+          ) : (
+            <div className={cn('relative -mx-4 -mt-4 flex h-36 items-end overflow-hidden bg-gradient-to-br', eventBannerGradient(data))}>
+              <div className="absolute inset-0 opacity-20" style={{ backgroundImage: `radial-gradient(circle at 20% 20%, rgba(255,255,255,0.5), transparent 40%)` }} />
+              <div className="relative p-4">
+                <p className="text-4xl font-black uppercase tracking-tight text-white/90 drop-shadow">{eventBannerLabel(data)}</p>
+                <p className="mt-1 text-sm font-medium text-white/80">{data.category || 'Event'}{data.region ? ` · ${data.region}` : ''}</p>
+              </div>
+            </div>
+          )}
 
           {/* Meta chips */}
           <div className="flex flex-wrap items-center gap-2">
@@ -409,6 +417,32 @@ function formatEventRange(data: EventMarkerData): string {
   };
   if (end && end !== start) return `${fmt(start)} – ${fmt(end)}`;
   return fmt(start);
+}
+
+const BANNER_GRADIENTS = [
+  'from-indigo-600 via-purple-600 to-fuchsia-500',
+  'from-slate-800 via-slate-700 to-slate-500',
+  'from-emerald-600 via-teal-600 to-cyan-500',
+  'from-rose-600 via-pink-600 to-orange-500',
+  'from-blue-700 via-indigo-700 to-violet-600',
+  'from-amber-600 via-orange-600 to-red-500',
+];
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function eventBannerGradient(data: EventMarkerData): string {
+  if (/devcon/i.test(data.name || '')) return 'from-yellow-600 via-amber-600 to-orange-600';
+  return BANNER_GRADIENTS[hashStr(data.name || data.eventId) % BANNER_GRADIENTS.length];
+}
+
+function eventBannerLabel(data: EventMarkerData): string {
+  const words = (data.name || 'Event').trim().split(/\s+/);
+  const initials = words.slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
+  return initials || 'EV';
 }
 
 function PlaceSheet({ marker, onClose }: { marker: MapMarker; onClose: () => void }) {
