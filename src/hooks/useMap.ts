@@ -113,7 +113,7 @@ export function useMap(options: UseMapOptions): UseMapReturn {
       if (!mapRef.current) throw new Error('Map not initialized');
 
       const el = createMapMarkerElement(markerData.type, {
-        pulse: markerData.type === 'drop',
+        pulse: markerData.type === 'drop' || (markerData.type === 'event' && (markerData.data as any).isActive),
       });
 
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
@@ -211,7 +211,7 @@ export function useMapMarkers(map: maplibregl.Map | null, markers: MapMarker[], 
 
       if (!marker) {
         const el = createMapMarkerElement(markerData.type, {
-          pulse: markerData.type === 'drop',
+          pulse: markerData.type === 'drop' || (markerData.type === 'event' && (markerData.data as any).isActive),
         });
 
         marker = new maplibregl.Marker({ element: el, anchor: 'center' })

@@ -199,8 +199,18 @@ export interface EventMarkerData {
   organizer?: string;
   summary?: string | null;
   category?: string | null;
+  kind?: string | null;
   region?: string | null;
   location?: string | null;
+  online?: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
+  startTimeStr?: string | null;
+  endTimeStr?: string | null;
+  url?: string | null;
+  imageUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   timetable?: EventTimetableSlotData[];
 }
 

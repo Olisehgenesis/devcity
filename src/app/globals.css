@@ -218,6 +218,16 @@
     @apply bg-white/90 dark:bg-gray-950/90 backdrop-blur-2xl;
   }
 
+  /* Devcon gold event card theme */
+  .devcon-gold {
+    @apply bg-gradient-to-b from-amber-50 via-yellow-50 to-white dark:from-amber-950/40 dark:via-yellow-950/30 dark:to-gray-950;
+  }
+
+  .devcon-gold-button {
+    @apply bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600 shadow-lg shadow-amber-500/30
+           hover:from-yellow-600 hover:to-amber-600;
+  }
+
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-white transition-all duration-200
            bg-gradient-to-r from-primary-600 to-purple-600 shadow-lg shadow-primary-500/25

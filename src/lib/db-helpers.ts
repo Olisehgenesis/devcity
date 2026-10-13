@@ -18,8 +18,8 @@ function normalizeAddress(address: string): string {
   return address.trim().toLowerCase();
 }
 
-function toDecimal(value: number | string): Decimal {
-  return new Decimal(value);
+function toDecimal(value: Decimal | number | string): Decimal {
+  return new Decimal(value.toString());
 }
 
 function toNumber(value: Decimal | null | undefined): number | null {
@@ -209,8 +209,8 @@ export async function authorizeClaim(dropId: string, userAddress: string, reques
   
   const signature = await signClaimAuthorization({
     dropId: dropIdToBytes32(dropId),
-    claimer: user.walletAddress as Hex,
-    amount: amountWei,
+    claimant: user.walletAddress as Hex,
+    amount: BigInt(amountWei.toString()),
     nonce,
     deadline: expiresAt,
   });

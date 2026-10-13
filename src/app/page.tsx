@@ -35,11 +35,18 @@ interface ApiEvent {
   organizer: string;
   summary: string | null;
   category: string | null;
+  kind: string | null;
   region: string | null;
   location: string | null;
+  imageUrl: string | null;
   latitude: number | null;
   longitude: number | null;
+  online: boolean;
   startDate: string | null;
+  endDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  url: string | null;
   timetable: ApiTimetableSlot[];
 }
 
@@ -48,27 +55,45 @@ async function loadEventMarkers(): Promise<MapMarker[]> {
     const res = await fetch('/api/events', { cache: 'no-store' });
     if (!res.ok) return [];
     const json = await res.json();
+    const now = Date.now();
     return (json.events as ApiEvent[])
       .filter((e) => e.latitude != null && e.longitude != null)
-      .map((e) => ({
-        id: `event-${e.slug}`,
-        type: 'event' as const,
-        position: { lat: e.latitude as number, lng: e.longitude as number, timestamp: Date.now() },
-        data: {
-          eventId: e.id,
-          name: e.name,
-          startTime: e.startDate ? new Date(e.startDate).getTime() : Date.now(),
-          distance: 0,
-          isActive: true,
-          slug: e.slug,
-          organizer: e.organizer,
-          summary: e.summary,
-          category: e.category,
-          region: e.region,
-          location: e.location,
-          timetable: e.timetable,
-        },
-      }));
+      .map((e) => {
+        const startTs = e.startDate ? new Date(`${e.startDate}T${e.startTime || '00:00:00'}Z`).getTime() : now;
+        const endTs = e.endDate
+          ? new Date(`${e.endDate}T${e.endTime || '23:59:59'}Z`).getTime()
+          : startTs;
+        const isActive = e.startDate != null && startTs <= now && endTs >= now;
+        return {
+          id: `event-${e.slug}`,
+          type: 'event' as const,
+          position: { lat: e.latitude as number, lng: e.longitude as number, timestamp: Date.now() },
+          data: {
+            eventId: e.id,
+            name: e.name,
+            startTime: startTs,
+            distance: 0,
+            isActive,
+            slug: e.slug,
+            organizer: e.organizer,
+            summary: e.summary,
+            category: e.category,
+            kind: e.kind,
+            region: e.region,
+            location: e.location,
+            online: e.online,
+            startDate: e.startDate,
+            endDate: e.endDate,
+            startTimeStr: e.startTime,
+            endTimeStr: e.endTime,
+            url: e.url,
+            imageUrl: e.imageUrl,
+            latitude: e.latitude,
+            longitude: e.longitude,
+            timetable: e.timetable,
+          },
+        };
+      });
   } catch {
     return [];
   }

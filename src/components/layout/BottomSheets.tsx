@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/Sheet';
@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/Button';
 import { Separator } from '@/components/ui/Separator';
 import { AvatarDisplay } from '@/components/avatar/AvatarComponents';
 import { AvatarPicker } from '@/components/social/AvatarPicker';
-import { formatDistanceToNow, formatTimeAgo, formatTokenAmount } from '@/lib/utils';
-import type { MapMarker, Drop, Token, Event, Place, Quest, User } from '@/types';
+import { WalletSheet } from '@/components/wallet/WalletSheet';
+import { formatDistanceToNow, formatTimeAgo, formatTokenAmount, formatCountdown } from '@/lib/utils';
+import type { MapMarker, Drop, Token, Event, Place, Quest, User, EventMarkerData } from '@/types';
 import { useAppStore } from '@/lib/store';
 import { demoDrops, demoEvents, demoPlaces, demoQuests, demoTokens, demoPeople } from '@/lib/demo-data';
+import { MapPin, Clock, CalendarDays, ExternalLink, Ticket, Video } from 'lucide-react';
 
 function getDrop(dropId: string): Drop | undefined {
   return demoDrops.find(d => d.id === dropId);
@@ -51,6 +53,10 @@ export function BottomSheets() {
         </SheetContent>
       </Sheet>
     );
+  }
+
+  if (activeBottomSheet === 'wallet') {
+    return <WalletSheet />;
   }
 
   if (activeBottomSheet === 'none' || !selectedMarkerId) return null;
@@ -166,37 +172,172 @@ function DropSheet({ marker, onClose }: { marker: MapMarker; onClose: () => void
 }
 
 function EventSheet({ marker, onClose }: { marker: MapMarker; onClose: () => void }) {
-  const data = marker.data as MapMarker['data'] & { eventId: string; name: string; startTime: number; tokenSymbol?: string; isActive: boolean };
+  const data = marker.data as EventMarkerData & { tokenSymbol?: string };
   const event = getEvent(data.eventId);
   const token = data.tokenSymbol ? getToken(demoTokens.find(t => t.symbol === data.tokenSymbol)?.id || '') : undefined;
+  const isDevcon = /devcon/i.test(data.name || '') || /devcon/i.test(event?.name || '');
 
-  if (!event) return null;
+  const startTs = data.startTime;
+  const now = Date.now();
+  const isLive = data.isActive || startTs <= now;
+  const isUpcoming = !isLive && startTs > now;
+
+  // Countdown ticks once a second while the card is open.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const countdownLabel = isUpcoming
+    ? `Starts in ${formatCountdown(startTs)}`
+    : isLive
+      ? 'Live now'
+      : 'Ended';
+
+  const dateRange = formatEventRange(data);
+  const venue = data.location || event?.name || '';
 
   return (
     <Sheet open={true} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="max-h-[85vh]">
-        <SheetHeader>
-          <div className="flex items-start justify-between">
-            <div>
+      <SheetContent
+        side="bottom"
+        className={cn(
+          'max-h-[88vh] overflow-y-auto',
+          isDevcon && 'devcon-gold'
+        )}
+      >
+        <SheetHeader className={cn(isDevcon && 'border-b border-yellow-600/20')}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                {isLive && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                    </span>
+                    Live now
+                  </span>
+                )}
+                {isUpcoming && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                    <Clock className="h-3 w-3" />
+                    {countdownLabel}
+                  </span>
+                )}
+                {!isLive && !isUpcoming && (
+                  <Badge variant="secondary" size="sm">Ended</Badge>
+                )}
+              </div>
               <SheetTitle className="text-xl">{data.name}</SheetTitle>
-              <SheetDescription>{event.description}</SheetDescription>
+              {data.organizer && (
+                <SheetDescription>
+                  Hosted by {data.organizer}
+                </SheetDescription>
+              )}
             </div>
-            <Badge variant={data.isActive ? 'success' : 'secondary'} className="mt-1">
-              {data.isActive ? 'Live Now' : 'Ended'}
-            </Badge>
+            {isDevcon && (
+              <Badge variant="warning" className="shrink-0">
+                <span className="text-yellow-900">★ Devcon</span>
+              </Badge>
+            )}
           </div>
         </SheetHeader>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-3 text-sm text-gray-500">
-            <span>📍</span>
-            <span>KICC, Nairobi</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-gray-500">
-            <span>🕐</span>
-            <span>{new Date(event.startTime).toLocaleDateString()} · {new Date(event.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          {data.imageUrl ? (
+            <div className="relative -mx-4 -mt-4 h-44 overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={data.imageUrl} alt={data.name} className="h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+            </div>
+          ) : null}
+
+          {/* Meta chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            {data.category && <Badge variant="outline" size="sm">{data.category}</Badge>}
+            {data.kind && <Badge variant="secondary" size="sm">{data.kind}</Badge>}
+            <Badge variant="secondary" size="sm">
+              {data.online ? <><Video className="h-3 w-3" /> Online</> : <><MapPin className="h-3 w-3" /> In person</>}
+            </Badge>
+            {data.region && <Badge variant="secondary" size="sm">{data.region}</Badge>}
           </div>
 
+          {/* Summary */}
+          {data.summary && (
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">{data.summary}</p>
+          )}
+          {!data.summary && event?.description && (
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">{event.description}</p>
+          )}
+
+          {/* Info rows */}
+          <div className="space-y-2.5 text-sm">
+            {venue && (
+              <div className="flex items-start gap-3">
+                <MapPin className="h-4 w-4 mt-0.5 text-gray-400 shrink-0" />
+                <span className="text-gray-700 dark:text-gray-200">{venue}</span>
+              </div>
+            )}
+            {dateRange && (
+              <div className="flex items-start gap-3">
+                <CalendarDays className="h-4 w-4 mt-0.5 text-gray-400 shrink-0" />
+                <span className="text-gray-700 dark:text-gray-200">{dateRange}</span>
+              </div>
+            )}
+            {(data.startTimeStr || data.endTimeStr) && (
+              <div className="flex items-start gap-3">
+                <Clock className="h-4 w-4 mt-0.5 text-gray-400 shrink-0" />
+                <span className="text-gray-700 dark:text-gray-200">
+                  {data.startTimeStr}{data.endTimeStr ? ` – ${data.endTimeStr}` : ''}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Tickets / RSVP */}
+          {data.url && (
+            <a href={data.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+              <Button className={cn('w-full gap-2', isDevcon && 'devcon-gold-button')} size="lg">
+                <Ticket className="h-4 w-4" />
+                {isDevcon ? 'Get Devcon ticket' : 'Get tickets / RSVP'}
+                <ExternalLink className="h-4 w-4 opacity-70" />
+              </Button>
+            </a>
+          )}
+
+          {/* Timetable */}
+          {data.timetable && data.timetable.length > 0 && (
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Schedule</h4>
+              <div className="space-y-2">
+                {data.timetable.map((slot) => {
+                  const slotDate = new Date(`${slot.date}T00:00:00Z`);
+                  return (
+                    <div key={slot.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/50">
+                      <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg bg-gradient-to-br from-yellow-500 to-amber-600 text-white">
+                        <span className="text-[9px] font-semibold uppercase opacity-80">{slotDate.toLocaleString('en', { month: 'short' })}</span>
+                        <span className="text-sm font-bold leading-none">{slotDate.getUTCDate()}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {slot.title || data.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {slot.label || slotDate.toLocaleDateString()}
+                          {slot.startTime ? ` · ${slot.startTime}` : ''}
+                          {slot.endTime ? `–${slot.endTime}` : ''}
+                          {slot.allDay && !slot.startTime ? ' · All day' : ''}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Event token */}
           {token && (
             <div className="p-3 rounded-xl bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20">
               <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Event Token: {token.symbol}</p>
@@ -204,7 +345,7 @@ function EventSheet({ marker, onClose }: { marker: MapMarker; onClose: () => voi
             </div>
           )}
 
-          {event.drops.length > 0 && (
+          {event && event.drops.length > 0 && (
             <div>
               <h4 className="font-medium mb-2">Active Drops</h4>
               <div className="space-y-2">
@@ -221,7 +362,7 @@ function EventSheet({ marker, onClose }: { marker: MapMarker; onClose: () => voi
             </div>
           )}
 
-          {event.quests.length > 0 && (
+          {event && event.quests.length > 0 && (
             <div>
               <h4 className="font-medium mb-2">Quests</h4>
               <div className="space-y-2">
@@ -238,7 +379,7 @@ function EventSheet({ marker, onClose }: { marker: MapMarker; onClose: () => voi
             </div>
           )}
 
-          {event.sponsors.length > 0 && (
+          {event && event.sponsors.length > 0 && (
             <div>
               <h4 className="font-medium mb-2">Sponsors</h4>
               <div className="flex gap-3 overflow-x-auto pb-2">
@@ -255,6 +396,19 @@ function EventSheet({ marker, onClose }: { marker: MapMarker; onClose: () => voi
       </SheetContent>
     </Sheet>
   );
+}
+
+function formatEventRange(data: EventMarkerData): string {
+  const start = data.startDate;
+  const end = data.endDate;
+  if (!start) return '';
+  const fmt = (s: string) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  if (end && end !== start) return `${fmt(start)} – ${fmt(end)}`;
+  return fmt(start);
 }
 
 function PlaceSheet({ marker, onClose }: { marker: MapMarker; onClose: () => void }) {

@@ -22,6 +22,7 @@ export async function GET() {
         kind: event.kind,
         region: event.region,
         location: event.location,
+        imageUrl: event.imageUrl,
         latitude: event.latitude,
         longitude: event.longitude,
         online: event.online,

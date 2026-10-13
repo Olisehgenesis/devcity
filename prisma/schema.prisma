@@ -203,6 +203,7 @@ model Event {
   kind       String?
   region     String?
   location   String?
+  imageUrl   String?
   latitude    Float?
   longitude   Float?
   online     Boolean         @default(false)
