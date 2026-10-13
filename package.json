@@ -18,7 +18,6 @@
     "@coinbase/wallet-sdk": "^4.4.0",
     "@dotenvx/dotenvx": "^2.33.0",
     "@lordicon/react": "^2.0.0",
-    "@next/swc-darwin-arm64": "^15.5.27",
     "@prisma/client": "^6.19.0",
     "@radix-ui/react-alert-dialog": "^1.1.24",
     "@radix-ui/react-avatar": "^1.2.7",
