@@ -262,7 +262,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady }: PasskeyWallet
     return (
       <div className="you-connect">
         <p className="you-sheet-lede">
-          Sign in with a passkey. Your passkey becomes your wallet — no seed phrase, no browser wallet.
+          Sign in with a passkey to open your profile. You can set up your wallet after signing in.
         </p>
         <button
           className="you-connect-primary"

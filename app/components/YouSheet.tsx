@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { ImagePlus, Shuffle } from 'lucide-react';
+import { ImagePlus, KeyRound, Shuffle } from 'lucide-react';
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi';
 import { base, baseSepolia } from 'wagmi/chains';
 import { Sheet } from './Sheet';
@@ -142,10 +142,11 @@ export function YouSheet({ open, onClose, notify }: YouSheetProps) {
     <Sheet open={open} onClose={onClose} eyebrow="Your account" title={sessionUser ? 'Your profile' : 'Sign in'}>
       {!sessionUser ? (
         <div className="profile-auth-gate">
-          <div className="profile-gate-art"><span><ImagePlus size={25} /></span><i /><i /><i /></div>
+          <div className="profile-gate-art"><KeyRound size={29} strokeWidth={2.5} /></div>
           <div className="profile-gate-copy">
-            <h3>{sessionLoading ? 'Checking your account' : 'Your city, your account'}</h3>
-            <p>{sessionLoading ? 'One moment while we check your passkey session.' : 'Sign in to view your profile, wallet, and activity.'}</p>
+            <span className="profile-gate-kicker">YOUR DEVCITY ACCOUNT</span>
+            <h3>{sessionLoading ? 'Checking your account' : 'Your profile starts here'}</h3>
+            <p>{sessionLoading ? 'One moment while we check your passkey session.' : 'Sign in to see your profile, wallet, and activity.'}</p>
           </div>
           <PasskeyWallet
             onSessionChange={(user) => setSessionUser(user)}
