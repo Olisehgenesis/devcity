@@ -14,7 +14,8 @@
  * expands (down arrow) into its day-by-day timetable.
  */
 import { readFileSync } from 'node:fs';
-import { PrismaClient } from '@prisma/client';
+import pkg from '@prisma/client';
+const { PrismaClient } = pkg;
 
 const EVENTS_URL = 'https://www.krew3.site/events';
 const SNAPSHOT_PATH = new URL('./data/krew3-events.json', import.meta.url);

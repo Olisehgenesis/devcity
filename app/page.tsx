@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { eventMarkerSvg } from "./components/EventMapMarker";
+import { EventCard } from "./components/EventCard";
 import { YouSheet } from "./components/YouSheet";
 import { TipSheet, type TipTarget } from "./components/TipSheet";
 import { Sheet } from "./components/Sheet";
@@ -47,6 +48,7 @@ type CityMarker = {
   avatar?: string;
   url?: string;
   category?: string;
+  raw?: EventApiItem;
 };
 type FilterKind = "all" | MarkerKind;
 type NavTab = "map" | "feed" | "chat" | "wallet" | "people";
@@ -55,15 +57,44 @@ type EventApiItem = {
   id: string;
   slug: string;
   name: string;
+  organizer: string;
   summary: string | null;
+  category: string | null;
+  kind: string | null;
+  region: string | null;
   location: string | null;
+  imageUrl: string | null;
   latitude: number | null;
   longitude: number | null;
+  online: boolean;
   startDate: string;
+  endDate: string | null;
   startTime: string | null;
+  endTime: string | null;
   url: string | null;
-  category?: string | null;
+  timetable?: Array<{
+    id: string;
+    date: string;
+    dayNumber: number | null;
+    label: string | null;
+    startTime: string | null;
+    endTime: string | null;
+    allDay: boolean;
+    title: string | null;
+  }>;
 };
+
+function isEventLive(event: EventApiItem): boolean {
+  const start = event.startDate
+    ? new Date(`${event.startDate}T${event.startTime || "00:00:00"}Z`).getTime()
+    : Date.now();
+  const end = event.endDate
+    ? new Date(`${event.endDate}T${event.endTime || "23:59:59"}Z`).getTime()
+    : start + 24 * 3600 * 1000;
+  if (Number.isNaN(start) || Number.isNaN(end)) return false;
+  const now = Date.now();
+  return now >= start && now <= end;
+}
 
 function eventToMarker(event: EventApiItem): CityMarker | null {
   if (typeof event.latitude !== "number" || typeof event.longitude !== "number") return null;
@@ -86,6 +117,7 @@ function eventToMarker(event: EventApiItem): CityMarker | null {
     color: "blue",
     url: event.url ?? undefined,
     category: event.category ?? undefined,
+    raw: event,
   };
 }
 
@@ -329,7 +361,8 @@ export default function CityHome() {
     for (const marker of eventMarkers) {
       const element = document.createElement("button");
       element.type = "button";
-      element.className = "map-marker event-pin-marker";
+      const isLive = marker.raw ? isEventLive(marker.raw) : false;
+      element.className = `map-marker event-pin-marker${isLive ? " is-live" : ""}`;
       element.setAttribute("aria-label", `${marker.name}, ${marker.distance}`);
       element.innerHTML = eventMarkerSvg({ title: marker.name, category: marker.category });
       element.addEventListener("click", (event) => {
@@ -638,7 +671,10 @@ export default function CityHome() {
           <button className="locate-button" onClick={centerOnMe} aria-label="Center map on me" title="Center map"><LocateFixed size={18} /></button>
         </div>
 
-        {selected && <article className={`activity-card ${selected.kind === "drop" ? "drop-card" : ""}`} aria-live="polite">
+        {selected && (selected.kind === "event" && selected.raw ? (
+          <EventCard event={selected.raw} onClose={() => setCardClosed(true)} />
+        ) : (
+        <article className={`activity-card ${selected.kind === "drop" ? "drop-card" : ""}`} aria-live="polite">
           <div className="card-topline">
             <span className={`card-icon tone-${selected.color}`}><MarkerIcon kind={selected.kind} size={17} /></span>
             <span className="card-kind">{selected.kind === "drop" ? "TOKEN DROP" : selected.kind.toUpperCase()}</span>
@@ -681,7 +717,7 @@ export default function CityHome() {
             </button>
           )}
           <p className="prototype-note">{connected ? "Ready when you are" : "Join the city to claim and tip"}</p>
-        </article>}
+        </article>))}
 
         {notice && <div className="notice-toast" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
 

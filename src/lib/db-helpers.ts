@@ -711,3 +711,187 @@ export async function updateMe(input: {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Stalls
+// ---------------------------------------------------------------------------
+
+export function serializeStall(stall: any) {
+  return {
+    id: stall.id,
+    ownerId: stall.ownerId,
+    name: stall.name,
+    description: stall.description,
+    latitude: Number(stall.latitude),
+    longitude: Number(stall.longitude),
+    radiusM: stall.radiusM,
+    imageUrl: stall.imageUrl,
+    tags: stall.tags ?? [],
+    isActive: stall.isActive,
+    createdAt: toIso(stall.createdAt),
+    updatedAt: toIso(stall.updatedAt),
+  };
+}
+
+export async function listStalls(opts?: { lat?: number; lng?: number; radiusKm?: number }) {
+  const where: any = { isActive: true };
+  if (opts?.lat != null && opts?.lng != null) {
+    const km = opts.radiusKm ?? 5;
+    const dLat = km / 111;
+    const dLng = km / (111 * Math.cos((opts.lat * Math.PI) / 180));
+    where.latitude = { gte: toDecimal(opts.lat - dLat), lte: toDecimal(opts.lat + dLat) };
+    where.longitude = { gte: toDecimal(opts.lng - dLng), lte: toDecimal(opts.lng + dLng) };
+  }
+  const stalls = await prisma.stall.findMany({ where, orderBy: { createdAt: 'desc' } });
+  return stalls.map(serializeStall);
+}
+
+export async function createStall(input: {
+  ownerId: string;
+  name: string;
+  description?: string;
+  lat: number;
+  lng: number;
+  radiusM?: number;
+  imageUrl?: string;
+  tags?: string[];
+}) {
+  if (!input.name) throw new ApiError(400, 'name is required');
+  if (input.lat == null || input.lng == null) throw new ApiError(400, 'lat and lng are required');
+  const stall = await prisma.stall.create({
+    data: {
+      ownerId: input.ownerId,
+      name: input.name,
+      description: input.description,
+      latitude: toDecimal(input.lat),
+      longitude: toDecimal(input.lng),
+      radiusM: input.radiusM ?? 50,
+      imageUrl: input.imageUrl,
+      tags: input.tags ?? [],
+    },
+  });
+  return serializeStall(stall);
+}
+
+// ---------------------------------------------------------------------------
+// Booths
+// ---------------------------------------------------------------------------
+
+export function serializeBooth(booth: any) {
+  return {
+    id: booth.id,
+    ownerId: booth.ownerId,
+    stallId: booth.stallId,
+    eventId: booth.eventId,
+    name: booth.name,
+    description: booth.description,
+    latitude: Number(booth.latitude),
+    longitude: Number(booth.longitude),
+    radiusM: booth.radiusM,
+    imageUrl: booth.imageUrl,
+    isActive: booth.isActive,
+    createdAt: toIso(booth.createdAt),
+    updatedAt: toIso(booth.updatedAt),
+  };
+}
+
+export async function listBooths(opts?: { lat?: number; lng?: number; radiusKm?: number; eventId?: string }) {
+  const where: any = { isActive: true };
+  if (opts?.eventId) where.eventId = opts.eventId;
+  if (opts?.lat != null && opts?.lng != null) {
+    const km = opts.radiusKm ?? 5;
+    const dLat = km / 111;
+    const dLng = km / (111 * Math.cos((opts.lat * Math.PI) / 180));
+    where.latitude = { gte: toDecimal(opts.lat - dLat), lte: toDecimal(opts.lat + dLat) };
+    where.longitude = { gte: toDecimal(opts.lng - dLng), lte: toDecimal(opts.lng + dLng) };
+  }
+  const booths = await prisma.booth.findMany({ where, orderBy: { createdAt: 'desc' } });
+  return booths.map(serializeBooth);
+}
+
+export async function createBooth(input: {
+  ownerId: string;
+  stallId?: string;
+  eventId?: string;
+  name: string;
+  description?: string;
+  lat: number;
+  lng: number;
+  radiusM?: number;
+  imageUrl?: string;
+}) {
+  if (!input.name) throw new ApiError(400, 'name is required');
+  if (input.lat == null || input.lng == null) throw new ApiError(400, 'lat and lng are required');
+  const booth = await prisma.booth.create({
+    data: {
+      ownerId: input.ownerId,
+      stallId: input.stallId,
+      eventId: input.eventId,
+      name: input.name,
+      description: input.description,
+      latitude: toDecimal(input.lat),
+      longitude: toDecimal(input.lng),
+      radiusM: input.radiusM ?? 100,
+      imageUrl: input.imageUrl,
+    },
+  });
+  return serializeBooth(booth);
+}
+
+// ---------------------------------------------------------------------------
+// Follows
+// ---------------------------------------------------------------------------
+
+export async function followUser(followerAddress: string, followingAddress: string) {
+  const follower = await getOrCreateUser(followerAddress);
+  const following = await getOrCreateUser(followingAddress);
+  if (follower.id === following.id) throw new ApiError(400, 'Cannot follow yourself');
+  await prisma.follow.upsert({
+    where: { followerId_followingId: { followerId: follower.id, followingId: following.id } },
+    create: { followerId: follower.id, followingId: following.id },
+    update: {},
+  });
+  return { following: { id: following.id, followingAddress: following.walletAddress } };
+}
+
+export async function unfollowUser(followerAddress: string, followingAddress: string) {
+  const follower = await getOrCreateUser(followerAddress);
+  await prisma.follow.deleteMany({
+    where: { followerId: follower.id, followingId: (await getOrCreateUser(followingAddress)).id },
+  });
+  return { ok: true };
+}
+
+export async function listFollowing(userAddress: string) {
+  const user = await getOrCreateUser(userAddress);
+  const rows = await prisma.follow.findMany({
+    where: { followerId: user.id },
+    include: { following: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  return rows.map((r) => ({
+    id: r.following.id,
+    walletAddress: r.following.walletAddress,
+    username: r.following.username,
+    name: r.following.name,
+    avatarUrl: r.following.avatarUrl,
+    followedAt: toIso(r.createdAt),
+  }));
+}
+
+export async function listFollowers(userAddress: string) {
+  const user = await getOrCreateUser(userAddress);
+  const rows = await prisma.follow.findMany({
+    where: { followingId: user.id },
+    include: { follower: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  return rows.map((r) => ({
+    id: r.follower.id,
+    walletAddress: r.follower.walletAddress,
+    username: r.follower.username,
+    name: r.follower.name,
+    avatarUrl: r.follower.avatarUrl,
+    followedAt: toIso(r.createdAt),
+  }));
+}

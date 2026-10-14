@@ -28,13 +28,14 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - DOTENV_PRIVATE_KEY=6fcbd35b9fe2858d30843e3cfc66e45b27196b24130bd1b26f294435318eb63b
+      - DATABASE_URL=postgresql://devcity:devcity_dev_password@postgres:5432/devcity?schema=public
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3000"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -12,13 +12,6 @@ build/
 dist/
 *.tsbuildinfo
 
-# Foundry build outputs
-contracts/out/
-contracts/cache/
-contracts/broadcast/
-contracts/coverage/
-contracts/coverage.json
-
 # IDE & OS
 .DS_Store
 *.swp

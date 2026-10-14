@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -10,8 +10,9 @@ datasource db {
 
 model User {
   id                String               @id
-  walletAddress     String               @unique
-  username          String
+  walletAddress     String?              @unique
+  username          String?              @unique
+  name              String?
   email             String?              @unique
   emailVerified     Boolean              @default(false)
   image             String?
@@ -37,6 +38,10 @@ model User {
   stories           Story[]
   activity          Activity[]
   avatarSettings    AvatarSettings?
+  stalls            Stall[]
+  booths            Booth[]
+  following         Follow[]              @relation("FollowFollower")
+  followers         Follow[]              @relation("FollowFollowing")
 
   @@map("users")
 }
@@ -141,6 +146,22 @@ model Wallet {
   @@map("wallets")
 }
 
+// Opt-in encrypted cloud backup of a client-side wallet key.
+// Stores ONLY the client-encrypted blob (AES-GCM ciphertext + KDF params).
+// The server never sees the private key or the passphrase.
+model WalletBackup {
+  id         String   @id @default(cuid())
+  address    String   @unique
+  iv         String
+  data       String   @db.Text
+  salt       String
+  iterations Int      @default(250000)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("wallet_backups")
+}
+
 model CityEvent {
   id          String        @id @default(cuid())
   slug        String        @unique
@@ -157,6 +178,7 @@ model CityEvent {
   members     EventMember[]
   drops       Drop[]
   places      Place[]
+  booths      Booth[]
 
   @@index([isActive, startsAt])
   @@map("city_events")
@@ -466,6 +488,70 @@ model AvatarSettings {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("avatar_settings")
+}
+
+// Off-chain map-anchored storefront. A stall is a seller's physical spot
+// (with an optional radius for drops/presence). Contract address is optional
+// if the owner later links an on-chain token or escrow.
+model Stall {
+  id          String    @id @default(cuid())
+  ownerId     String
+  name        String
+  description String?
+  latitude    Decimal   @db.Decimal(9, 6)
+  longitude   Decimal   @db.Decimal(9, 6)
+  radiusM     Int       @default(50)
+  imageUrl    String?
+  tags        String[]  @default([])
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  booth       Booth?
+
+  @@index([latitude, longitude])
+  @@index([ownerId])
+  @@map("stalls")
+}
+
+// Off-chain sponsored/venue space (booth) that can host drops and places.
+// A booth can be attached to a stall or stand alone on the map.
+model Booth {
+  id          String    @id @default(cuid())
+  ownerId     String
+  stallId     String?   @unique
+  eventId     String?
+  name        String
+  description String?
+  latitude    Decimal   @db.Decimal(9, 6)
+  longitude   Decimal   @db.Decimal(9, 6)
+  radiusM     Int       @default(100)
+  imageUrl    String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  stall       Stall?    @relation(fields: [stallId], references: [id], onDelete: SetNull)
+  event       CityEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([latitude, longitude])
+  @@index([ownerId])
+  @@index([eventId])
+  @@map("booths")
+}
+
+model Follow {
+  id         String   @id @default(cuid())
+  followerId String
+  followingId String
+  createdAt  DateTime @default(now())
+  follower   User     @relation("FollowFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  following  User     @relation("FollowFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+  @@index([followerId])
+  @@map("follows")
 }
 
 enum AvatarMode {

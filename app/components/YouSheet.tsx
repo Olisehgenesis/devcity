@@ -7,6 +7,7 @@ import { base, baseSepolia } from 'wagmi/chains';
 import { Sheet } from './Sheet';
 import { useCityStore, timeAgo, type AvatarMode, type PresenceStatus, type Visibility } from '../lib/city-store';
 import { dicebearAvatarUrl } from '../lib/avatars';
+import { PasskeyWallet } from './PasskeyWallet';
 
 interface YouSheetProps {
   open: boolean;
@@ -271,50 +272,7 @@ export function YouSheet({ open, onClose, notify }: YouSheetProps) {
             Claim drops, tip builders, and show up on the map. Passkey-first — no seed phrase.
           </p>
 
-          <div className="you-connect-buttons">
-            {coinbase && (
-              <button
-                className="you-connect-primary"
-                disabled={isPending || isConnecting}
-                onClick={() => doConnect(coinbase.id)}
-              >
-                {pendingId === coinbase.id || isConnecting ? (
-                  <><span className="spinner" /> Connecting…</>
-                ) : (
-                  'Continue with passkey'
-                )}
-              </button>
-            )}
-            {injected && (
-              <button
-                className="you-connect-secondary"
-                disabled={isPending || isConnecting}
-                onClick={() => doConnect(injected.id)}
-              >
-                {pendingId === injected.id ? (
-                  <><span className="spinner spinner-dark" /> Connecting…</>
-                ) : (
-                  'Browser wallet'
-                )}
-              </button>
-            )}
-            {fallback && !coinbase && !injected && (
-              <button
-                className="you-connect-primary"
-                disabled={isPending || isConnecting}
-                onClick={() => doConnect(fallback.id)}
-              >
-                Connect wallet
-              </button>
-            )}
-          </div>
-
-          {error && <p className="you-error">{error.message.split('.')[0]}</p>}
-          <p className="you-note">
-            {isConnecting || pendingId
-              ? 'Check the Coinbase window to finish sign-in.'
-              : 'Base Sepolia · gasless claims · demo until contracts deploy'}
-          </p>
+          <PasskeyWallet />
         </div>
       ) : (
         <div className="you-profile">
