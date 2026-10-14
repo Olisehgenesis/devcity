@@ -9,6 +9,7 @@ export interface TipTarget {
   name: string;
   initials: string;
   color: string;
+  address?: string;
 }
 
 interface TipSheetProps {
@@ -45,22 +46,43 @@ export function TipSheet({ open, onClose, target, isConnected, onNeedWallet, not
     setTimeout(reset, 250);
   };
 
-  const send = () => {
-    if (!isConnected) {
-      close();
-      onNeedWallet();
-      notify('Connect a wallet to tip.');
-      return;
-    }
+  const send = async () => {
     if (!finalAmount || Number(finalAmount) <= 0 || !target) return;
     setSending(true);
-    setTimeout(() => {
+    try {
+      const self = await import('@/lib/keystore');
+      const local = await self.listLocalWallets();
+      const myAddress = local[0]?.address;
+      if (!myAddress) {
+        close();
+        onNeedWallet();
+        notify('Create a passkey wallet to tip.');
+        return;
+      }
+      const res = await fetch('/api/tips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromAddress: myAddress,
+          toAddress: target.address ?? myAddress,
+          tokenSymbol: token,
+          amount: finalAmount,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Tip could not be sent.');
+      }
       sendTip(target.name, token, finalAmount);
-      setSending(false);
       setDone(true);
       notify(`Sent ${finalAmount} ${token} to ${target.name}.`);
       setTimeout(close, 1400);
-    }, 800);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Tip failed. Try again.');
+      close();
+    } finally {
+      setSending(false);
+    }
   };
 
   if (!target) return null;

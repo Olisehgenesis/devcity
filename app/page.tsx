@@ -516,9 +516,12 @@ export default function CityHome() {
 
   async function handleClaim() {
     if (!selected || selected.kind !== "drop") return;
-    if (!isConnected) {
+    const self = await import("@/lib/keystore");
+    const local = await self.listLocalWallets();
+    const myAddress = local[0]?.address;
+    if (!myAddress) {
       setYouOpen(true);
-      setNotice("Connect a wallet to claim.");
+      setNotice("Create a passkey wallet to claim.");
       return;
     }
     setClaiming(true);
@@ -526,7 +529,7 @@ export default function CityHome() {
       const response = await fetch("/api/claims/authorize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dropId: selected.id.replace(/^drop-/, "") }),
+        body: JSON.stringify({ dropId: selected.id.replace(/^drop-/, ""), userAddress: myAddress }),
       });
       if (!response.ok) throw new Error("Claim could not be authorized.");
       claim(selected.id, selected.name, tokenFor(selected), selected.amount ?? "1");

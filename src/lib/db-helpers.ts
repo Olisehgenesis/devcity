@@ -895,3 +895,62 @@ export async function listFollowers(userAddress: string) {
     followedAt: toIso(r.createdAt),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Tips (DB-backed; on-chain ERC-20 transfer is a separate chain step)
+// ---------------------------------------------------------------------------
+
+export async function createTip(input: {
+  fromAddress: string;
+  toAddress: string;
+  tokenSymbol: string;
+  amount: string;
+  message?: string;
+}) {
+  if (!input.toAddress || !input.tokenSymbol || !input.amount) {
+    throw new ApiError(400, 'fromAddress, toAddress, tokenSymbol and amount are required');
+  }
+  const from = await getOrCreateUser(input.fromAddress);
+  const to = await getOrCreateUser(input.toAddress);
+  const token = await prisma.token.findFirst({ where: { symbol: { equals: input.tokenSymbol, mode: 'insensitive' } } });
+  if (!token) throw new ApiError(404, `No token "${input.tokenSymbol}" — pick a token in the app.`);
+  if (from.id === to.id) throw new ApiError(400, 'Cannot tip yourself');
+  const tip = await prisma.tip.create({
+    data: {
+      fromUserId: from.id,
+      toUserId: to.id,
+      tokenId: token.id,
+      amount: toDecimal(input.amount),
+      message: input.message,
+    },
+  });
+  return {
+    id: tip.id,
+    toId: to.id,
+    tokenSymbol: token.symbol,
+    amount: tip.amount.toString(),
+    createdAt: toIso(tip.createdAt),
+  };
+}
+
+export async function listTips(userAddress: string, type: 'sent' | 'received' = 'sent') {
+  const user = await getOrCreateUser(userAddress);
+  const where = type === 'received' ? { toUserId: user.id } : { fromUserId: user.id };
+  const rows = await prisma.tip.findMany({
+    where,
+    include: { token: true, fromUser: true, toUser: true },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    amount: r.amount.toString(),
+    tokenSymbol: r.token.symbol,
+    message: r.message,
+    direction: type,
+    from: r.fromUser.walletAddress,
+    to: r.toUser.walletAddress,
+    txHash: r.txHash,
+    createdAt: toIso(r.createdAt),
+  }));
+}
