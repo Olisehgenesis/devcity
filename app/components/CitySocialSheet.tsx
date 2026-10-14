@@ -1,24 +1,44 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Gift, Hand, Heart, MapPin, MessageCircle, Paperclip, Search, Send, Sparkles } from 'lucide-react';
+import { ArrowLeft, Heart, MapPin, MessageCircle, Paperclip, Search, Send, Sparkles } from 'lucide-react';
 import { Sheet } from './Sheet';
-import { timeAgo, type ActivityItem, type Broadcast } from '../lib/city-store';
+import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
 import { useXmtpChat, type XmtpUiMessage } from '../hooks/useXmtpChat';
 import type { Attachment } from '@xmtp/browser-sdk';
 
 export type SocialView = 'feed' | 'chat' | 'people';
+export type FeedProfileStatus = 'checking' | 'signed-out' | 'wallet-needed' | 'ready' | 'error';
+
+type FeedComment = {
+  id: string;
+  text: string;
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+};
+
+type FeedBroadcast = {
+  id: string;
+  text: string;
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+  likes: number;
+  liked: boolean;
+  comments: FeedComment[];
+};
 
 interface CitySocialSheetProps {
   open: boolean;
   view: SocialView | null;
-  activity: ActivityItem[];
-  broadcasts: Broadcast[];
   avatarSrc?: string;
-  onBroadcast: (text: string) => void;
-  onLikeBroadcast: (id: string) => void;
-  onCommentBroadcast: (id: string, text: string) => void;
+  profileStatus: FeedProfileStatus;
+  userAddress: string | null;
+  onRequestProfile: () => void;
   onNotify: (message: string) => void;
   onConnectWallet: () => void;
   onEnableNotifications: () => void;
@@ -52,10 +72,16 @@ function initialsFor(username: string) {
     .join('') || username.slice(0, 2).toUpperCase();
 }
 
-export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, onBroadcast, onLikeBroadcast, onCommentBroadcast, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip }: CitySocialSheetProps) {
+export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
   const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
+  const [broadcasts, setBroadcasts] = useState<FeedBroadcast[]>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedError, setFeedError] = useState('');
+  const [feedRetry, setFeedRetry] = useState(0);
+  const [broadcastSaving, setBroadcastSaving] = useState(false);
+  const [pendingBroadcastId, setPendingBroadcastId] = useState<string | null>(null);
   const [broadcastDraft, setBroadcastDraft] = useState('');
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [commentingId, setCommentingId] = useState<string | null>(null);
@@ -64,6 +90,32 @@ export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, o
   const [chatActionError, setChatActionError] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const xmtp = useXmtpChat(open && view === 'chat', onNotify);
+
+  useEffect(() => {
+    if (!open || view !== 'feed') return;
+    const controller = new AbortController();
+    const params = new URLSearchParams();
+    if (userAddress) params.set('userAddress', userAddress);
+    setFeedLoading(true);
+    setFeedError('');
+
+    void (async () => {
+      try {
+        const queryString = params.size ? `?${params.toString()}` : '';
+        const response = await fetch(`/api/broadcasts${queryString}`, { signal: controller.signal });
+        const data = await response.json() as { broadcasts?: FeedBroadcast[]; error?: string };
+        if (!response.ok) throw new Error(data.error || 'Could not load the city feed.');
+        setBroadcasts(data.broadcasts ?? []);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setFeedError(error instanceof Error ? error.message : 'Could not load the city feed.');
+      } finally {
+        if (!controller.signal.aborted) setFeedLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [open, view, userAddress, feedRetry]);
 
   useEffect(() => {
     if (!open || view !== 'people') return;
@@ -144,65 +196,126 @@ export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, o
     }
   }
 
-  function sendBroadcast(event: FormEvent<HTMLFormElement>) {
+  async function sendBroadcast(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!broadcastDraft.trim()) return;
-    onBroadcast(broadcastDraft);
-    setBroadcastDraft('');
+    if (profileStatus !== 'ready' || !userAddress) {
+      onRequestProfile();
+      return;
+    }
+    setBroadcastSaving(true);
+    setFeedError('');
+    try {
+      const response = await fetch('/api/broadcasts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, text: broadcastDraft }),
+      });
+      const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
+      if (!response.ok || !data.broadcast) throw new Error(data.error || 'Broadcast could not be saved.');
+      setBroadcasts((items) => [data.broadcast!, ...items.filter((item) => item.id !== data.broadcast!.id)]);
+      setBroadcastDraft('');
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : 'Broadcast could not be saved.');
+    } finally {
+      setBroadcastSaving(false);
+    }
   }
 
-  function sendBroadcastComment(event: FormEvent<HTMLFormElement>, broadcastId: string) {
+  async function toggleLike(broadcastId: string) {
+    if (profileStatus !== 'ready' || !userAddress) {
+      onRequestProfile();
+      return;
+    }
+    setPendingBroadcastId(broadcastId);
+    setFeedError('');
+    try {
+      const response = await fetch(`/api/broadcasts/${encodeURIComponent(broadcastId)}/like`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress }),
+      });
+      const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
+      if (!response.ok || !data.broadcast) throw new Error(data.error || 'Like could not be saved.');
+      setBroadcasts((items) => items.map((item) => item.id === broadcastId ? data.broadcast! : item));
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : 'Like could not be saved.');
+    } finally {
+      setPendingBroadcastId(null);
+    }
+  }
+
+  async function sendBroadcastComment(event: FormEvent<HTMLFormElement>, broadcastId: string) {
     event.preventDefault();
     const text = commentDrafts[broadcastId]?.trim();
     if (!text) return;
-    onCommentBroadcast(broadcastId, text);
-    setCommentDrafts((drafts) => ({ ...drafts, [broadcastId]: '' }));
+    if (profileStatus !== 'ready' || !userAddress) {
+      onRequestProfile();
+      return;
+    }
+    setPendingBroadcastId(broadcastId);
+    setFeedError('');
+    try {
+      const response = await fetch(`/api/broadcasts/${encodeURIComponent(broadcastId)}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, text }),
+      });
+      const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
+      if (!response.ok || !data.broadcast) throw new Error(data.error || 'Comment could not be saved.');
+      setBroadcasts((items) => items.map((item) => item.id === broadcastId ? data.broadcast! : item));
+      setCommentDrafts((drafts) => ({ ...drafts, [broadcastId]: '' }));
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : 'Comment could not be saved.');
+    } finally {
+      setPendingBroadcastId(null);
+    }
   }
 
   return (
     <Sheet open={open && view !== null} onClose={onClose} eyebrow="MUMBAI · YOUR CITY" title={title}>
       {view === 'feed' && (
         <div className="social-feed">
-          <div className="social-live-line"><span className="live-dot" /> LIVE IN FORT <span>·</span> moments from the city</div>
-          <form className="broadcast-composer" onSubmit={sendBroadcast}>
-            <span className="broadcast-composer-avatar">{avatarSrc ? <img src={avatarSrc} alt="" /> : 'Y'}</span>
-            <textarea value={broadcastDraft} onChange={(event) => setBroadcastDraft(event.target.value.slice(0, 240))} placeholder="What's happening around you?" rows={2} aria-label="Write a city broadcast" />
-            <div className="broadcast-composer-bottom"><small>{broadcastDraft.length}/240 · saved in this browser</small><button type="submit" disabled={!broadcastDraft.trim()}><RadioIcon /> Broadcast</button></div>
-          </form>
-          {broadcasts.map((broadcast) => (
+          <div className="social-live-line"><span className="live-dot" /> SHARED CITY FEED <span>·</span> posts sync across devices</div>
+          {profileStatus === 'ready' ? (
+            <form className="broadcast-composer" onSubmit={sendBroadcast}>
+              <span className="broadcast-composer-avatar">{avatarSrc ? <img src={avatarSrc} alt="" /> : 'Y'}</span>
+              <textarea value={broadcastDraft} onChange={(event) => setBroadcastDraft(event.target.value.slice(0, 240))} placeholder="What's happening around you?" rows={2} aria-label="Write a city broadcast" />
+              <div className="broadcast-composer-bottom"><small>{broadcastDraft.length}/240 · saved to the city feed</small><button type="submit" disabled={!broadcastDraft.trim() || broadcastSaving}><RadioIcon /> {broadcastSaving ? 'Saving…' : 'Broadcast'}</button></div>
+            </form>
+          ) : (
+            <div className="feed-profile-gate">
+              <strong>{profileStatus === 'checking' ? 'Checking your profile…' : profileStatus === 'error' ? 'Profile check failed' : profileStatus === 'wallet-needed' ? 'Finish setting up your profile' : 'Sign in to join the conversation'}</strong>
+              <p>{profileStatus === 'checking' ? 'Your account is needed to post, like, or comment.' : profileStatus === 'error' ? 'Open your profile to retry sign-in before posting.' : 'Sign in with a passkey and set up your wallet to post, like, and comment.'}</p>
+              {profileStatus !== 'checking' && <button className="you-connect-primary" onClick={onRequestProfile}>{profileStatus === 'wallet-needed' ? 'Finish profile setup' : 'Open your profile'}</button>}
+            </div>
+          )}
+          {feedError && <p className="feed-error" role="alert">{feedError}{broadcasts.length === 0 && <button onClick={() => setFeedRetry((count) => count + 1)}>Try again</button>}</p>}
+          {feedLoading && broadcasts.length === 0 && <p className="social-empty" role="status">Loading the city feed…</p>}
+          {broadcasts.map((broadcast) => {
+            const isOwn = !!userAddress && broadcast.userId === `user_${userAddress.toLowerCase()}`;
+            const author = isOwn ? 'You' : broadcast.username && !broadcast.username.startsWith('user_') ? broadcast.username : 'City explorer';
+            const authorAvatar = broadcast.avatarUrl || (isOwn ? avatarSrc : undefined);
+            return (
             <article className="broadcast-card" key={broadcast.id}>
-              <header><span className="broadcast-composer-avatar">{avatarSrc ? <img src={avatarSrc} alt="" /> : 'Y'}</span><span><strong>You</strong><small>{timeAgo(broadcast.at)} · Mumbai</small></span><span className="broadcast-pulse" title="Your city signal is live" /></header>
+              <header><span className="broadcast-composer-avatar">{authorAvatar ? <img src={authorAvatar} alt="" /> : author.slice(0, 1).toUpperCase()}</span><span><strong>{author}</strong><small>{timeAgo(Date.parse(broadcast.createdAt))}</small></span><span className="broadcast-pulse" title="Shared with the city" /></header>
               <p className="broadcast-copy">{broadcast.text}</p>
               <div className="broadcast-actions">
-                <button className={broadcast.liked ? 'is-liked' : ''} onClick={() => onLikeBroadcast(broadcast.id)} aria-label={broadcast.liked ? 'Unlike broadcast' : 'Like broadcast'}><Heart size={15} fill={broadcast.liked ? 'currentColor' : 'none'} /> {broadcast.likes}</button>
+                <button className={broadcast.liked ? 'is-liked' : ''} onClick={() => void toggleLike(broadcast.id)} disabled={pendingBroadcastId === broadcast.id} aria-label={broadcast.liked ? 'Unlike broadcast' : 'Like broadcast'}><Heart size={15} fill={broadcast.liked ? 'currentColor' : 'none'} /> {broadcast.likes}</button>
                 <button onClick={() => setCommentingId(commentingId === broadcast.id ? null : broadcast.id)}><MessageCircle size={15} /> {broadcast.comments.length} comments</button>
-                <span className="broadcast-radius">YOUR MAP SIGNAL</span>
+                <span className="broadcast-radius">CITY FEED</span>
               </div>
-              {broadcast.comments.map((comment) => <p className="broadcast-comment" key={comment.id}><strong>You</strong> {comment.text}</p>)}
+              {broadcast.comments.map((comment) => <p className="broadcast-comment" key={comment.id}><strong>{comment.username && !comment.username.startsWith('user_') ? comment.username : comment.userId === `user_${userAddress?.toLowerCase()}` ? 'You' : 'City explorer'}</strong> {comment.text}</p>)}
               {commentingId === broadcast.id && <form className="broadcast-comment-form" onSubmit={(event) => sendBroadcastComment(event, broadcast.id)}>
                 <input value={commentDrafts[broadcast.id] ?? ''} onChange={(event) => setCommentDrafts((drafts) => ({ ...drafts, [broadcast.id]: event.target.value.slice(0, 240) }))} placeholder="Add a comment" aria-label="Add a comment" />
-                <button type="submit" disabled={!commentDrafts[broadcast.id]?.trim()} aria-label="Post comment"><Send size={14} /></button>
+                <button type="submit" disabled={!commentDrafts[broadcast.id]?.trim() || pendingBroadcastId === broadcast.id} aria-label="Post comment"><Send size={14} /></button>
               </form>}
             </article>
-          ))}
-          {broadcasts.length === 0 && activity.length === 0 && (
-            <p className="social-empty">Nothing happening yet. Share the first broadcast.</p>
+          );
+          })}
+          {!feedLoading && !feedError && broadcasts.length === 0 && (
+            <p className="social-empty">No broadcasts yet. Be the first to share what&apos;s happening.</p>
           )}
-          {activity
-            .map((item) => ({ ...item, place: 'Mumbai' }))
-            .sort((a, b) => b.at - a.at)
-            .map((item) => (
-              <article className="feed-item" key={item.id}>
-                <span className={`feed-item-icon feed-${item.kind}`}>
-                  {item.kind === 'claim' ? <Gift size={15} /> : item.kind === 'tip' ? <Sparkles size={15} /> : <Hand size={15} />}
-                </span>
-                <div className="feed-item-copy">
-                  <p>{item.text}</p>
-                  <span><MapPin size={12} /> {item.place} <i /> {timeAgo(item.at)}</span>
-                </div>
-                <Sparkles size={15} className="feed-spark" />
-              </article>
-            ))}
           <button className="social-map-link" onClick={onClose}><MapPin size={15} /> Back to the map</button>
         </div>
       )}

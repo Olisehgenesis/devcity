@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useAccount } from "wagmi";
 import * as maplibregl from "maplibre-gl";
@@ -28,7 +28,7 @@ import { EventCard } from "./components/EventCard";
 import { YouSheet } from "./components/YouSheet";
 import { TipSheet, type TipTarget } from "./components/TipSheet";
 import { Sheet } from "./components/Sheet";
-import { CitySocialSheet, type SocialView } from "./components/CitySocialSheet";
+import { CitySocialSheet, type FeedProfileStatus, type SocialView } from "./components/CitySocialSheet";
 import { ScanSheet } from "./components/ScanSheet";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
@@ -206,6 +206,9 @@ export default function CityHome() {
   const [activeTab, setActiveTab] = useState<NavTab>("map");
   const [notice, setNotice] = useState("");
   const [youOpen, setYouOpen] = useState(false);
+  const [returnToFeedAfterProfile, setReturnToFeedAfterProfile] = useState(false);
+  const [feedProfileStatus, setFeedProfileStatus] = useState<FeedProfileStatus>("checking");
+  const [feedUserAddress, setFeedUserAddress] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [socialView, setSocialView] = useState<SocialView | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -242,16 +245,38 @@ export default function CityHome() {
   const [claiming, setClaiming] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  const refreshFeedProfile = useCallback(async () => {
+    setFeedProfileStatus("checking");
+    setFeedUserAddress(null);
+    try {
+      const [{ authClient }, { listLocalWallets }] = await Promise.all([
+        import("@/lib/auth-client"),
+        import("@/lib/keystore"),
+      ]);
+      const session = await authClient.getSession();
+      const user = (session?.data as { user?: { id: string } } | null)?.user;
+      if (!user) {
+        setFeedProfileStatus("signed-out");
+        return;
+      }
+      const wallets = await listLocalWallets();
+      const address = wallets[0]?.address ?? null;
+      setFeedUserAddress(address);
+      setFeedProfileStatus(address ? "ready" : "wallet-needed");
+    } catch {
+      setFeedProfileStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshFeedProfile();
+  }, [refreshFeedProfile]);
+
   useEffect(() => setHydrated(true), []);
 
   const { isConnected } = useAccount();
   const claimedMap = useCityStore((s) => s.claimed);
   const claim = useCityStore((s) => s.claim);
-  const activity = useCityStore((s) => s.activity);
-  const broadcasts = useCityStore((s) => s.broadcasts);
-  const addBroadcast = useCityStore((s) => s.addBroadcast);
-  const toggleBroadcastLike = useCityStore((s) => s.toggleBroadcastLike);
-  const addBroadcastComment = useCityStore((s) => s.addBroadcastComment);
   const avatarMode = useCityStore((s) => s.avatarMode);
   const avatarSeed = useCityStore((s) => s.avatarSeed);
   const avatarImageData = useCityStore((s) => s.avatarImageData);
@@ -472,7 +497,7 @@ export default function CityHome() {
   useEffect(() => {
     if (!mapReady || !myPosition) return;
     const element = document.createElement("div");
-    element.className = `my-location-marker${broadcasts.length > 0 && presenceStatus !== 'offline' ? ' my-location-broadcasting' : ''}${presenceStatus === 'offline' ? ' my-location-offline' : ''}`;
+    element.className = `my-location-marker${presenceStatus === 'offline' ? ' my-location-offline' : ''}`;
     if (avatarMode === 'upload' && avatarImageData) {
       const avatar = document.createElement('img');
       avatar.src = avatarImageData;
@@ -495,7 +520,7 @@ export default function CityHome() {
     return () => {
       marker.remove();
     };
-  }, [avatarImageData, avatarMode, avatarSeed, broadcasts.length, mapReady, myPosition, presenceStatus]);
+  }, [avatarImageData, avatarMode, avatarSeed, mapReady, myPosition, presenceStatus]);
 
   function tokenFor(marker: CityMarker) {
     return marker.tokenSymbol ?? "TOKENS";
@@ -633,14 +658,29 @@ export default function CityHome() {
   }
 
   function openProfile() {
+    setReturnToFeedAfterProfile(false);
     setSocialView(null);
     setActiveTab("map");
     setYouOpen(true);
   }
 
-  function handleBroadcast(text: string) {
-    addBroadcast(text);
-    setNotice('Broadcast added to your city feed. Your map signal grew.');
+  function openProfileFromFeed() {
+    setReturnToFeedAfterProfile(true);
+    setSocialView(null);
+    setActiveTab("map");
+    setYouOpen(true);
+  }
+
+  function closeProfile() {
+    setYouOpen(false);
+    void refreshFeedProfile();
+    if (returnToFeedAfterProfile) {
+      setReturnToFeedAfterProfile(false);
+      setSocialView("feed");
+      setActiveTab("feed");
+    } else if (activeTab === "wallet") {
+      setActiveTab("map");
+    }
   }
 
   function notifyChat(message: string) {
@@ -778,7 +818,7 @@ export default function CityHome() {
         </nav>
       </section>
 
-      <YouSheet open={youOpen} onClose={() => { setYouOpen(false); if (activeTab === "wallet") setActiveTab("map"); }} notify={setNotice} />
+      <YouSheet open={youOpen} onClose={closeProfile} notify={setNotice} />
       <ScanSheet
         open={scanOpen}
         onClose={() => setScanOpen(false)}
@@ -787,12 +827,10 @@ export default function CityHome() {
       <CitySocialSheet
         open={socialView !== null}
         view={socialView}
-        activity={activity}
-        broadcasts={broadcasts}
         avatarSrc={currentAvatarSrc}
-        onBroadcast={handleBroadcast}
-        onLikeBroadcast={toggleBroadcastLike}
-        onCommentBroadcast={addBroadcastComment}
+        profileStatus={feedProfileStatus}
+        userAddress={feedUserAddress}
+        onRequestProfile={openProfileFromFeed}
         onNotify={notifyChat}
         onConnectWallet={() => { setSocialView(null); setActiveTab('wallet'); setYouOpen(true); }}
         onEnableNotifications={() => void enableChatNotifications()}

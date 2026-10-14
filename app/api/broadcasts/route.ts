@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { listBroadcasts, createBroadcast, ApiError } from '@/lib/db-helpers';
 
 export async function GET(request: Request) {
@@ -16,10 +16,10 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const broadcast = await createBroadcast(body.userAddress, body.text);
+    const broadcast = await createBroadcast(body.userAddress, body.text, request);
     return NextResponse.json({ broadcast }, { status: 201 });
   } catch (err) {
     if (err instanceof ApiError) {

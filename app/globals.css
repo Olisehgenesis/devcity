@@ -117,6 +117,12 @@ h1, h2, h3, p { margin: 0; }
 .broadcast-comment-form input { min-width: 0; flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); font-size: 11px; }
 .broadcast-comment-form button { display: grid; place-items: center; width: 32px; border-radius: 9px; background: var(--surface); color: var(--ink); }
 .broadcast-comment-form button:disabled { opacity: .45; }
+.feed-profile-gate { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 19px; background: color-mix(in srgb, var(--lime) 18%, var(--paper)); text-align: center; }
+.feed-profile-gate strong { font-size: 13px; }
+.feed-profile-gate p { max-width: 34ch; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.feed-profile-gate .you-connect-primary { width: 100%; max-width: 240px; height: 40px; margin-top: 3px; font-size: 12px; }
+.feed-error { margin: 0 0 12px; color: #a34035; font-size: 12px; line-height: 1.45; }
+.feed-error button { margin-left: 8px; color: var(--ink); font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
