@@ -1,25 +1,27 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { ImagePlus, KeyRound, Shuffle } from 'lucide-react';
-import { useAccount, useDisconnect, useSwitchChain } from 'wagmi';
-import { base, baseSepolia } from 'wagmi/chains';
+import { useEffect, useRef, useState } from 'react';
+import { CalendarDays, Check, ImagePlus, KeyRound, Shuffle, Wallet, X } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { useCityStore, timeAgo, type AvatarMode } from '../lib/city-store';
 import { dicebearAvatarUrl } from '../lib/avatars';
-import { PasskeyWallet } from './PasskeyWallet';
+import { normalizeUsername } from '@/lib/usernames';
+import { authClient } from '@/lib/auth-client';
 
 interface YouSheetProps {
   open: boolean;
   onClose: () => void;
-  notify: (msg: string) => void;
+  onOpenWallet: () => void;
 }
 
 type ProfileUser = { id: string; name?: string | null; email?: string | null };
 
-function shortAddr(addr?: string) {
-  if (!addr) return '';
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+function formatEventDate(date: string | null) {
+  if (!date) return 'Date to be announced';
+  const parsed = new Date(`${date.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(parsed.getTime())
+    ? 'Date to be announced'
+    : parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 async function encodeProfileImage(file: File): Promise<string> {
@@ -100,12 +102,11 @@ function AvatarControls({
   );
 }
 
-export function YouSheet({ open, onClose, notify }: YouSheetProps) {
-  const { address, isConnected, chainId } = useAccount();
-  const { disconnect } = useDisconnect();
-  const { switchChain } = useSwitchChain();
-
+export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
   const activity = useCityStore((s) => s.activity);
+  const savedEvents = useCityStore((s) => s.savedEvents);
+  const markEventAttended = useCityStore((s) => s.markEventAttended);
+  const removeSavedEvent = useCityStore((s) => s.removeSavedEvent);
   const avatarMode = useCityStore((s) => s.avatarMode);
   const avatarSeed = useCityStore((s) => s.avatarSeed);
   const avatarImageData = useCityStore((s) => s.avatarImageData);
@@ -113,45 +114,54 @@ export function YouSheet({ open, onClose, notify }: YouSheetProps) {
   const setAvatarImageData = useCityStore((s) => s.setAvatarImageData);
   const shuffleAvatar = useCityStore((s) => s.shuffleAvatar);
 
-  const [copied, setCopied] = useState(false);
   const [sessionUser, setSessionUser] = useState<ProfileUser | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
-  const wrongChain = isConnected && chainId !== baseSepolia.id && chainId !== base.id;
-  const profileName = sessionUser?.name || 'City explorer';
+  const [sessionError, setSessionError] = useState('');
+  const [retrySession, setRetrySession] = useState(0);
+  const accountHandle = normalizeUsername(sessionUser?.name ?? '');
+  const profileName = accountHandle ? `${accountHandle}.devcity.fun` : sessionUser?.name || 'City explorer';
   const profileInitials = (sessionUser?.name || sessionUser?.email || 'You').slice(0, 2).toUpperCase();
-  const chainLabel = !isConnected
-    ? 'Verified with passkey'
-    : chainId === base.id
-      ? 'Base'
-      : chainId === baseSepolia.id
-        ? 'Base Sepolia'
-        : 'Wrong network';
 
-  const copyAddr = async () => {
-    if (!address) return;
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* clipboard unavailable */
-    }
-  };
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setSessionLoading(true);
+    setSessionError('');
+    setSessionUser(null);
+    void authClient.getSession()
+      .then((result) => {
+        if (active) setSessionUser((result?.data as { user?: ProfileUser } | null)?.user ?? null);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        console.error('Could not load profile session:', error);
+        setSessionError('Could not load your profile. Try again.');
+      })
+      .finally(() => {
+        if (active) setSessionLoading(false);
+      });
+    return () => { active = false; };
+  }, [open, retrySession]);
 
   return (
-    <Sheet open={open} onClose={onClose} eyebrow="Your account" title={sessionUser ? 'Your profile' : 'Sign in'}>
-      {!sessionUser ? (
+    <Sheet open={open} onClose={onClose} eyebrow="Your DEVCITY identity" title="Profile">
+      {sessionLoading ? (
+        <p className="you-note">Loading your profile…</p>
+      ) : !sessionUser ? (
         <div className="profile-auth-gate">
           <div className="profile-gate-art"><KeyRound size={29} strokeWidth={2.5} /></div>
           <div className="profile-gate-copy">
             <span className="profile-gate-kicker">YOUR DEVCITY ACCOUNT</span>
-            <h3>{sessionLoading ? 'Checking your account' : 'Your profile starts here'}</h3>
-            <p>{sessionLoading ? 'One moment while we check your passkey session.' : 'Sign in to see your profile, wallet, and activity.'}</p>
+            <h3>Your profile starts here</h3>
+            <p>Sign in to see your DEVCITY identity and activity.</p>
           </div>
-          <PasskeyWallet
-            onSessionChange={(user) => setSessionUser(user)}
-            onSessionReady={() => setSessionLoading(false)}
-          />
+          {sessionError && (
+            <div className="profile-session-error" role="alert">
+              <p>{sessionError}</p>
+              <button onClick={() => setRetrySession((attempt) => attempt + 1)}>Try again</button>
+            </div>
+          )}
+          <button className="you-connect-primary" onClick={onOpenWallet}><Wallet size={17} /> Open wallet to sign in</button>
         </div>
       ) : (
         <div className="you-profile">
@@ -159,55 +169,91 @@ export function YouSheet({ open, onClose, notify }: YouSheetProps) {
             <div className={`you-avatar you-avatar-lg${avatarMode === 'initials' ? ' you-avatar-initials' : ''}`}>
               {avatarMode === 'upload' && avatarImageData ? (
                 <img src={avatarImageData} alt="Your uploaded profile photo" />
-              ) : avatarMode === 'dicebear' && avatarSeed ? (
-                <img src={dicebearAvatarUrl(avatarSeed)} alt="Your generated avatar" />
+              ) : avatarMode === 'dicebear' ? (
+                <img src={dicebearAvatarUrl(avatarSeed || sessionUser.name || sessionUser.id)} alt="Your generated avatar" />
               ) : <span>{profileInitials}</span>}
             </div>
             <div className="you-identity-text">
               <strong className="profile-display-name">{profileName}</strong>
-              {address ? <button className="you-address" onClick={copyAddr}>{shortAddr(address)} {copied ? '· copied' : ''}</button> : <span className="profile-account-label">{sessionUser.email || 'Passkey account'}</span>}
-              <span className="you-chain">{chainLabel}</span>
+              <span className="profile-account-label">Here for the city.</span>
             </div>
+            <button className="profile-edit-avatar" onClick={() => document.querySelector<HTMLDetailsElement>('.profile-appearance-disclosure')?.setAttribute('open', '')}>Edit look</button>
           </header>
 
-          {wrongChain && (
-            <button className="you-switch" onClick={() => switchChain({ chainId: baseSepolia.id })}>
-              Switch to Base Sepolia
-            </button>
-          )}
+          <div className="profile-stat-strip" aria-label="Your DEVCITY activity">
+            <div><strong>{savedEvents.filter((event) => event.attendance === 'attended').length}</strong><span>attended</span></div>
+            <div><strong>{activity.filter((item) => item.kind === 'claim').length}</strong><span>drops</span></div>
+            <div><strong>{activity.filter((item) => item.kind === 'tip').length}</strong><span>tips</span></div>
+          </div>
+
+          <section className="profile-events-section" aria-labelledby="profile-events-title">
+            <div className="profile-section-heading">
+              <div><span className="profile-section-kicker">YOUR CITY CALENDAR</span><h3 id="profile-events-title">My events</h3></div>
+              <span className="profile-count">{savedEvents.length}</span>
+            </div>
+            <p className="profile-device-note">Your going and attended list is saved on this device.</p>
+            {savedEvents.length > 0 ? (
+              <div className="profile-event-list">
+                {savedEvents.map((event) => (
+                  <article className="profile-event-item" key={event.id}>
+                    <span className={`profile-event-state${event.attendance === 'attended' ? ' is-attended' : ''}`}>
+                      {event.attendance === 'attended' ? <Check size={14} /> : <CalendarDays size={14} />}
+                    </span>
+                    <div className="profile-event-copy">
+                      <strong>{event.name}</strong>
+                      <span>{formatEventDate(event.startDate)}{event.location ? ` · ${event.location}` : ''}</span>
+                      <small>{event.attendance === 'attended' ? 'Attended' : 'Going'}</small>
+                    </div>
+                    <div className="profile-event-actions">
+                      {event.attendance === 'going' && <button onClick={() => markEventAttended(event.id)}>Attended</button>}
+                      {event.url && <a href={event.url} target="_blank" rel="noreferrer" aria-label={`Open ${event.name}`}>Open</a>}
+                      <button className="profile-event-remove" onClick={() => removeSavedEvent(event.id)} aria-label={`Remove ${event.name} from my events`}><X size={14} /></button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="profile-empty-events">
+                <p>Keep your plans and past events together here.</p>
+                <span>Open an event on the map and choose “I’m going” to add it.</span>
+              </div>
+            )}
+          </section>
+
+          <details className="profile-disclosure profile-appearance-disclosure">
+            <summary>Profile appearance <span>Saved on this device</span></summary>
+            <AvatarControls mode={avatarMode} seed={avatarSeed} fallbackSeed={sessionUser.name ?? 'you'} imageData={avatarImageData} setMode={setAvatarMode} setImageData={setAvatarImageData} shuffle={shuffleAvatar} />
+          </details>
 
           <details className="profile-disclosure">
-            <summary>Profile appearance <span>Saved on this device</span></summary>
-            <AvatarControls mode={avatarMode} seed={avatarSeed} fallbackSeed={address?.slice(2, 4) ?? sessionUser.name ?? 'you'} imageData={avatarImageData} setMode={setAvatarMode} setImageData={setAvatarImageData} shuffle={shuffleAvatar} />
-          </details>
-
-          {activity.length > 0 && <details className="profile-disclosure">
-            <summary>Recent activity <span>{activity.length}</span></summary>
+            <summary>City activity <span>{activity.length}</span></summary>
             <div className="profile-activity-wrap">
-              <ul className="you-activity">
-                {activity.map((item) => (
-                  <li key={item.id}>
-                    <span className={`you-activity-dot you-activity-${item.kind}`} />
-                    <span className="you-activity-text">{item.text}</span>
-                    <span className="you-activity-time">{timeAgo(item.at)}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="profile-local-note">Activity is stored on this device.</p>
+              {activity.length > 0 ? (
+                <>
+                  <ul className="you-activity">
+                    {activity.map((item) => (
+                      <li key={item.id}>
+                        <span className={`you-activity-dot you-activity-${item.kind}`} />
+                        <span className="you-activity-text">{item.text}</span>
+                        <span className="you-activity-time">{timeAgo(item.at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="profile-local-note">Activity is stored on this device.</p>
+                </>
+              ) : (
+                <div className="profile-empty-activity">
+                  <p>Your drops and tips will show up here as you explore.</p>
+                </div>
+              )}
             </div>
-          </details>}
-
-          <details className="profile-disclosure profile-wallet-disclosure">
-            <summary>Wallet, balances & recovery <span>Manage</span></summary>
-            <PasskeyWallet
-              onSessionChange={(user) => setSessionUser(user)}
-              onSessionReady={() => setSessionLoading(false)}
-            />
           </details>
 
-          {isConnected && <button className="you-disconnect" onClick={() => { disconnect(); notify('Browser wallet disconnected.'); }}>
-            Disconnect browser wallet
-          </button>}
+          <button className="profile-open-wallet" onClick={onOpenWallet}>
+            <span className="profile-open-wallet-icon"><Wallet size={18} /></span>
+            <span><strong>Open wallet</strong><small>Balances, address and security</small></span>
+            <span aria-hidden="true">→</span>
+          </button>
         </div>
       )}
     </Sheet>

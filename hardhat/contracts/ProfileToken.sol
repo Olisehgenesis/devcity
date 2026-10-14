@@ -29,6 +29,8 @@ contract ProfileToken is
     using BalanceDeltaLib for BalanceDelta;
 
     uint256 public MAX_SUPPLY;
+    uint256 public constant TREASURY_BPS = 1_000;
+    uint256 public constant BPS_DENOMINATOR = 10_000;
     string public tokenURI;
     address public profileOwner;
     uint256 public createdAt;
@@ -41,11 +43,14 @@ contract ProfileToken is
     IPermit2 public permit2;
     bytes32 public poolId;
     bool public poolCreated;
+    bytes32 private activeSwapDataHash;
 
     event TokenURIUpdated(string newURI);
     event PoolCreated(bytes32 indexed poolId);
     event USDTTokenSet(address usdtToken);
     event TokensBurnedForUSDT(uint256 amount, uint256 usdtReceived);
+    event TokensSoldForUSDT(address indexed seller, uint256 tokenAmount, uint256 usdtReceived);
+    event TokensBoughtWithUSDT(address indexed buyer, uint256 usdtAmount, uint256 tokenReceived);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -80,7 +85,9 @@ contract ProfileToken is
         usdtToken = _usdtToken;
         factory = _factory;
 
-        _mint(_profileOwner, MAX_SUPPLY);
+        uint256 treasuryAllocation = (MAX_SUPPLY * TREASURY_BPS) / BPS_DENOMINATOR;
+        _mint(_profileOwner, MAX_SUPPLY - treasuryAllocation);
+        _mint(_factory, treasuryAllocation);
     }
 
     /**
@@ -140,35 +147,79 @@ contract ProfileToken is
         uint256 minUSDTOut,
         uint256 deadline
     ) external nonReentrant whenNotPaused returns (uint256 usdtReceived) {
+        return _sellForUSDT(amountIn, minUSDTOut, deadline);
+    }
+
+    function sellForUSDT(
+        uint256 amountIn,
+        uint256 minUSDTOut,
+        uint256 deadline
+    ) external nonReentrant whenNotPaused returns (uint256 usdtReceived) {
+        return _sellForUSDT(amountIn, minUSDTOut, deadline);
+    }
+
+    function _sellForUSDT(
+        uint256 amountIn,
+        uint256 minUSDTOut,
+        uint256 deadline
+    ) internal returns (uint256 usdtReceived) {
         require(poolCreated, "Pool not created");
         require(amountIn > 0, "Amount must be > 0");
         require(block.timestamp <= deadline, "Deadline passed");
         require(address(poolManager) != address(0), "PoolManager not set");
         require(usdtToken != address(0), "USDT not set");
 
-        // Transfer tokens to the PoolManager so they can be settled during the swap.
-        _transfer(msg.sender, address(poolManager), amountIn);
+        bool zeroForOne = address(this) < usdtToken;
+        _transfer(msg.sender, address(this), amountIn);
+        usdtReceived = _swapExactInput(amountIn, minUSDTOut, msg.sender, address(this), usdtToken, zeroForOne);
+        emit TokensBurnedForUSDT(amountIn, usdtReceived);
+        emit TokensSoldForUSDT(msg.sender, amountIn, usdtReceived);
+    }
 
-        bytes memory unlockData = abi.encode(
+    function buyWithUSDT(
+        uint256 usdtAmountIn,
+        uint256 minTokensOut,
+        uint256 deadline
+    ) external nonReentrant whenNotPaused returns (uint256 tokensReceived) {
+        require(poolCreated, "Pool not created");
+        require(usdtAmountIn > 0, "Amount must be > 0");
+        require(block.timestamp <= deadline, "Deadline passed");
+        require(address(poolManager) != address(0), "PoolManager not set");
+        require(usdtToken != address(0), "USDT not set");
+
+        IERC20(usdtToken).safeTransferFrom(msg.sender, address(this), usdtAmountIn);
+        bool zeroForOne = usdtToken < address(this);
+        tokensReceived = _swapExactInput(usdtAmountIn, minTokensOut, msg.sender, usdtToken, address(this), zeroForOne);
+        emit TokensBoughtWithUSDT(msg.sender, usdtAmountIn, tokensReceived);
+    }
+
+    function _swapExactInput(
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address recipient,
+        address inputToken,
+        address outputToken,
+        bool zeroForOne
+    ) internal returns (uint256 amountOut) {
+        require(amountIn <= uint256(type(int256).max), "Amount too large");
+        bytes memory callbackData = abi.encode(
             SwapCallbackData({
                 amountIn: amountIn,
-                minUSDTOut: minUSDTOut,
-                recipient: msg.sender
+                minAmountOut: minAmountOut,
+                recipient: recipient,
+                inputToken: inputToken,
+                outputToken: outputToken,
+                zeroForOne: zeroForOne
             })
         );
-
-        bytes memory result = poolManager.unlock(unlockData);
+        activeSwapDataHash = keccak256(callbackData);
+        bytes memory result = poolManager.unlock(callbackData);
+        require(activeSwapDataHash == bytes32(0), "Swap callback not completed");
         BalanceDelta delta = BalanceDelta.wrap(abi.decode(result, (int256)));
-
-        bool zeroForOne = address(this) < usdtToken;
         int256 outDelta = zeroForOne ? delta.amount1() : delta.amount0();
-        require(outDelta > 0, "No USDT received");
-        usdtReceived = uint256(outDelta);
-
-        require(usdtReceived >= minUSDTOut, "Slippage exceeded");
-
-        emit TokensBurnedForUSDT(amountIn, usdtReceived);
-        return usdtReceived;
+        require(outDelta > 0, "No output received");
+        amountOut = uint256(outDelta);
+        require(amountOut >= minAmountOut, "Slippage exceeded");
     }
 
     /**
@@ -221,8 +272,11 @@ contract ProfileToken is
 
     struct SwapCallbackData {
         uint256 amountIn;
-        uint256 minUSDTOut;
+        uint256 minAmountOut;
         address recipient;
+        address inputToken;
+        address outputToken;
+        bool zeroForOne;
     }
 
     /**
@@ -231,42 +285,54 @@ contract ProfileToken is
      */
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
         require(msg.sender == address(poolManager), "Only PoolManager");
+        require(activeSwapDataHash != bytes32(0) && keccak256(data) == activeSwapDataHash, "Unexpected callback");
+        activeSwapDataHash = bytes32(0);
         SwapCallbackData memory params = abi.decode(data, (SwapCallbackData));
 
-        bool zeroForOne = address(this) < usdtToken;
+        bool zeroForOne = params.zeroForOne;
+        require(
+            (params.inputToken == address(this) && params.outputToken == usdtToken)
+                || (params.inputToken == usdtToken && params.outputToken == address(this)),
+            "Unsupported pair"
+        );
+        require(zeroForOne == (params.inputToken < params.outputToken), "Invalid swap direction");
 
         PoolKey memory poolKey = PoolKey({
-            currency0: zeroForOne ? Currency.wrap(address(this)) : Currency.wrap(usdtToken),
-            currency1: zeroForOne ? Currency.wrap(usdtToken) : Currency.wrap(address(this)),
+            currency0: Currency.wrap(zeroForOne ? params.inputToken : params.outputToken),
+            currency1: Currency.wrap(zeroForOne ? params.outputToken : params.inputToken),
             fee: 3000,
             tickSpacing: 60,
             hooks: address(0)
         });
 
-        // Sync the input currency so settle() can compute the paid amount.
-        poolManager.sync(Currency.wrap(address(this)));
-
-        // Exact-in swap: amountSpecified must be NEGATIVE.
+        poolManager.sync(Currency.wrap(params.inputToken));
         BalanceDelta swapDelta = poolManager.swap(
             poolKey,
             SwapParams({
                 zeroForOne: zeroForOne,
                 amountSpecified: -int256(params.amountIn),
-                sqrtPriceLimitX96: 0
+                sqrtPriceLimitX96: zeroForOne
+                    ? 4295128740
+                    : 1461446703485210103287273052203988822378723970341
             }),
             ""
         );
 
-        // Settle the input currency (tokens were pre-transferred to the PoolManager).
+        int256 inDelta = zeroForOne ? swapDelta.amount0() : swapDelta.amount1();
+        require(inDelta < 0, "No input consumed");
+        uint256 amountConsumed = uint256(-inDelta);
+        require(amountConsumed <= params.amountIn, "Input exceeded");
+        IERC20(params.inputToken).safeTransfer(address(poolManager), amountConsumed);
         poolManager.settle();
 
-        // Take the output USDT and send to the recipient.
         int256 outDelta = zeroForOne ? swapDelta.amount1() : swapDelta.amount0();
-        require(outDelta > 0, "No USDT received");
-        uint256 usdtOut = uint256(outDelta);
-        poolManager.take(Currency.wrap(usdtToken), params.recipient, usdtOut);
+        require(outDelta > 0, "No output received");
+        uint256 amountOut = uint256(outDelta);
+        uint256 refund = params.amountIn - amountConsumed;
+        if (refund > 0) IERC20(params.inputToken).safeTransfer(params.recipient, refund);
+        poolManager.take(Currency.wrap(params.outputToken), params.recipient, amountOut);
 
-        require(usdtOut >= params.minUSDTOut, "Slippage exceeded");
+        require(amountOut >= params.minAmountOut, "Slippage exceeded");
 
         return abi.encode(swapDelta);
     }

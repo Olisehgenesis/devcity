@@ -68,10 +68,14 @@ export async function decryptWithPassphrase(passphrase: string, payload: Encrypt
 
 export interface LocalWallet {
   address: Address;
-  /** encrypted by the user passphrase / recovery secret — never plaintext on disk */
+  /** Encrypted by the user's PIN or legacy passphrase; never store plaintext on disk. */
   encryptedPrivateKey: EncryptedPayload;
-  /** random recovery secret, shown once and encrypted with the passphrase */
-  recoverySecret: EncryptedPayload;
+  /** User-facing wallet label, normally the account's DEVCITY handle. */
+  name?: string;
+  /** New wallets use a PIN. Omitted for legacy passphrase-protected wallets. */
+  pinProtected?: boolean;
+  /** Legacy encrypted recovery secret; not used by PIN-protected wallets. */
+  recoverySecret?: EncryptedPayload;
   backupConsent: boolean;
   backupRef?: string;
   createdAt: number;

@@ -8,7 +8,6 @@ import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   ArrowUpRight,
-  CircleUserRound,
   Gift,
   LocateFixed,
   Map,
@@ -20,12 +19,13 @@ import {
   Search,
   Sparkles,
   UsersRound,
-  UserRound,
+  Wallet,
   X,
 } from "lucide-react";
 import { eventMarkerSvg } from "./components/EventMapMarker";
 import { EventCard } from "./components/EventCard";
 import { YouSheet } from "./components/YouSheet";
+import { WalletSheet } from "./components/WalletSheet";
 import { TipSheet, type TipTarget } from "./components/TipSheet";
 import { Sheet } from "./components/Sheet";
 import { CitySocialSheet, type FeedProfileStatus, type SocialView } from "./components/CitySocialSheet";
@@ -206,6 +206,7 @@ export default function CityHome() {
   const [activeTab, setActiveTab] = useState<NavTab>("map");
   const [notice, setNotice] = useState("");
   const [youOpen, setYouOpen] = useState(false);
+  const [walletOpen, setWalletOpen] = useState(false);
   const [returnToFeedAfterProfile, setReturnToFeedAfterProfile] = useState(false);
   const [feedProfileStatus, setFeedProfileStatus] = useState<FeedProfileStatus>("checking");
   const [feedUserAddress, setFeedUserAddress] = useState<string | null>(null);
@@ -277,6 +278,9 @@ export default function CityHome() {
   const { isConnected } = useAccount();
   const claimedMap = useCityStore((s) => s.claimed);
   const claim = useCityStore((s) => s.claim);
+  const savedEvents = useCityStore((s) => s.savedEvents);
+  const saveEvent = useCityStore((s) => s.saveEvent);
+  const removeSavedEvent = useCityStore((s) => s.removeSavedEvent);
   const avatarMode = useCityStore((s) => s.avatarMode);
   const avatarSeed = useCityStore((s) => s.avatarSeed);
   const avatarImageData = useCityStore((s) => s.avatarImageData);
@@ -532,7 +536,7 @@ export default function CityHome() {
     const local = await self.listLocalWallets();
     const myAddress = local[0]?.address;
     if (!myAddress) {
-      setYouOpen(true);
+      openWallet();
       setNotice("Create a passkey wallet to claim.");
       return;
     }
@@ -563,7 +567,7 @@ export default function CityHome() {
       const local = await self.listLocalWallets();
       const ownerId = local[0]?.address;
       if (!ownerId) {
-        setYouOpen(true);
+        openWallet();
         setCreateError("Create a passkey wallet first to set up a spot.");
         return;
       }
@@ -597,7 +601,10 @@ export default function CityHome() {
     setScanOpen(false);
     if (tab === "map") setFilter("all");
     if (tab === "feed" || tab === "chat" || tab === "people") setSocialView(tab);
-    if (tab === "wallet") setYouOpen(true);
+    if (tab === "wallet") {
+      setYouOpen(false);
+      setWalletOpen(true);
+    }
   }
 
   function chooseFilter(nextFilter: FilterKind) {
@@ -661,13 +668,23 @@ export default function CityHome() {
     setReturnToFeedAfterProfile(false);
     setSocialView(null);
     setActiveTab("map");
+    setWalletOpen(false);
     setYouOpen(true);
+  }
+
+  function openWallet() {
+    setSocialView(null);
+    setScanOpen(false);
+    setYouOpen(false);
+    setActiveTab("wallet");
+    setWalletOpen(true);
   }
 
   function openProfileFromFeed() {
     setReturnToFeedAfterProfile(true);
     setSocialView(null);
     setActiveTab("map");
+    setWalletOpen(false);
     setYouOpen(true);
   }
 
@@ -678,9 +695,13 @@ export default function CityHome() {
       setReturnToFeedAfterProfile(false);
       setSocialView("feed");
       setActiveTab("feed");
-    } else if (activeTab === "wallet") {
-      setActiveTab("map");
     }
+  }
+
+  function closeWallet() {
+    setWalletOpen(false);
+    setActiveTab("map");
+    void refreshFeedProfile();
   }
 
   function notifyChat(message: string) {
@@ -736,7 +757,9 @@ export default function CityHome() {
             {searchOpen && <label className="search-field"><Search size={16} /><input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Find a person or place" /><button onClick={() => { setSearchOpen(false); setSearchTerm(""); }} aria-label="Close search"><X size={16} /></button></label>}
             <button className="round-action" onClick={() => setSearchOpen((open) => !open)} aria-label={searchOpen ? "Close search" : "Search the city"}><Search size={18} /></button>
             <button className="invite-button" onClick={() => setNotice("Your invite link is ready to share.")}><Plus size={15} /> Invite</button>
-            <button className={`top-profile-button${youOpen ? " is-active" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile"><CircleUserRound size={19} /></button>
+            <button className={`top-profile-button${youOpen ? " is-active" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
+              <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" />
+            </button>
           </div>
         </header>
 
@@ -760,6 +783,24 @@ export default function CityHome() {
             event={selected.raw}
             onClose={() => setCardClosed(true)}
             onShowOnMap={() => mapRef.current?.flyTo({ center: [selected.longitude, selected.latitude], zoom: 15.5, duration: 900 })}
+            attendance={savedEvents.find((event) => event.id === selected.raw?.id)?.attendance ?? null}
+            onToggleGoing={() => {
+              const event = selected.raw;
+              if (!event) return;
+              const saved = savedEvents.find((item) => item.id === event.id);
+              if (saved) {
+                if (saved.attendance === "going") removeSavedEvent(saved.id);
+                return;
+              }
+              saveEvent({
+                id: event.id,
+                name: event.name,
+                organizer: event.organizer,
+                location: event.location,
+                startDate: event.startDate,
+                url: event.url,
+              });
+            }}
           />
         ) : (
         <article className={`activity-card ${selected.kind === "drop" ? "drop-card" : ""}`} aria-live="polite">
@@ -814,11 +855,12 @@ export default function CityHome() {
           <button className={activeTab === "feed" ? "is-active" : ""} onClick={() => chooseTab("feed")} aria-label="Feed"><Radio size={19} /><span>Feed</span></button>
           <button className="mobile-scan-button" onClick={() => { setSocialView(null); setScanOpen(true); }} aria-label="Scan a QR code"><QrCode size={21} /><span>Scan</span></button>
           <button className={activeTab === "chat" ? "is-active" : ""} onClick={() => chooseTab("chat")} aria-label="Inbox"><MessageCircle size={19} /><span>Inbox</span></button>
-          <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Your profile"><UserRound size={19} /><span>You</span></button>
+          <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Wallet"><Wallet size={19} /><span>Wallet</span></button>
         </nav>
       </section>
 
-      <YouSheet open={youOpen} onClose={closeProfile} notify={setNotice} />
+      <YouSheet open={youOpen} onClose={closeProfile} onOpenWallet={openWallet} />
+      <WalletSheet open={walletOpen} onClose={closeWallet} notify={setNotice} />
       <ScanSheet
         open={scanOpen}
         onClose={() => setScanOpen(false)}
@@ -832,7 +874,7 @@ export default function CityHome() {
         userAddress={feedUserAddress}
         onRequestProfile={openProfileFromFeed}
         onNotify={notifyChat}
-        onConnectWallet={() => { setSocialView(null); setActiveTab('wallet'); setYouOpen(true); }}
+        onConnectWallet={openWallet}
         onEnableNotifications={() => void enableChatNotifications()}
         notificationsEnabled={typeof Notification !== 'undefined' && Notification.permission === 'granted'}
         onClose={() => { setSocialView(null); setActiveTab("map"); }}
@@ -842,7 +884,7 @@ export default function CityHome() {
         open={tipTarget !== null}
         onClose={() => setTipTarget(null)}
         target={tipTarget}
-        onNeedWallet={() => setYouOpen(true)}
+        onNeedWallet={openWallet}
         notify={setNotice}
       />
       {createKind && (

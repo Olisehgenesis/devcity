@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Heart, MapPin, MessageCircle, Paperclip, Search, Send, Sparkles } from 'lucide-react';
+import { ArrowLeft, Heart, KeyRound, MapPin, MessageCircle, Paperclip, Search, Send, Sparkles } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
 import { useXmtpChat, type XmtpUiMessage } from '../hooks/useXmtpChat';
 import type { Attachment } from '@xmtp/browser-sdk';
+import type { Hex } from 'viem';
+import type { LocalWallet } from '@/lib/keystore';
+import { getUnlockedPrivateKey, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
 
 export type SocialView = 'feed' | 'chat' | 'people';
 export type FeedProfileStatus = 'checking' | 'signed-out' | 'wallet-needed' | 'ready' | 'error';
@@ -88,8 +91,48 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [draft, setDraft] = useState('');
   const [recipient, setRecipient] = useState('');
   const [chatActionError, setChatActionError] = useState('');
+  const [inboxWallet, setInboxWallet] = useState<LocalWallet | null>(null);
+  const [inboxWalletLoading, setInboxWalletLoading] = useState(false);
+  const [inboxWalletError, setInboxWalletError] = useState('');
+  const [inboxWalletUnlocked, setInboxWalletUnlocked] = useState(false);
+  const [inboxPin, setInboxPin] = useState('');
+  const [inboxWalletRetry, setInboxWalletRetry] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const xmtp = useXmtpChat(open && view === 'chat', onNotify);
+  const connectWithLocalWallet = xmtp.connectWithLocalWallet;
+
+  useEffect(() => {
+    if (!open || view !== 'chat' || profileStatus !== 'ready' || !userAddress) {
+      setInboxPin('');
+      return;
+    }
+    let cancelled = false;
+    setInboxWallet(null);
+    setInboxWalletError('');
+    setInboxWalletUnlocked(false);
+    setInboxWalletLoading(true);
+    void import('@/lib/keystore')
+      .then(({ listLocalWallets }) => listLocalWallets())
+      .then((wallets) => {
+        if (cancelled) return;
+        const wallet = wallets.find((item) => item.address.toLowerCase() === userAddress.toLowerCase());
+        if (!wallet) throw new Error('This device does not have the wallet for your passkey account.');
+        setInboxWallet(wallet);
+        const privateKey = getUnlockedPrivateKey(wallet.address);
+        if (privateKey) {
+          setInboxWalletUnlocked(true);
+          void connectWithLocalWallet(privateKey, wallet.address);
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setInboxWalletError(error instanceof Error ? error.message : 'Could not load your wallet.');
+      })
+      .finally(() => {
+        if (!cancelled) setInboxWalletLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, profileStatus, userAddress, view, inboxWalletRetry, connectWithLocalWallet]);
 
   useEffect(() => {
     if (!open || view !== 'feed') return;
@@ -159,6 +202,10 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     `${person.username} ${person.status}`.toLowerCase().includes(query.toLowerCase())), [nearbyPeople, query]);
   const thread = xmtp.threads.find((item) => item.id === xmtp.activeThreadId);
   const title = view === 'feed' ? 'Around the city' : view === 'people' ? 'People nearby' : thread ? shortInbox(thread.peerInboxId) : 'Your chats';
+  const shouldConnectPasskeyInbox = profileStatus === 'ready'
+    && !!userAddress
+    && xmtp.status !== 'connecting'
+    && (xmtp.status === 'idle' || xmtp.status === 'error' || xmtp.connectedAddress?.toLowerCase() !== userAddress.toLowerCase());
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -193,6 +240,39 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       await xmtp.sendAttachment(file);
     } catch (error) {
       setChatActionError(error instanceof Error ? error.message : 'Attachment could not be sent.');
+    }
+  }
+
+  async function connectPasskeyInbox() {
+    if (!inboxWallet) return;
+    let privateKey = getUnlockedPrivateKey(inboxWallet.address);
+    if (!privateKey && inboxWallet.pinProtected && !/^\d{6}$/.test(inboxPin)) {
+      setChatActionError('Enter your 6-digit wallet PIN to unlock the inbox.');
+      return;
+    }
+    if (!privateKey && !inboxWallet.pinProtected && !inboxPin) {
+      setChatActionError('Enter your wallet passphrase to unlock the inbox.');
+      return;
+    }
+    setChatActionError('');
+    try {
+      if (!privateKey) {
+        const { decryptWithPassphrase } = await import('@/lib/keystore');
+        const key = await decryptWithPassphrase(inboxPin, inboxWallet.encryptedPrivateKey);
+        if (!/^0x[a-fA-F0-9]{64}$/.test(key)) throw new Error('The unlocked wallet key is invalid.');
+        privateKey = key as Hex;
+        rememberUnlockedWallet(inboxWallet.address, privateKey);
+        setInboxWalletUnlocked(true);
+      }
+      await connectWithLocalWallet(privateKey, inboxWallet.address);
+    } catch (error) {
+      setChatActionError(error instanceof DOMException && error.name === 'OperationError'
+        ? 'That PIN did not unlock this wallet. Check it and try again.'
+        : error instanceof Error
+          ? error.message
+          : 'Could not unlock this wallet.');
+    } finally {
+      setInboxPin('');
     }
   }
 
@@ -351,12 +431,58 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
 
       {view === 'chat' && (
         <div className="social-chat">
-          {!xmtp.isWalletConnected ? (
+          {shouldConnectPasskeyInbox ? (
+            <div className="xmtp-state xmtp-passkey-state">
+              <span className="xmtp-state-icon"><KeyRound size={21} /></span>
+              <strong>Open your encrypted inbox</strong>
+              {inboxWalletLoading ? (
+                <p>Checking your passkey wallet on this device…</p>
+              ) : inboxWallet ? (
+                <>
+                  {inboxWalletUnlocked ? (
+                    <>
+                      <p>{inboxWallet.name || 'Your DEVCITY wallet'} is unlocked. Connect to XMTP to load your messages.</p>
+                      <button className="xmtp-wallet-connect" onClick={() => void connectPasskeyInbox()}>Retry inbox connection</button>
+                    </>
+                  ) : (
+                    <>
+                      <p>Unlock {inboxWallet.name || 'your DEVCITY wallet'} to connect to XMTP and load your messages.</p>
+                      <label className="xmtp-pin-label" htmlFor="xmtp-wallet-pin">{inboxWallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
+                      <input
+                        id="xmtp-wallet-pin"
+                        className="xmtp-pin-input"
+                        type="password"
+                        inputMode={inboxWallet.pinProtected ? 'numeric' : 'text'}
+                        autoComplete="current-password"
+                        maxLength={inboxWallet.pinProtected ? 6 : undefined}
+                        value={inboxPin}
+                        onChange={(event) => setInboxPin(inboxWallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)}
+                        onKeyDown={(event) => { if (event.key === 'Enter') void connectPasskeyInbox(); }}
+                        placeholder={inboxWallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'}
+                      />
+                      <button className="xmtp-wallet-connect" onClick={() => void connectPasskeyInbox()} disabled={inboxWallet.pinProtected ? inboxPin.length !== 6 : !inboxPin}>
+                        {xmtp.status === 'error' ? 'Retry and open inbox' : 'Unlock and show messages'}
+                      </button>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p>{inboxWalletError || 'Your passkey wallet is not available on this device.'}</p>
+                  {inboxWalletError && <button className="xmtp-retry" onClick={() => setInboxWalletRetry((attempt) => attempt + 1)}>Try again</button>}
+                  {!inboxWalletError && <button className="outside-cta" onClick={onConnectWallet}>Open Wallet</button>}
+                </>
+              )}
+              {(chatActionError || xmtp.error) && <p className="xmtp-error" role="alert">{chatActionError || xmtp.error}</p>}
+            </div>
+          ) : profileStatus === 'checking' && !xmtp.isWalletConnected ? (
+            <div className="xmtp-state"><span className="spinner" /><strong>Checking your passkey account…</strong><p>Your existing DEVCITY wallet will be used if it is available on this device.</p></div>
+          ) : !xmtp.isWalletConnected && profileStatus !== 'ready' ? (
             <div className="xmtp-state">
               <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
-              <strong>Private chats, tied to your wallet</strong>
-              <p>Your messages are end-to-end encrypted with XMTP. Connect the wallet you want to use for messaging.</p>
-              <button className="outside-cta" onClick={onConnectWallet}>Connect wallet</button>
+              <strong>{profileStatus === 'wallet-needed' ? 'Finish setting up your wallet' : 'Sign in to your passkey wallet'}</strong>
+              <p>Your encrypted messages are tied to your DEVCITY wallet. Sign in on this device to load your XMTP inbox.</p>
+              <button className="outside-cta xmtp-open-wallet" onClick={onConnectWallet}>{profileStatus === 'wallet-needed' ? 'Finish wallet setup' : 'Open Wallet to sign in'}</button>
             </div>
           ) : xmtp.status === 'idle' || xmtp.status === 'error' ? (
             <div className="xmtp-state">
@@ -367,7 +493,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               {xmtp.error && <p className="xmtp-error" role="alert">{xmtp.error}</p>}
             </div>
           ) : xmtp.status === 'connecting' ? (
-            <div className="xmtp-state"><span className="spinner" /><strong>Connecting to XMTP…</strong><p>Approve the message in your wallet to open your inbox.</p></div>
+            <div className="xmtp-state"><span className="spinner" /><strong>Connecting to XMTP…</strong><p>Syncing your encrypted conversations. Approve any wallet request if prompted.</p></div>
           ) : thread ? (
             <>
               <button className="chat-back" onClick={() => { xmtp.setActiveThreadId(null); setDraft(''); }}><ArrowLeft size={15} /> All chats</button>

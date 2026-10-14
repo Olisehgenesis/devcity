@@ -18,7 +18,7 @@ A living reference for the DEVCITY26 onchain platform: architecture, live addres
        ┌───────▼────────┐   ┌───────────────────▼───────────────────┐
        │   DropClaim     │   │      ProfileTokenFactory (UUPS)       │
        │   (UUPS proxy)  │   │   createToken → ProfileToken (ERC-20) │
-       │ claims w/ signed │   │   createPoolAndAddLiquidity (V4)      │
+       │ claims w/ signed │   │   price-aware Uniswap V4 pool launch │
        │ auth + signer    │   └───────────────────┬───────────────────┘
        │ list             │                       │ one per user
        └───────┬──────────┘   ┌───────────────────▼───────────────────┐
@@ -70,6 +70,7 @@ UUPS upgradeable router + factory orchestrator. All admin actions flow through h
 | `initialize()` | owner | init (once) |
 | `deployAll(poolManager, positionManager, permit2, usdt, backendSigner, maxSupply, tokenURI)` | owner | deploys DropClaim, ProfileTokenFactory, DEVCITY26Token behind proxies; stores V4 addresses; sets first backend signer |
 | `wireV4Contracts()` | owner | passes V4 addresses into DEVCITY26Token |
+| `upgradeProfileTokenFactory(newImplementation)` | owner | route a factory UUPS upgrade through the deployer proxy |
 | `addBackendSigner / removeBackendSigner / getBackendSigners` | owner / view | manage the DropClaim signer list |
 | `createDevcityPool(amount0Desired, amount1Desired, min0, min1, deadline)` | owner | create DEV26/USDT V4 pool + initial liquidity |
 | `createDrop(...)` | owner | create a drop on DropClaim (pulls tokens from caller) |
@@ -94,28 +95,33 @@ Manages token drops with **expiring signed authorizations** and claim caps. Back
 - Client calls `claim(...)` with that signature; contract checks `digest.recover(signature) == claimAuthority`.
 
 ### 3.3 ProfileTokenFactory
-Creates **one profile token per user** (ERC-20, max supply `1,000,000`), optionally seeds a **Uniswap V4 pool** paired with USDT, and supports swap-to-USDT and adding liquidity.
+Creates **one profile token per user** (fixed supply `1,000,000`, with `900,000` minted to the profile owner and `100,000` held by the factory treasury), optionally seeds a **Uniswap V4 pool** paired with USDT, supports buy/sell swaps, and allows adding liquidity. There is no extra protocol buy/sell tax. Treasury tokens can be withdrawn only by the deployer owner through the deployer contract.
 
 | Function | Purpose |
 | --- | --- |
 | `createToken(name, symbol, tokenURI)` | one token per address; factory wires V4, then transfers ownership to the user |
-| `createPoolAndAddLiquidity(amount0Desired, amount1Desired, min0, min1, deadline)` | create V4 pool at 1:1 + add initial liquidity |
-| `addLiquidity(...)` | add to an existing pool |
-| `burnForUSDT(amountIn, minUSDTOut, deadline)` | swap token → USDT via V4 unlock/settle |
+| `createPoolAndAddLiquidityAtPrice(amount0, amount1, min0, min1, initialSqrtPriceX96, deadline)` | initialize a new V4 pool at the reviewed contribution ratio and add initial liquidity |
+| `addLiquidity(...)` | add to an existing pool at its current price |
+| `supportsPriceAwarePoolLaunch()` | check whether the deployed implementation supports safe initial pricing |
+| `buyWithUSDT(usdtAmountIn, minTokensOut, deadline)` on the token | swap USDT → profile token via V4 unlock/settle |
+| `sellForUSDT(amountIn, minUSDTOut, deadline)` on the token | swap profile token → USDT via V4 unlock/settle; `burnForUSDT` remains as a compatibility alias |
+| `withdrawTreasuryTokens(token, recipient, amount)` | withdraw a profile token's treasury reserve (deployer owner only) |
 | `getUserToken / getTokenCount / getTokenAt / hasPool` | view helpers |
 | `setUSDTToken` | owner updates USDT |
 
 **Create-token flow (dynamic):**
 1. Client calls `createToken(name, symbol, tokenURI)` — e.g. a user's name/symbol and the user's DiceBear avatar or uploaded image as `tokenURI` (data URI).
-2. Factory deploys `ProfileToken` (factory owner), wires V4 contracts, transfers ownership to user.
-3. User acquires USDT, calls `createPoolAndAddLiquidity` → token now has a market price on Uniswap V4.
+2. Factory deploys an initialized `ProfileToken` proxy, minting `900,000` tokens to the user and `100,000` to the factory, wires V4 contracts, and transfers token ownership to the user.
+3. User acquires USDT and chooses both launch amounts; the client derives the initial V4 price from that contribution ratio, then calls `createPoolAndAddLiquidityAtPrice`.
+
+**Celo Sepolia deployment:** The factory now uses the price-aware implementation. The deployer proxy points to a small extension that forwards existing deployer methods to its previous implementation while adding owner-only factory upgrade and treasury routes. Fresh profile-token launches create initialized ERC-1967 proxies. Tokens created under older implementations are not retroactively changed.
 
 ### 3.4 ProfileToken
 The user's personal ERC-20. UUPS upgradeable; supports tipping, burning, and V4 swaps.
 
 | Function | Purpose |
 | --- | --- |
-| `initialize(name, symbol, tokenURI, profileOwner, usdt, factory)` | mints full 1M supply to owner |
+| `initialize(name, symbol, tokenURI, profileOwner, usdt, factory)` | mints 900,000 tokens to the profile owner and 100,000 to the factory treasury |
 | `setTokenURI` / `setUSDTToken` / `setV4Contracts` | metadata & wiring (owner) |
 | `burnForUSDT(amountIn, minUSDTOut, deadline)` | V4 swap to USDT (unlock callback implemented) |
 | `tip(to, amount)` | plain transfer (tipping) |
@@ -156,6 +162,7 @@ dotenvx run -- bash -c 'cd hardhat && npm run <cmd>'
 | `sync` | copy latest Solidity from `../contracts` into `hardhat/contracts` |
 | `compile` | compile |
 | `deploy` | fresh deploy (deployer + deployAll + add admin signer) → `deployments.json` |
+| `upgrade-profile-factory` | upgrade the existing Sepolia deployer and profile factory to support reviewed initial pool prices |
 | `status` | print token name/symbol/supply/tokenURI/pool/USDT/signers |
 | `signers` | list backend signers |
 | `add-signer` / `remove-signer` | `SIGNER=0x... npm run …` |

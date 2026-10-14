@@ -1,9 +1,11 @@
 import { execSync } from "child_process";
+import { existsSync } from "fs";
 
 // Copy the canonical contracts from ../contracts into hardhat/contracts
 const srcDir = "../contracts";
 const files = [
   "DEVCITY26Deployer.sol",
+  "DEVCITY26DeployerExtension.sol",
   "DEVCITY26Token.sol",
   "DropClaim.sol",
   "ProfileToken.sol",
@@ -12,6 +14,10 @@ const files = [
 ];
 
 for (const f of files) {
+  if (!existsSync(`${srcDir}/${f}`)) {
+    console.warn(`Skipping missing canonical source: ${srcDir}/${f}`);
+    continue;
+  }
   execSync(`cp "${srcDir}/${f}" "contracts/${f}"`, { stdio: "inherit" });
 }
 console.log("Synced contracts from ../contracts into hardhat/contracts");

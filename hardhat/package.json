@@ -6,6 +6,7 @@
     "compile": "hardhat compile",
     "sync": "hardhat run scripts/sync-contracts.ts",
     "deploy": "hardhat run scripts/deploy.ts --network celoSepolia",
+    "upgrade-profile-factory": "hardhat run scripts/upgrade-profile-factory.ts --network celoSepolia",
     "status": "hardhat run scripts/status.ts --network celoSepolia",
     "signers": "hardhat run scripts/list-signers.ts --network celoSepolia",
     "add-signer": "hardhat run scripts/add-signer.ts --network celoSepolia",

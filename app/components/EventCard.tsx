@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock, ExternalLink, LocateFixed, MapPin, Navigation, Ticket, Video } from 'lucide-react';
+import { CalendarDays, Check, Clock, ExternalLink, LocateFixed, MapPin, Navigation, Ticket, Video, X } from 'lucide-react';
 
 export interface EventCardData {
   id: string;
@@ -58,10 +58,14 @@ export function EventCard({
   event,
   onClose,
   onShowOnMap,
+  attendance,
+  onToggleGoing,
 }: {
   event: EventCardData;
   onClose: () => void;
   onShowOnMap: () => void;
+  attendance: 'going' | 'attended' | null;
+  onToggleGoing: () => void;
 }) {
   const { start, end } = useMemo(() => parseTs(event), [event]);
   const [, setTick] = useState(0);
@@ -100,6 +104,9 @@ export function EventCard({
 
   return (
     <article className={`event-card${isDevcon ? ' is-devcon' : ''}`}>
+      <button className="event-card-close" onClick={onClose} aria-label="Close event card">
+        <X size={18} />
+      </button>
       {/* Status line on top */}
       <div className={`event-status${isLive ? ' is-live' : ''}`}>
         {isLive ? (
@@ -144,6 +151,15 @@ export function EventCard({
             {event.organizer && <p className="event-card-organizer">Hosted by {event.organizer}</p>}
           </div>
         </div>
+        <button
+          className={`event-attendance-button${attendance ? ' is-going' : ''}`}
+          onClick={onToggleGoing}
+          disabled={attendance === 'attended'}
+          aria-pressed={Boolean(attendance)}
+        >
+          <Check size={15} />
+          {attendance === 'attended' ? 'Marked attended' : attendance === 'going' ? 'You’re going' : 'I’m going'}
+        </button>
 
         {/* Meta chips */}
         <div className="event-card-chips">
@@ -243,9 +259,6 @@ export function EventCard({
           </details>
         )}
 
-        <button className="event-card-close" onClick={onClose} aria-label="Close event">
-          Close
-        </button>
       </div>
     </article>
   );

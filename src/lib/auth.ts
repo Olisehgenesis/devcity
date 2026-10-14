@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { betterAuth } from 'better-auth';
+import { APIError } from 'better-auth/api';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { passkey } from '@better-auth/passkey';
 import { prisma } from './prisma';
+import { normalizeUsername } from './usernames';
 
 function resolveBaseUrl(): string {
   const raw = process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
@@ -30,19 +32,34 @@ export const auth = betterAuth({
       rpName: 'DEVCITY26',
       registration: {
         requireSession: false,
-        resolveUser: async () => {
+        resolveUser: async ({ context }) => {
+          const username = typeof context === 'string' ? normalizeUsername(context) : null;
+          if (!username) {
+            throw new APIError('BAD_REQUEST', {
+              message: 'Choose a valid username before creating your passkey.',
+            });
+          }
           const id = randomUUID();
           return {
             id,
-            name: 'City explorer',
-            displayName: 'City explorer',
+            name: username,
+            displayName: username,
           };
         },
-        afterVerification: async ({ user }) => {
-          await prisma.user.upsert({
-            where: { id: user.id },
-            create: { id: user.id, name: user.name },
-            update: {},
+        afterVerification: async ({ user, context }) => {
+          const username = typeof context === 'string' ? normalizeUsername(context) : null;
+          if (!username) {
+            throw new APIError('BAD_REQUEST', {
+              message: 'The username is invalid. Please restart account creation.',
+            });
+          }
+          await prisma.$transaction(async (tx) => {
+            await tx.user.create({
+              data: { id: user.id, name: username, username },
+            });
+            await tx.profile.create({
+              data: { userId: user.id, username, displayName: username },
+            });
           });
           return { userId: user.id };
         },

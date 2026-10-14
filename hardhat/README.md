@@ -25,6 +25,7 @@ dotenvx run -- bash -c 'cd hardhat && npm run deploy'
 | Command | What it does |
 | --- | --- |
 | `npm run deploy` | Deploys `DEVCITY26Deployer` + proxy, runs `deployAll` (DropClaim, ProfileTokenFactory, DEVCITY26Token), adds admin as backend signer. Saves addresses to `hardhat/deployments.json`. |
+| `DEVCITY_DEPLOYER_PROXY=… npm run upgrade-profile-factory` | Upgrades the existing deployer to a size-limited forwarding extension and upgrades the profile-token factory for price-aware seeding, initialized token proxies, owner-only treasury withdrawals, and buy/sell swaps. New tokens use a 90% owner / 10% factory-treasury allocation. Requires the deployer owner key. |
 | `npm run status` | Reads deployed addresses from `deployments.json`, prints token name/symbol/supply/tokenURI/poolManager/USDT/signers. |
 | `npm run signers` | Lists authorized backend signers. |
 | `npm run add-signer` | Adds a signer: `SIGNER=0x... npm run add-signer` |

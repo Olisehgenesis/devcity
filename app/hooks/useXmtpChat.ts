@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { hexToBytes, type Address } from 'viem';
+import { hexToBytes, type Address, type Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { useAccount, useWalletClient } from 'wagmi';
 import {
   Client,
@@ -58,7 +59,9 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
   const streamRef = useRef<{ end: () => Promise<unknown> } | null>(null);
   const notifyRef = useRef(notifyIncoming);
   const activeThreadRef = useRef<string | null>(null);
+  const signerAddressRef = useRef<string | null>(null);
   const [client, setClient] = useState<Client | null>(null);
+  const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
   const [threads, setThreads] = useState<XmtpThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<XmtpUiMessage[]>([]);
@@ -83,40 +86,41 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
     setThreads(nextThreads.sort((left, right) => (right.lastMessage?.sentAt.getTime() ?? 0) - (left.lastMessage?.sentAt.getTime() ?? 0)));
   }, []);
 
-  const connect = useCallback(async () => {
-    if (!address || !walletClient) {
-      setError('Connect an Ethereum wallet first.');
-      return;
-    }
-    if (clientRef.current) return;
-
+  const connectWithSigner = useCallback(async (signer: Signer, signerAddress: string) => {
     setStatus('connecting');
     setError('');
+    let created: Client | null = null;
     try {
-      const signer: Signer = connector?.id.toLowerCase().includes('coinbase')
-        ? createSCWSigner(
-            address as Address,
-            async (message) => walletClient.signMessage({ account: walletClient.account, message }),
-            BigInt(chainId ?? 8453),
-          )
-        : {
-            type: 'EOA',
-            getIdentifier: () => ({ identifier: address, identifierKind: IdentifierKind.Ethereum }),
-            signMessage: async (message) => hexToBytes(await walletClient.signMessage({ account: walletClient.account, message })),
-          };
+      if (clientRef.current && signerAddressRef.current === signerAddress.toLowerCase()) {
+        await refreshThreads(clientRef.current);
+        setStatus('ready');
+        return;
+      }
+      if (clientRef.current) {
+        const previousClient = clientRef.current;
+        const previousStream = streamRef.current;
+        clientRef.current = null;
+        streamRef.current = null;
+        signerAddressRef.current = null;
+        setClient(null);
+        setConnectedAddress(null);
+        setThreads([]);
+        try {
+          await previousStream?.end();
+        } finally {
+          previousClient.close();
+        }
+      }
 
       const xmtpEnv = process.env.NEXT_PUBLIC_XMTP_ENV === 'production' ? 'production' : 'dev';
       const clientOptions = { env: xmtpEnv } as Omit<ConstructorParameters<typeof Client>[0], 'codecs'> & { codecs?: [] };
-      const created = await Client.create<[]>(signer, clientOptions);
-      clientRef.current = created;
-      setClient(created);
+      created = await Client.create<[]>(signer, clientOptions);
       await refreshThreads(created);
-      setStatus('ready');
-
-      const stream = await created.conversations.streamAllMessages({
+      const activeClient = created;
+      const stream = await activeClient.conversations.streamAllMessages({
         consentStates: [ConsentState.Allowed],
         onValue: (message) => {
-          const uiMessage = toUiMessage(message, created.inboxId ?? '');
+          const uiMessage = toUiMessage(message, activeClient.inboxId ?? '');
           if (activeThreadRef.current === uiMessage.conversationId) {
             setMessages((current) => current.some((item) => item.id === uiMessage.id) ? current : [...current, uiMessage]);
           }
@@ -125,18 +129,56 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
               ? `New attachment: ${uiMessage.attachment.filename ?? 'file'}`
               : `New message: ${uiMessage.text.slice(0, 72)}`);
           }
-          void refreshThreads(created);
+          void refreshThreads(activeClient);
         },
         onError: (streamError) => {
           setError(streamError.message);
         },
       });
+      clientRef.current = created;
+      signerAddressRef.current = signerAddress.toLowerCase();
       streamRef.current = stream;
+      setClient(activeClient);
+      setConnectedAddress(signerAddress.toLowerCase());
+      setStatus('ready');
     } catch (cause) {
+      created?.close();
       setStatus('error');
       setError(cause instanceof Error ? cause.message : 'XMTP could not connect.');
     }
-  }, [address, chainId, connector, refreshThreads, walletClient]);
+  }, [refreshThreads]);
+
+  const connect = useCallback(async () => {
+    if (!address || !walletClient) {
+      setError('Connect an Ethereum wallet first.');
+      return;
+    }
+    const signer: Signer = connector?.id.toLowerCase().includes('coinbase')
+      ? createSCWSigner(
+          address as Address,
+          async (message) => walletClient.signMessage({ account: walletClient.account, message }),
+          BigInt(chainId ?? 8453),
+        )
+      : {
+          type: 'EOA',
+          getIdentifier: () => ({ identifier: address, identifierKind: IdentifierKind.Ethereum }),
+          signMessage: async (message) => hexToBytes(await walletClient.signMessage({ account: walletClient.account, message })),
+        };
+    await connectWithSigner(signer, address);
+  }, [address, chainId, connector, connectWithSigner, walletClient]);
+
+  const connectWithLocalWallet = useCallback(async (privateKey: Hex, expectedAddress: string) => {
+    const account = privateKeyToAccount(privateKey);
+    if (account.address.toLowerCase() !== expectedAddress.toLowerCase()) {
+      throw new Error('This key does not match the wallet saved to your passkey account.');
+    }
+    const signer: Signer = {
+      type: 'EOA',
+      getIdentifier: () => ({ identifier: account.address, identifierKind: IdentifierKind.Ethereum }),
+      signMessage: async (message) => hexToBytes(await account.signMessage({ message })),
+    };
+    await connectWithSigner(signer, account.address);
+  }, [connectWithSigner]);
 
   useEffect(() => {
     if (!enabled || !client || !activeThreadId) {
@@ -210,6 +252,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
     address,
     isWalletConnected: isConnected,
     client,
+    connectedAddress,
     threads,
     activeThreadId,
     setActiveThreadId,
@@ -218,6 +261,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
     error,
     sending,
     connect,
+    connectWithLocalWallet,
     startConversation,
     sendText,
     sendAttachment,

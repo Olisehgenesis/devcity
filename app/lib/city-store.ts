@@ -23,15 +23,27 @@ export interface TipRecord {
 
 export interface ActivityItem {
   id: string;
-  kind: 'claim' | 'tip' | 'join';
+  kind: 'claim' | 'tip' | 'join' | 'event';
   text: string;
   at: number;
+}
+
+export interface SavedEvent {
+  id: string;
+  name: string;
+  organizer: string;
+  location: string | null;
+  startDate: string | null;
+  url: string | null;
+  attendance: 'going' | 'attended';
+  savedAt: number;
 }
 
 interface CityStore {
   claimed: Record<string, ClaimRecord>;
   tips: TipRecord[];
   activity: ActivityItem[];
+  savedEvents: SavedEvent[];
   visibility: Visibility;
   profilePrivacy: ProfilePrivacy;
   presenceStatus: PresenceStatus;
@@ -47,6 +59,9 @@ interface CityStore {
   setAvatarMode: (mode: AvatarMode) => void;
   setAvatarImageData: (data: string) => void;
   shuffleAvatar: () => void;
+  saveEvent: (event: Omit<SavedEvent, 'attendance' | 'savedAt'>) => void;
+  markEventAttended: (eventId: string) => void;
+  removeSavedEvent: (eventId: string) => void;
   reset: () => void;
 }
 
@@ -56,6 +71,7 @@ export const useCityStore = create<CityStore>()(
       claimed: {},
       tips: [],
       activity: [],
+      savedEvents: [],
       visibility: 'approximate',
       profilePrivacy: 'public',
       presenceStatus: 'online',
@@ -101,7 +117,29 @@ export const useCityStore = create<CityStore>()(
 
       shuffleAvatar: () => set({ avatarMode: 'dicebear', avatarSeed: crypto.randomUUID() }),
 
-      reset: () => set({ claimed: {}, tips: [], activity: [], avatarMode: 'dicebear', avatarSeed: '', avatarImageData: null }),
+      saveEvent: (event) =>
+        set((state) => {
+          if (state.savedEvents.some((saved) => saved.id === event.id)) return state;
+          return {
+            savedEvents: [{ ...event, attendance: 'going', savedAt: Date.now() }, ...state.savedEvents],
+            activity: [
+              { id: `a-${Date.now()}`, kind: 'event' as const, text: `Going to ${event.name}`, at: Date.now() },
+              ...state.activity,
+            ].slice(0, 30),
+          };
+        }),
+
+      markEventAttended: (eventId) =>
+        set((state) => ({
+          savedEvents: state.savedEvents.map((event) =>
+            event.id === eventId ? { ...event, attendance: 'attended' } : event,
+          ),
+        })),
+
+      removeSavedEvent: (eventId) =>
+        set((state) => ({ savedEvents: state.savedEvents.filter((event) => event.id !== eventId) })),
+
+      reset: () => set({ claimed: {}, tips: [], activity: [], savedEvents: [], avatarMode: 'dicebear', avatarSeed: '', avatarImageData: null }),
     }),
     {
       name: 'devcity-city',

@@ -4,11 +4,13 @@ pragma solidity ^0.8.26;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./ProfileToken.sol";
 import "./interfaces/IV4Core.sol";
 import {LiquidityAmounts} from "@uniswap/v4-core/src/libraries/LiquidityAmounts.sol";
+import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
 /**
  * @title ProfileTokenFactory
@@ -60,6 +62,7 @@ contract ProfileTokenFactory is
     );
 
     event USDTTokenUpdated(address newUSDT);
+    event TreasuryTokensWithdrawn(address indexed token, address indexed recipient, uint256 amount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -106,11 +109,19 @@ contract ProfileTokenFactory is
         require(bytes(name).length > 0, "Name required");
         require(bytes(symbol).length > 0, "Symbol required");
 
-        // Factory deploys token with itself as owner, user as profileOwner.
-        ProfileToken token = new ProfileToken();
-        token.initialize(name, symbol, tokenURI, msg.sender, usdtToken, address(this));
-
-        tokenAddress = address(token);
+        // Deploy the initialized token behind a proxy so its initializer is
+        // callable and later token-logic upgrades remain possible.
+        ProfileToken tokenImplementation = new ProfileToken();
+        tokenAddress = address(
+            new ERC1967Proxy(
+                address(tokenImplementation),
+                abi.encodeCall(
+                    ProfileToken.initialize,
+                    (name, symbol, tokenURI, msg.sender, usdtToken, address(this))
+                )
+            )
+        );
+        ProfileToken token = ProfileToken(tokenAddress);
         userToken[msg.sender] = tokenAddress;
         allTokens.push(tokenAddress);
 
@@ -148,15 +159,54 @@ contract ProfileTokenFactory is
         uint256 amount1Min,
         uint256 deadline
     ) external returns (bytes32 poolId) {
+        uint160 initialSqrtPriceX96 = _sqrtPriceX96FromAmounts(amount0Desired, amount1Desired);
+        return _createPoolAtPrice(amount0Desired, amount1Desired, amount0Min, amount1Min, initialSqrtPriceX96, deadline);
+    }
+
+    /**
+     * @dev Create a profile-token pool using the launch price chosen from the
+     * initial token/USDT contribution ratio, then add the initial liquidity.
+     * If another transaction initialized this pool first, its price must match
+     * the caller's reviewed launch price exactly.
+     */
+    function createPoolAndAddLiquidityAtPrice(
+        uint256 amount0Desired,
+        uint256 amount1Desired,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint160 initialSqrtPriceX96,
+        uint256 deadline
+    ) external returns (bytes32 poolId) {
+        return _createPoolAtPrice(
+            amount0Desired,
+            amount1Desired,
+            amount0Min,
+            amount1Min,
+            initialSqrtPriceX96,
+            deadline
+        );
+    }
+
+    function _createPoolAtPrice(
+        uint256 amount0Desired,
+        uint256 amount1Desired,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint160 initialSqrtPriceX96,
+        uint256 deadline
+    ) internal returns (bytes32 poolId) {
         address token = userToken[msg.sender];
         require(token != address(0), "No token created");
         require(!poolCreated[token], "Pool already exists");
         require(amount0Desired > 0 && amount1Desired > 0, "Amounts must be > 0");
         require(block.timestamp <= deadline, "Deadline passed");
+        require(
+            initialSqrtPriceX96 > MIN_SQRT_RATIO && initialSqrtPriceX96 < MAX_SQRT_RATIO,
+            "Invalid initial price"
+        );
 
         address token0 = token < usdtToken ? token : usdtToken;
         address token1 = token < usdtToken ? usdtToken : token;
-
         PoolKey memory poolKey = PoolKey({
             currency0: CurrencyLib.wrap(token0),
             currency1: CurrencyLib.wrap(token1),
@@ -164,9 +214,13 @@ contract ProfileTokenFactory is
             tickSpacing: 60,
             hooks: address(0)
         });
-
-        // Initialize the pool at 1:1 if it does not exist yet.
-        try poolManager.initialize(poolKey, SQRT_PRICE_1_1) {} catch {}
+        PoolId poolIdValue = PoolId.wrap(keccak256(abi.encode(poolKey)));
+        (uint160 existingSqrtPriceX96, , , ) = poolManager.getSlot0(poolIdValue);
+        if (existingSqrtPriceX96 == 0) {
+            poolManager.initialize(poolKey, initialSqrtPriceX96);
+        } else {
+            require(existingSqrtPriceX96 == initialSqrtPriceX96, "Pool initialized at another price");
+        }
 
         _pullAndMint(
             token0,
@@ -178,12 +232,44 @@ contract ProfileTokenFactory is
             deadline
         );
 
-        poolId = keccak256(abi.encode(poolKey));
+        poolId = PoolId.unwrap(poolIdValue);
         ProfileToken(token).setPoolCreated(poolId);
         poolCreated[token] = true;
-
         emit PoolCreated(token, msg.sender, poolId, amount0Desired, amount1Desired);
         return poolId;
+    }
+
+    function _sqrtPriceX96FromAmounts(uint256 amount0, uint256 amount1) internal pure returns (uint160) {
+        require(amount0 > 0 && amount1 > 0, "Amounts must be > 0");
+        uint256 ratioX192 = FullMath.mulDiv(amount1, uint256(1) << 192, amount0);
+        uint256 sqrtPrice = _integerSqrt(ratioX192);
+        require(
+            sqrtPrice > MIN_SQRT_RATIO && sqrtPrice < MAX_SQRT_RATIO,
+            "Invalid initial price"
+        );
+        return uint160(sqrtPrice);
+    }
+
+    function _integerSqrt(uint256 value) internal pure returns (uint256 result) {
+        if (value == 0) return 0;
+        result = value;
+        uint256 estimate = (value / 2) + 1;
+        while (estimate < result) {
+            result = estimate;
+            estimate = (value / estimate + estimate) / 2;
+        }
+    }
+
+    function supportsPriceAwarePoolLaunch() external pure returns (bool) {
+        return true;
+    }
+
+    function withdrawTreasuryTokens(address token, address recipient, uint256 amount) external onlyOwner {
+        require(token != address(0) && recipient != address(0), "Invalid address");
+        require(amount > 0, "Amount must be > 0");
+        require(ProfileToken(token).factory() == address(this), "Unknown profile token");
+        IERC20(token).safeTransfer(recipient, amount);
+        emit TreasuryTokensWithdrawn(token, recipient, amount);
     }
 
     /**

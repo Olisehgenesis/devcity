@@ -146,6 +146,21 @@ contract DEVCITY26Deployer is
     }
 
     /**
+     * @dev Upgrade the profile-token factory implementation through its proxy.
+     * The deployer proxy is the factory's owner, so the admin must route the
+     * authorized upgrade through this contract.
+     */
+    function upgradeProfileTokenFactory(address newImplementation) external onlyOwner {
+        require(address(profileTokenFactory) != address(0), "Factory not deployed");
+        profileTokenFactory.upgradeToAndCall(newImplementation, "");
+    }
+
+    function withdrawProfileTokenTreasury(address token, address recipient, uint256 amount) external onlyOwner {
+        require(address(profileTokenFactory) != address(0), "Factory not deployed");
+        profileTokenFactory.withdrawTreasuryTokens(token, recipient, amount);
+    }
+
+    /**
      * @dev Add a backend signer to DropClaim (admin only).
      */
     function addBackendSigner(address signer) external onlyOwner {
