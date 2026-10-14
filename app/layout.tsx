@@ -15,10 +15,6 @@ export const metadata: Metadata = {
   description: "Enter the city. Find your people. Claim something worth sharing.",
   applicationName: "DEVCITY26",
   manifest: "/manifest.json",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#e9f0e1" },
-    { media: "(prefers-color-scheme: dark)", color: "#101a17" },
-  ],
   appleWebApp: {
     capable: true,
     title: "DEVCITY26",
@@ -37,7 +33,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#e9f0e1",
+  themeColor: "#e9e4d5",
   width: "device-width",
   initialScale: 1,
   minimumScale: 1,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sheet } from './Sheet';
 import { useCityStore } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
@@ -16,23 +16,48 @@ interface TipSheetProps {
   open: boolean;
   onClose: () => void;
   target: TipTarget | null;
-  isConnected: boolean;
   onNeedWallet: () => void;
   notify: (msg: string) => void;
 }
 
 const PRESETS = ['1', '5', '10'];
-const TOKENS = ['OLISEH', 'DEV26', 'ETHHOUSE'];
 
-export function TipSheet({ open, onClose, target, isConnected, onNeedWallet, notify }: TipSheetProps) {
+export function TipSheet({ open, onClose, target, onNeedWallet, notify }: TipSheetProps) {
   const sendTip = useCityStore((s) => s.sendTip);
   const [amount, setAmount] = useState('5');
-  const [token, setToken] = useState(TOKENS[0]);
+  const [tokens, setTokens] = useState<string[]>([]);
+  const [token, setToken] = useState('');
+  const [tokensLoading, setTokensLoading] = useState(false);
+  const [tokensError, setTokensError] = useState('');
   const [custom, setCustom] = useState('');
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
 
   const finalAmount = custom || amount;
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setTokensLoading(true);
+    setTokensError('');
+    fetch('/api/drops')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Available tip tokens could not be loaded.');
+        const data = await response.json() as { drops?: Array<{ tokenSymbol?: string | null }> };
+        const available = [...new Set((data.drops ?? []).map((drop) => drop.tokenSymbol?.trim()).filter((symbol): symbol is string => Boolean(symbol)))];
+        if (!cancelled) {
+          setTokens(available);
+          setToken((current) => available.includes(current) ? current : available[0] ?? '');
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setTokensError(error instanceof Error ? error.message : 'Available tip tokens could not be loaded.');
+      })
+      .finally(() => {
+        if (!cancelled) setTokensLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [open]);
 
   const reset = () => {
     setAmount('5');
@@ -59,12 +84,15 @@ export function TipSheet({ open, onClose, target, isConnected, onNeedWallet, not
         notify('Create a passkey wallet to tip.');
         return;
       }
+      if (!target.address) throw new Error('This person does not have a wallet address yet.');
+      if (myAddress.toLowerCase() === target.address.toLowerCase()) throw new Error('You cannot tip your own wallet.');
+      if (!token) throw new Error('There are no tip tokens available in the city yet.');
       const res = await fetch('/api/tips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fromAddress: myAddress,
-          toAddress: target.address ?? myAddress,
+          toAddress: target.address,
           tokenSymbol: token,
           amount: finalAmount,
         }),
@@ -92,7 +120,7 @@ export function TipSheet({ open, onClose, target, isConnected, onNeedWallet, not
       <div className="tip-body">
         <div className="tip-target">
           <div className={`marker-avatar tone-${target.color}`}><img src={dicebearAvatarUrl(target.name, avatarBackgroundForColor(target.color))} alt="" /></div>
-          <span>{target.name} · instant, no fees you pay</span>
+          <span>{target.address ? `${target.name} · ${target.address.slice(0, 6)}…${target.address.slice(-4)}` : `${target.name} · wallet address unavailable`}</span>
         </div>
 
         {done ? (
@@ -128,26 +156,28 @@ export function TipSheet({ open, onClose, target, isConnected, onNeedWallet, not
               />
             </div>
 
-            <div className="tip-tokens">
-              {TOKENS.map((t) => (
-                <button
-                  key={t}
-                  className={`tip-token${token === t ? ' is-selected' : ''}`}
-                  onClick={() => setToken(t)}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
+            {tokensLoading ? <p className="tip-note">Loading city tokens…</p> : tokensError ? <p className="tip-error" role="alert">{tokensError}</p> : tokens.length > 0 ? (
+              <div className="tip-tokens" aria-label="Choose a tip token">
+                {tokens.map((availableToken) => (
+                  <button
+                    key={availableToken}
+                    className={`tip-token${token === availableToken ? ' is-selected' : ''}`}
+                    onClick={() => setToken(availableToken)}
+                  >
+                    {availableToken}
+                  </button>
+                ))}
+              </div>
+            ) : <p className="tip-note">No tip tokens are available in the city yet.</p>}
 
-            <button className="tip-send" disabled={sending || !finalAmount} onClick={send}>
+            <button className="tip-send" disabled={sending || !finalAmount || !token || !target.address || tokensLoading || Boolean(tokensError)} onClick={send}>
               {sending ? (
                 <><span className="spinner" /> Sending…</>
               ) : (
                 `Tip ${finalAmount} ${token}`
               )}
             </button>
-            {!isConnected && <p className="tip-note">You will be asked to connect first.</p>}
+            {!target.address && <p className="tip-note">This profile cannot receive a tip until a wallet is linked.</p>}
           </>
         )}
       </div>

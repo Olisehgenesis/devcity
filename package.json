@@ -41,6 +41,7 @@
     "@radix-ui/react-tooltip": "^1.3.0",
     "@tanstack/react-query": "^5.104.1",
     "@xmtp/browser-sdk": "^7.1.0",
+    "@zxing/browser": "^0.1.5",
     "better-auth": "^1.7.7",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",

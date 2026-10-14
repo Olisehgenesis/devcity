@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useAccount } from "wagmi";
-import { LordIcon } from "@lordicon/react";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -16,10 +15,12 @@ import {
   MapPin,
   MessageCircle,
   Plus,
+  QrCode,
   Radio,
   Search,
   Sparkles,
   UsersRound,
+  UserRound,
   X,
 } from "lucide-react";
 import { eventMarkerSvg } from "./components/EventMapMarker";
@@ -28,6 +29,7 @@ import { YouSheet } from "./components/YouSheet";
 import { TipSheet, type TipTarget } from "./components/TipSheet";
 import { Sheet } from "./components/Sheet";
 import { CitySocialSheet, type SocialView } from "./components/CitySocialSheet";
+import { ScanSheet } from "./components/ScanSheet";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
 
@@ -204,6 +206,7 @@ export default function CityHome() {
   const [activeTab, setActiveTab] = useState<NavTab>("map");
   const [notice, setNotice] = useState("");
   const [youOpen, setYouOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [socialView, setSocialView] = useState<SocialView | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
@@ -274,8 +277,8 @@ export default function CityHome() {
   const selected = cardClosed
     ? undefined
     : selectedId
-      ? visibleMarkers.find((marker) => marker.id === selectedId) ?? visibleMarkers[0]
-      : visibleMarkers[0];
+      ? visibleMarkers.find((marker) => marker.id === selectedId)
+      : undefined;
   const isClaimed = hydrated && selected ? Boolean(claimedMap[selected.id]) : false;
   const connected = hydrated && isConnected;
 
@@ -414,22 +417,6 @@ export default function CityHome() {
       registry.set(marker.id, mapMarker);
     }
   }, [dropMarkers, mapReady, claimedMap]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!mapReady || !map) return;
-    const revealLabels = () => {
-      const visible = map.getZoom() >= 13.5;
-      for (const [id, marker] of mapMarkersRef.current) {
-        if (id.startsWith("event-")) marker.getElement().classList.toggle("event-label-visible", visible);
-      }
-    };
-    revealLabels();
-    map.on("zoom", revealLabels);
-    return () => {
-      map.off("zoom", revealLabels);
-    };
-  }, [mapReady, eventMarkers]);
 
   useEffect(() => {
     if (mapReady || mapError) {
@@ -582,16 +569,21 @@ export default function CityHome() {
     setActiveTab(tab);
     setNotice("");
     setSocialView(null);
+    setScanOpen(false);
     if (tab === "map") setFilter("all");
     if (tab === "feed" || tab === "chat" || tab === "people") setSocialView(tab);
     if (tab === "wallet") setYouOpen(true);
   }
 
   function chooseFilter(nextFilter: FilterKind) {
+    if (nextFilter === "person") {
+      setSocialView("people");
+      setActiveTab("map");
+      return;
+    }
     setFilter(nextFilter);
     setCardClosed(false);
-    const firstVisible = allMarkers.find((marker) => nextFilter === "all" || marker.kind === nextFilter);
-    if (firstVisible) setSelectedId(firstVisible.id);
+    setSelectedId(null);
   }
 
   function exploreMumbai() {
@@ -710,7 +702,7 @@ export default function CityHome() {
 
         <div className="map-tools">
           <div className="filter-list" role="group" aria-label="Filter map">
-            {filters.map((item) => <button key={item.id} className={`filter-chip ${filter === item.id ? "is-selected" : ""}`} onClick={() => chooseFilter(item.id)}>{item.label}</button>)}
+            {filters.map((item) => <button key={item.id} className={`filter-chip ${filter === item.id || (item.id === "person" && socialView === "people") ? "is-selected" : ""}`} onClick={() => chooseFilter(item.id)}>{item.label}</button>)}
           </div>
           <button className="locate-button" onClick={centerOnMe} aria-label="Center map on me" title="Center map"><LocateFixed size={18} /></button>
           <button className="locate-button" onClick={() => setCreateMenuOpen((v) => !v)} aria-label="Create a stall or booth" title="Create"><Plus size={18} /></button>
@@ -724,7 +716,11 @@ export default function CityHome() {
         )}
 
         {selected && (selected.kind === "event" && selected.raw ? (
-          <EventCard event={selected.raw} onClose={() => setCardClosed(true)} />
+          <EventCard
+            event={selected.raw}
+            onClose={() => setCardClosed(true)}
+            onShowOnMap={() => mapRef.current?.flyTo({ center: [selected.longitude, selected.latitude], zoom: 15.5, duration: 900 })}
+          />
         ) : (
         <article className={`activity-card ${selected.kind === "drop" ? "drop-card" : ""}`} aria-live="polite">
           <div className="card-topline">
@@ -776,13 +772,18 @@ export default function CityHome() {
         <nav className="mobile-nav" aria-label="Main navigation">
           <button className={activeTab === "map" ? "is-active" : ""} onClick={() => chooseTab("map")} aria-label="Map"><Map size={19} /><span>Map</span></button>
           <button className={activeTab === "feed" ? "is-active" : ""} onClick={() => chooseTab("feed")} aria-label="Feed"><Radio size={19} /><span>Feed</span></button>
-          <button className={activeTab === "chat" ? "is-active" : ""} onClick={() => chooseTab("chat")} aria-label="Chat"><MessageCircle size={19} /><span>Chat</span></button>
-          <button className={activeTab === "people" ? "is-active" : ""} onClick={() => chooseTab("people")} aria-label="People"><UsersRound size={19} /><span>People</span></button>
-          <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Wallet"><LordIcon className="wallet-tab-lordicon" src="/icons/wallet.json" trigger="hover" target="button"><img src="/icons/wallet.svg" alt="" /></LordIcon><span>Wallet</span></button>
+          <button className="mobile-scan-button" onClick={() => { setSocialView(null); setScanOpen(true); }} aria-label="Scan a QR code"><QrCode size={21} /><span>Scan</span></button>
+          <button className={activeTab === "chat" ? "is-active" : ""} onClick={() => chooseTab("chat")} aria-label="Inbox"><MessageCircle size={19} /><span>Inbox</span></button>
+          <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Your profile"><UserRound size={19} /><span>You</span></button>
         </nav>
       </section>
 
       <YouSheet open={youOpen} onClose={() => { setYouOpen(false); if (activeTab === "wallet") setActiveTab("map"); }} notify={setNotice} />
+      <ScanSheet
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onTip={(target) => { setScanOpen(false); setTipTarget(target); }}
+      />
       <CitySocialSheet
         open={socialView !== null}
         view={socialView}
@@ -797,13 +798,12 @@ export default function CityHome() {
         onEnableNotifications={() => void enableChatNotifications()}
         notificationsEnabled={typeof Notification !== 'undefined' && Notification.permission === 'granted'}
         onClose={() => { setSocialView(null); setActiveTab("map"); }}
-        onTip={(name, initials, color) => { setSocialView(null); setTipTarget({ name, initials, color }); }}
+        onTip={(name, initials, color, address) => { setSocialView(null); setTipTarget({ name, initials, color, address }); }}
       />
       <TipSheet
         open={tipTarget !== null}
         onClose={() => setTipTarget(null)}
         target={tipTarget}
-        isConnected={isConnected}
         onNeedWallet={() => setYouOpen(true)}
         notify={setNotice}
       />

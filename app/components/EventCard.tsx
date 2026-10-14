@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock, ExternalLink, MapPin, Ticket, Video } from 'lucide-react';
+import { CalendarDays, Clock, ExternalLink, LocateFixed, MapPin, Navigation, Ticket, Video } from 'lucide-react';
 
 export interface EventCardData {
   id: string;
@@ -54,7 +54,15 @@ function formatCountdown(ms: number): string {
   return `${m}m`;
 }
 
-export function EventCard({ event, onClose }: { event: EventCardData; onClose: () => void }) {
+export function EventCard({
+  event,
+  onClose,
+  onShowOnMap,
+}: {
+  event: EventCardData;
+  onClose: () => void;
+  onShowOnMap: () => void;
+}) {
   const { start, end } = useMemo(() => parseTs(event), [event]);
   const [, setTick] = useState(0);
 
@@ -84,6 +92,11 @@ export function EventCard({ event, onClose }: { event: EventCardData; onClose: (
   }, [event.endDate]);
 
   const timeRange = [event.startTime, event.endTime].filter(Boolean).join(' – ') || null;
+  const directionsUrl = event.latitude !== null && event.longitude !== null
+    ? `https://www.google.com/maps/dir/?api=1&destination=${event.latitude},${event.longitude}`
+    : event.location
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`
+      : null;
 
   return (
     <article className={`event-card${isDevcon ? ' is-devcon' : ''}`}>
@@ -174,23 +187,37 @@ export function EventCard({ event, onClose }: { event: EventCardData; onClose: (
         {event.summary && <p className="event-card-summary">{event.summary}</p>}
 
         {/* Tickets / RSVP */}
-        {event.url && (
-          <a
-            className={`event-card-cta${isDevcon ? ' devcon-gold-button' : ''}`}
-            href={event.url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Ticket size={15} />
-            {isDevcon ? 'Get Devcon ticket' : 'Get tickets / RSVP'}
-            <ExternalLink size={14} className="op-70" />
-          </a>
+        {(event.url || (!event.online && directionsUrl)) && (
+          <div className="event-card-actions">
+            {event.url && (
+              <a
+                className={`event-card-cta${isDevcon ? ' devcon-gold-button' : ''}`}
+                href={event.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Ticket size={15} />
+                {isDevcon ? 'Open Devcon event' : 'Open event'}
+                <ExternalLink size={14} className="op-70" />
+              </a>
+            )}
+            {directionsUrl && !event.online && (
+              <a className="event-card-directions" href={directionsUrl} target="_blank" rel="noopener noreferrer">
+                <Navigation size={15} /> Get directions <ExternalLink size={13} />
+              </a>
+            )}
+            {!event.online && event.latitude !== null && event.longitude !== null && (
+              <button className="event-card-map-action" onClick={onShowOnMap}>
+                <LocateFixed size={15} /> Show on map
+              </button>
+            )}
+          </div>
         )}
 
         {/* Schedule */}
         {event.timetable && event.timetable.length > 0 && (
-          <div className="event-schedule">
-            <h4 className="event-schedule-title">Schedule</h4>
+          <details className="event-schedule">
+            <summary className="event-schedule-title">View schedule <span>{event.timetable.length} sessions</span></summary>
             <div className="event-schedule-list">
               {event.timetable.map((slot) => {
                 const d = new Date(`${slot.date}T00:00:00Z`);
@@ -213,7 +240,7 @@ export function EventCard({ event, onClose }: { event: EventCardData; onClose: (
                 );
               })}
             </div>
-          </div>
+          </details>
         )}
 
         <button className="event-card-close" onClick={onClose} aria-label="Close event">

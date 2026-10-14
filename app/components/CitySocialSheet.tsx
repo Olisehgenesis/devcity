@@ -24,7 +24,7 @@ interface CitySocialSheetProps {
   onEnableNotifications: () => void;
   notificationsEnabled: boolean;
   onClose: () => void;
-  onTip: (name: string, initials: string, color: string) => void;
+  onTip: (name: string, initials: string, color: string, address?: string) => void;
 }
 
 type PresenceUser = {
@@ -220,7 +220,15 @@ export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, o
                 <button className="people-follow" onClick={() => void toggleFollow(person)} aria-label={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`} title={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`}>
                   {following.has(person.userId) ? 'Following' : '+ Follow'}
                 </button>
-                <button className="people-message" onClick={() => onTip(person.username, initialsFor(person.username), tone)} aria-label={`Tip ${person.username}`} title={`Tip ${person.username}`}><Sparkles size={17} /></button>
+                <button
+                  className="people-message"
+                  onClick={() => {
+                    const address = person.userId.replace(/^user_/, '');
+                    onTip(person.username, initialsFor(person.username), tone, /^0x[a-fA-F0-9]{40}$/.test(address) ? address : undefined);
+                  }}
+                  aria-label={`Tip ${person.username}`}
+                  title={`Tip ${person.username}`}
+                ><Sparkles size={17} /></button>
               </article>
             );
           })}

@@ -28,7 +28,12 @@ interface SessionUser {
   email?: string | null;
 }
 
-export function PasskeyWallet() {
+interface PasskeyWalletProps {
+  onSessionChange?: (user: SessionUser | null) => void;
+  onSessionReady?: () => void;
+}
+
+export function PasskeyWallet({ onSessionChange, onSessionReady }: PasskeyWalletProps) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>('signed-out');
@@ -89,16 +94,28 @@ export function PasskeyWallet() {
   }, [usdtBal.data, usdcBal.data, cusdBal.data]);
 
   async function refreshSession() {
-    const res = await authClient.getSession();
-    const next = (res?.data as { user?: SessionUser } | null)?.user ?? null;
-    setUser(next);
-    setSessionLoading(false);
-    if (next) {
-      void resolveWalletForUser(next.id);
-    } else {
+    try {
+      const res = await authClient.getSession();
+      const next = (res?.data as { user?: SessionUser } | null)?.user ?? null;
+      setUser(next);
+      onSessionChange?.(next);
+      if (next) {
+        await resolveWalletForUser(next.id);
+      } else {
+        setPhase('signed-out');
+        setWallet(null);
+        setUnlockedKey(null);
+      }
+    } catch (sessionError) {
+      setError(sessionError instanceof Error ? sessionError.message : 'Could not check your account.');
+      setUser(null);
+      onSessionChange?.(null);
       setPhase('signed-out');
       setWallet(null);
       setUnlockedKey(null);
+    } finally {
+      setSessionLoading(false);
+      onSessionReady?.();
     }
   }
 
@@ -435,6 +452,7 @@ export function PasskeyWallet() {
         onClick={() => {
           authClient.signOut();
           setUser(null);
+          onSessionChange?.(null);
           setWallet(null);
           setUnlockedKey(null);
           setPhase('signed-out');
