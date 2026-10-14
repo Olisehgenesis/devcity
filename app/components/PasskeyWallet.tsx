@@ -41,6 +41,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady }: PasskeyWallet
   const [unlockedKey, setUnlockedKey] = useState<Hex | null>(null);
   const [passphrase, setPassphrase] = useState('');
   const [error, setError] = useState('');
+  const [authAction, setAuthAction] = useState<'sign-in' | 'register' | null>(null);
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupDone, setBackupDone] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -266,31 +267,41 @@ export function PasskeyWallet({ onSessionChange, onSessionReady }: PasskeyWallet
         </p>
         <button
           className="you-connect-primary"
+          disabled={authAction !== null}
           onClick={async () => {
             setError('');
+            setAuthAction('sign-in');
             try {
-              await authClient.signIn.passkey();
+              const result = await authClient.signIn.passkey();
+              if (result.error) throw new Error(result.error.message || 'Passkey sign-in failed');
               await refreshSession();
-            } catch (e: any) {
-              setError(e?.message || 'Passkey sign-in failed');
+            } catch (e: unknown) {
+              setError(e instanceof Error ? e.message : 'Passkey sign-in failed');
+            } finally {
+              setAuthAction(null);
             }
           }}
         >
-          Sign in with passkey
+          {authAction === 'sign-in' ? 'Waiting for passkey…' : 'Sign in with passkey'}
         </button>
         <button
           className="you-connect-secondary"
+          disabled={authAction !== null}
           onClick={async () => {
             setError('');
+            setAuthAction('register');
             try {
-              await authClient.passkey.addPasskey({ name: 'DEVCITY wallet', createSession: true });
+              const result = await authClient.passkey.addPasskey({ name: 'DEVCITY wallet', createSession: true });
+              if (result.error) throw new Error(result.error.message || 'Could not create account');
               await refreshSession();
-            } catch (e: any) {
-              setError(e?.message || 'Could not create account');
+            } catch (e: unknown) {
+              setError(e instanceof Error ? e.message : 'Could not create account');
+            } finally {
+              setAuthAction(null);
             }
           }}
         >
-          Create an account with passkey
+          {authAction === 'register' ? 'Waiting for passkey…' : 'Create an account with passkey'}
         </button>
         {error && <p className="you-error">{error}</p>}
         <p className="you-note">{chainLabel} · passkey wallet · your key stays encrypted</p>

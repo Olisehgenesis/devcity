@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { passkey } from '@better-auth/passkey';
@@ -27,6 +28,25 @@ export const auth = betterAuth({
     passkey({
       rpID: authOrigin.hostname,
       rpName: 'DEVCITY26',
+      registration: {
+        requireSession: false,
+        resolveUser: async () => {
+          const id = randomUUID();
+          return {
+            id,
+            name: 'City explorer',
+            displayName: 'City explorer',
+          };
+        },
+        afterVerification: async ({ user }) => {
+          await prisma.user.upsert({
+            where: { id: user.id },
+            create: { id: user.id, name: user.name },
+            update: {},
+          });
+          return { userId: user.id };
+        },
+      },
     }),
   ],
 });
