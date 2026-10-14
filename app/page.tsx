@@ -215,6 +215,11 @@ export default function CityHome() {
   const [myPosition, setMyPosition] = useState<[number, number] | null>(null);
   const [outsidePromptOpen, setOutsidePromptOpen] = useState(false);
   const [dropSheetOpen, setDropSheetOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [createKind, setCreateKind] = useState<"stall" | "booth" | null>(null);
+  const [createName, setCreateName] = useState("");
+  const [creatingPlace, setCreatingPlace] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [dropClaimed, setDropClaimed] = useState(false);
   const [eventMarkers, setEventMarkers] = useState<CityMarker[]>([]);
   const [dropMarkers, setDropMarkers] = useState<CityMarker[]>([]);
@@ -534,6 +539,42 @@ export default function CityHome() {
     }
   }
 
+  async function handleCreatePlace() {
+    if (!createKind || !createName.trim()) return;
+    setCreatingPlace(true);
+    setCreateError("");
+    try {
+      const self = await import("@/lib/keystore");
+      const local = await self.listLocalWallets();
+      const ownerId = local[0]?.address;
+      if (!ownerId) {
+        setYouOpen(true);
+        setCreateError("Create a passkey wallet first to set up a spot.");
+        return;
+      }
+      const endpoint = createKind === "stall" ? "/api/stalls" : "/api/booths";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerId,
+          name: createName.trim(),
+          lat: myPosition?.[0] ?? 19.0662,
+          lng: myPosition?.[1] ?? 72.8697,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not create.");
+      setNotice(`${createKind === "stall" ? "Stall" : "Booth"} "${createName.trim()}" created.`);
+      setCreateKind(null);
+      setCreateName("");
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : "Could not create. Try again.");
+    } finally {
+      setCreatingPlace(false);
+    }
+  }
+
   function chooseTab(tab: NavTab) {
     setActiveTab(tab);
     setNotice("");
@@ -669,7 +710,15 @@ export default function CityHome() {
             {filters.map((item) => <button key={item.id} className={`filter-chip ${filter === item.id ? "is-selected" : ""}`} onClick={() => chooseFilter(item.id)}>{item.label}</button>)}
           </div>
           <button className="locate-button" onClick={centerOnMe} aria-label="Center map on me" title="Center map"><LocateFixed size={18} /></button>
+          <button className="locate-button" onClick={() => setCreateMenuOpen((v) => !v)} aria-label="Create a stall or booth" title="Create"><Plus size={18} /></button>
         </div>
+
+        {createMenuOpen && (
+          <div className="create-menu" role="menu">
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateMenuOpen(false); }}><Gift size={16} /> Create stall</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateMenuOpen(false); }}><MapPin size={16} /> Create booth</button>
+          </div>
+        )}
 
         {selected && (selected.kind === "event" && selected.raw ? (
           <EventCard event={selected.raw} onClose={() => setCardClosed(true)} />
@@ -755,6 +804,34 @@ export default function CityHome() {
         onNeedWallet={() => setYouOpen(true)}
         notify={setNotice}
       />
+      {createKind && (
+        <Sheet
+          open
+          onClose={() => { setCreateKind(null); setCreateName(""); }}
+          eyebrow="Mumbai · create"
+          title={createKind === "stall" ? "Create a stall" : "Create a booth"}
+        >
+          <div className="drop-sheet-content">
+            <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
+            <input
+              className="create-name-input"
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              placeholder={createKind === "stall" ? "Stall name (e.g. Spice corner)" : "Booth name (e.g. Devcon welcome desk)"}
+              aria-label="Name"
+            />
+            <p className="drop-sheet-copy">
+              {createKind === "stall"
+                ? "A stall is your map-anchored spot in the city. Set it at your current location and share it with people nearby."
+                : "A booth is a sponsored/venue space that can host drops and link to an event."}
+            </p>
+            <button className="claim-button" disabled={creatingPlace || !createName.trim()} onClick={() => void handleCreatePlace()}>
+              {creatingPlace ? <><span className="spinner" /> Creating…</> : `Create ${createKind}`}
+            </button>
+            {createError && <p className="you-error">{createError}</p>}
+          </div>
+        </Sheet>
+      )}
       {outsidePromptOpen && locationState === "outside" && (
         <div className="outside-overlay" role="dialog" aria-modal="true" aria-labelledby="outside-title">
           <div className="outside-panel">

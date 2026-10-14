@@ -55,6 +55,7 @@ function initialsFor(username: string) {
 export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, onBroadcast, onLikeBroadcast, onCommentBroadcast, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
   const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
+  const [following, setFollowing] = useState<Set<string>>(new Set());
   const [broadcastDraft, setBroadcastDraft] = useState('');
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [commentingId, setCommentingId] = useState<string | null>(null);
@@ -77,6 +78,30 @@ export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, o
       cancelled = true;
     };
   }, [open, view]);
+
+  async function toggleFollow(person: PresenceUser) {
+    const self = await import('@/lib/keystore');
+    const local = await self.listLocalWallets();
+    const myAddress = local[0]?.address;
+    if (!myAddress) {
+      onNotify('Create a passkey wallet first, then follow people.');
+      return;
+    }
+    const theirAddress = person.userId.startsWith('user_') ? `0x${person.userId.slice(5)}` : person.userId;
+    if (following.has(person.userId)) {
+      await fetch(`/api/follows?followerAddress=${myAddress}&followingAddress=${theirAddress}`, { method: 'DELETE' }).catch(() => {});
+      const next = new Set(following);
+      next.delete(person.userId);
+      setFollowing(next);
+      return;
+    }
+    await fetch('/api/follows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ followerAddress: myAddress, followingAddress: theirAddress }),
+    }).catch(() => {});
+    setFollowing((prev) => new Set(prev).add(person.userId));
+  }
 
   const filteredPeople = useMemo(() => nearbyPeople.filter((person) =>
     `${person.username} ${person.status}`.toLowerCase().includes(query.toLowerCase())), [nearbyPeople, query]);
@@ -192,6 +217,9 @@ export function CitySocialSheet({ open, view, activity, broadcasts, avatarSrc, o
               <article className="people-item" key={person.userId}>
                 <span className={`people-avatar tone-${tone}`}><img src={person.avatarUrl ?? dicebearAvatarUrl(person.username, avatarBackgroundForColor(tone))} alt={`${person.username}'s avatar`} /><i /></span>
                 <div className="people-copy"><strong>{person.username}</strong><span>{person.status}</span><small><MapPin size={11} /> {person.distance} km away</small></div>
+                <button className="people-follow" onClick={() => void toggleFollow(person)} aria-label={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`} title={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`}>
+                  {following.has(person.userId) ? 'Following' : '+ Follow'}
+                </button>
                 <button className="people-message" onClick={() => onTip(person.username, initialsFor(person.username), tone)} aria-label={`Tip ${person.username}`} title={`Tip ${person.username}`}><Sparkles size={17} /></button>
               </article>
             );
