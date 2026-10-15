@@ -147,12 +147,12 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
   const [balances, setBalances] = useState<Record<string, bigint>>({});
   const [prices, setPrices] = useState<Record<string, TokenPrice>>({});
   const [profileToken, setProfileToken] = useState<ProfileTokenDetails | null>(null);
+  const [profileStats, setProfileStats] = useState<{ icon?: string; totalSupplyFormatted?: number } | null>(null);
   const [priceAwareFactory, setPriceAwareFactory] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importAddress, setImportAddress] = useState('');
   const [tokenName, setTokenName] = useState('');
   const [tokenSymbol, setTokenSymbol] = useState('');
-  const [tokenURI, setTokenURI] = useState('');
   const [editTokenURI, setEditTokenURI] = useState('');
   const [recipient, setRecipient] = useState('');
   const [tipAmount, setTipAmount] = useState('');
@@ -292,7 +292,24 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
   }, [checkFactoryCapability, loadProfileToken, loadTokens]);
 
   useEffect(() => {
-    if (!tokenName && username) setTokenName(`${username} Token`);
+    if (!profileToken?.address) {
+      setProfileStats(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/token-stats?address=${encodeURIComponent(profileToken.address)}&chainId=${assetChainId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && typeof data.icon === 'string') {
+          setProfileStats({ icon: data.icon, totalSupplyFormatted: data.totalSupplyFormatted });
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [assetChainId, profileToken?.address]);
+
+  useEffect(() => {
+    if (!tokenName && username) setTokenName(`${username.replace(/[^a-zA-Z0-9-]/g, '')}.devcity.fun`);
     if (!tokenSymbol && normalizedUsername !== 'CITY') setTokenSymbol(normalizedUsername);
   }, [normalizedUsername, tokenName, tokenSymbol, username]);
 
@@ -364,10 +381,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
       setError('Use 2–10 letters or numbers for the token symbol.');
       return;
     }
-    if (!isAllowedTokenURI(tokenURI.trim())) {
-      setError('Use an https:// or ipfs:// token details URL, up to 2,048 characters.');
-      return;
-    }
+    const uri = `${window.location.origin}/api/token-icon?owner=${wallet.address}&chainId=${assetChainId}`;
     setOperation('launch');
     setError('');
     setTransactionHash('');
@@ -377,10 +391,30 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         address: CELO_SEPOLIA.profileTokenFactory as Address,
         abi: PROFILE_FACTORY_ABI,
         functionName: 'createToken',
-        args: [name, symbol, tokenURI.trim()],
+        args: [name, symbol, uri],
       });
       await waitForSuccess(hash);
       await loadProfileToken();
+      const contractAddress = await publicClient.readContract({
+        address: CELO_SEPOLIA.profileTokenFactory as Address,
+        abi: PROFILE_FACTORY_ABI,
+        functionName: 'getUserToken',
+        args: [wallet.address as Address],
+      });
+      if (contractAddress && contractAddress.toLowerCase() !== zeroAddress) {
+        await fetch('/api/profile-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            creatorAddress: wallet.address,
+            name,
+            symbol,
+            contractAddress,
+            chainId: assetChainId,
+            maxSupply: '1000000',
+          }),
+        });
+      }
       notify?.(`${symbol} profile token launched on Celo Sepolia.`);
     } catch (launchError) {
       setError(launchError instanceof Error ? launchError.message : 'Profile token launch failed.');
@@ -727,12 +761,10 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 <strong>Your profile can have its own token.</strong>
                 <p>Launch a fixed-supply token tied to this wallet. Your tokens are created on Celo Sepolia and are not real-world money.</p>
               </div>
-              <label className="wallet-field-label" htmlFor="profile-token-name">Token name</label>
-              <input id="profile-token-name" className="you-passphrase" value={tokenName} onChange={(event) => setTokenName(event.target.value)} placeholder={`${username || 'Your name'} Token`} maxLength={32} />
-              <label className="wallet-field-label" htmlFor="profile-token-symbol">Ticker</label>
-              <input id="profile-token-symbol" className="you-passphrase wallet-token-symbol-input" value={tokenSymbol} onChange={(event) => setTokenSymbol(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))} placeholder={normalizedUsername} maxLength={10} />
-              <label className="wallet-field-label" htmlFor="profile-token-uri">Token details URL <span>Optional</span></label>
-              <input id="profile-token-uri" className="you-passphrase" value={tokenURI} onChange={(event) => setTokenURI(event.target.value)} placeholder="https://… or ipfs://…" maxLength={2048} />
+              <div className="wallet-launch-preview">
+                <span className="wallet-token-mark">{tokenSymbol.slice(0, 1) || 'T'}</span>
+                <div><strong>{tokenName || `${username || 'Your name'}.devcity.fun`}</strong><span>${tokenSymbol || normalizedUsername || 'TICKER'} · 1,000,000 supply</span></div>
+              </div>
               <div className="wallet-token-contract-note"><strong>Fixed launch terms</strong><span>1,000,000 tokens · 18 decimals · 900,000 to you · 100,000 held in the factory treasury · one token per wallet</span></div>
               {!unlockedKey && (
                 <div className="wallet-token-unlock">
@@ -740,18 +772,20 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <input id="profile-token-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
                 </div>
               )}
-              <button className="you-connect-primary" disabled={operation === 'launch' || tokenName.trim().length < 2 || !tokenSymbol} onClick={() => void launchToken()}>
-                {operation === 'launch' ? 'Launching on Sepolia…' : 'Launch profile token'}
+              <button className="you-connect-primary" disabled={operation === 'launch'} onClick={() => void launchToken()}>
+                {operation === 'launch' ? 'Launching on Sepolia…' : `Launch ${tokenSymbol || normalizedUsername || 'your'} token`}
               </button>
-              <p className="wallet-token-footnote">Launching requires a Celo Sepolia transaction and network fees. Review the name and ticker carefully; deployed tokens cannot be renamed.</p>
+              <p className="wallet-token-footnote">Launching requires a Celo Sepolia transaction and network fees. Your token is named from your handle and saved to your profile.</p>
             </>
           ) : (
             <>
               <div className="wallet-profile-token-card">
                 <div className="wallet-profile-token-head">
-                  <span className="wallet-token-mark">{profileToken.symbol.slice(0, 1)}</span>
-                  <div><strong>{profileToken.name}</strong><span>${profileToken.symbol} · Celo Sepolia</span></div>
-                </div>
+                {profileStats?.icon
+                  ? <img className="wallet-profile-token-icon" src={profileStats.icon} alt={`${profileToken.symbol} token icon`} />
+                  : <span className="wallet-token-mark">{profileToken.symbol.slice(0, 1)}</span>}
+                <div><strong>{profileToken.name}</strong><span>${profileToken.symbol} · Celo Sepolia</span></div>
+              </div>
                 <div className="wallet-profile-token-balance">
                   <strong>{Number(formatUnits(profileToken.balance, profileToken.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
                   <span>available to you · {Number(formatUnits(profileToken.totalSupply, profileToken.decimals)).toLocaleString()} total supply</span>
@@ -765,6 +799,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   {profileToken.priceSource && <small>{profileToken.priceSource} · indicative, not a sale quote</small>}
                 </div>
                 <button className="wallet-profile-token-address" onClick={() => void copyAddress(profileToken.address)}><span>{profileToken.address}</span><Copy size={15} />{copied ? 'Copied' : 'Copy'}</button>
+                <a className="wallet-token-explorer" href={`${window.location.origin}/api/token-icon?owner=${wallet.address}&chainId=${assetChainId}`} target="_blank" rel="noreferrer">Token profile image <ExternalLink size={13} /></a>
                 <a className="wallet-token-explorer" href={`${CELO_SEPOLIA.blockExplorer}/address/${profileToken.address}`} target="_blank" rel="noreferrer">View token on Blockscout <ExternalLink size={13} /></a>
               </div>
 

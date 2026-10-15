@@ -1,9 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDownToLine, ArrowUpRight, Check, Copy, KeyRound, LandPlot, ShieldCheck, Send as SendIcon, Sparkles, Wallet as WalletIcon } from 'lucide-react';
 import { useBalance, useReadContract } from 'wagmi';
-import { createWalletClient, createPublicClient, getAddress, http, isAddress, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { authClient } from '@/lib/auth-client';
 import { normalizeUsername } from '@/lib/usernames';
@@ -17,19 +15,13 @@ import {
   uploadEncryptedBackup,
   decryptWithPassphrase,
   loadBackupForUser,
-  exportEncryptedKeystore,
-  downloadEncryptedKeystore,
-  readEncryptedKeystoreFile,
-  importEncryptedKeystore,
   type LocalWallet,
-  type EncryptedKeystoreFile,
 } from '@/lib/keystore';
-import { CELO_MAINNET_ID, CELO_SEPOLIA_ID, IS_MAINNET, ACTIVE_CHAIN, feeCurrenciesFor, toGasCurrency } from '@/lib/celo';
-import { CELO_SEPOLIA, CHAIN, ERC20_ABI } from '@/lib/chain';
+import { CELO_MAINNET_ID, CELO_SEPOLIA_ID, IS_MAINNET, feeCurrenciesFor } from '@/lib/celo';
+import { ERC20_ABI } from '@/lib/chain';
 import type { Hex, Address } from 'viem';
-import { WalletTokenTools } from './WalletTokenTools';
 import { WalletTradeTab } from './wallet/WalletTradeTab';
-import { WalletOverview } from './wallet/WalletOverview';
+import { WalletOverview, type WalletTabId } from './wallet/WalletOverview';
 import { WalletAssetsTab } from './wallet/WalletAssetsTab';
 import { WalletSendTab } from './wallet/WalletSendTab';
 import { WalletTipTab } from './wallet/WalletTipTab';
@@ -39,12 +31,6 @@ import { WalletSecurityTab } from './wallet/WalletSecurityTab';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
 
 type Phase = 'signed-out' | 'registering' | 'ready' | 'restore' | 'backup-required';
-type WalletTab = 'assets' | 'send' | 'tip' | 'drop' | 'token' | 'trade' | 'security';
-
-const PROFILE_FACTORY_ABI = [
-  { type: 'function', name: 'getUserToken', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ type: 'address' }] },
-  { type: 'function', name: 'createToken', stateMutability: 'nonpayable', inputs: [{ name: 'name', type: 'string' }, { name: 'symbol', type: 'string' }, { name: 'tokenURI', type: 'string' }], outputs: [{ type: 'address' }] },
-] as const;
 
 interface SessionUser {
   id: string;
@@ -73,41 +59,13 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupDone, setBackupDone] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState<WalletTab>('assets');
-  const [transactionHash, setTransactionHash] = useState('');
-  const [transactionExplorer, setTransactionExplorer] = useState('');
-  const [exportingKeystore, setExportingKeystore] = useState(false);
-  const [importingKeystore, setImportingKeystore] = useState(false);
-  const [keystoreFile, setKeystoreFile] = useState<EncryptedKeystoreFile | null>(null);
-  const [keystorePassphrase, setKeystorePassphrase] = useState('');
+  const [tab, setTab] = useState<WalletTabId>('assets');
   const [restoreAddress, setRestoreAddress] = useState<string | null>(null);
 
   // Fee currency selection (default USDT, then USDC, cUSD, ...)
   const [feeSymbol, setFeeSymbol] = useState('USDT');
-  const [sendTo, setSendTo] = useState('');
-  const [sendAmount, setSendAmount] = useState('');
-  const [sendToken, setSendToken] = useState('USDT');
-  const [sending, setSending] = useState(false);
   const [importedTokens, setImportedTokens] = useState<ImportedWalletToken[]>([]);
   const onImportedTokensChange = useCallback((tokens: ImportedWalletToken[]) => setImportedTokens(tokens), []);
-
-  // Tip
-  const [tipTo, setTipTo] = useState('');
-  const [tipAmount, setTipAmount] = useState('');
-  const [tipToken, setTipToken] = useState('USDT');
-  const [tipping, setTipping] = useState(false);
-
-  // Create drop
-  const [dropName, setDropName] = useState('');
-  const [dropAmount, setDropAmount] = useState('');
-  const [dropMaxClaimants, setDropMaxClaimants] = useState('100');
-  const [dropEndsIn, setDropEndsIn] = useState('24');
-  const [creatingDrop, setCreatingDrop] = useState(false);
-  const [dropToken, setDropToken] = useState('USDT');
-
-  // Profile token launch
-  const [launchingToken, setLaunchingToken] = useState(false);
-  const [launchedToken, setLaunchedToken] = useState<{ address: string; name: string; symbol: string } | null>(null);
 
   const chainId = IS_MAINNET ? CELO_MAINNET_ID : CELO_SEPOLIA_ID;
   const chainLabel = IS_MAINNET ? 'Celo' : 'Celo Sepolia';
@@ -196,9 +154,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
       cUSD: fmt(cusdBal.data, 18),
     };
   }, [usdtBal.data, usdcBal.data, cusdBal.data]);
-  const customSendToken = importedTokens.find((item) => sendToken === `CUSTOM:${item.address}`);
-  const sendTokenLabel = customSendToken?.symbol ?? sendToken;
-
   async function refreshSession() {
     try {
       const res = await authClient.getSession();
@@ -316,29 +271,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
     }
   }
 
-  async function handleUnlock() {
-    if (!wallet) return;
-    if (!pin) {
-      setError(wallet.pinProtected ? 'Enter your 6-digit wallet PIN.' : 'Enter your wallet passphrase.');
-      return;
-    }
-    if (wallet.pinProtected && !/^\d{6}$/.test(pin)) {
-      setError('Your wallet PIN must be 6 digits.');
-      return;
-    }
-    try {
-      const local = await loadLocalWallet(wallet.address);
-      if (!local) throw new Error('Wallet not found on this device');
-      const privateKey = (await decryptWithPassphrase(pin, local.encryptedPrivateKey)) as Hex;
-      setUnlockedKey(privateKey);
-      rememberUnlockedWallet(local.address, privateKey);
-      setError('');
-      setPin('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : wallet.pinProtected ? 'Incorrect wallet PIN.' : 'Wrong wallet passphrase.');
-    }
-  }
-
   async function handleRestoreFromBackup() {
     if (!restoreAddress || !user) return;
     if (!pin) {
@@ -407,348 +339,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
       setError(e instanceof Error ? e.message : 'Backup failed');
     } finally {
       setBackupSaving(false);
-    }
-  }
-
-  async function handleExportKeystore() {
-    if (!wallet || !unlockedKey) {
-      setError('Unlock your wallet before exporting.');
-      return;
-    }
-    if (!keystorePassphrase) {
-      setError('Choose a passphrase for the keystore file.');
-      return;
-    }
-    setExportingKeystore(true);
-    setError('');
-    try {
-      const file = await exportEncryptedKeystore(wallet.address, unlockedKey, keystorePassphrase);
-      downloadEncryptedKeystore(file, wallet.address);
-      setKeystorePassphrase('');
-      onNotify?.('Encrypted keystore file downloaded.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not export keystore.');
-    } finally {
-      setExportingKeystore(false);
-    }
-  }
-
-  async function handleImportKeystore(file: File) {
-    if (!user) return;
-    setImportingKeystore(true);
-    setError('');
-    try {
-      const parsed = await readEncryptedKeystoreFile(file);
-      setKeystoreFile(parsed);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not read keystore file.');
-      setImportingKeystore(false);
-    }
-  }
-
-  async function confirmImportKeystore() {
-    if (!keystoreFile || !user) return;
-    if (!keystorePassphrase) {
-      setError('Enter the passphrase for this keystore file.');
-      return;
-    }
-    setImportingKeystore(true);
-    setError('');
-    try {
-      const { address, privateKey } = await importEncryptedKeystore(keystoreFile, keystorePassphrase);
-      if (!/^0x[0-9a-f]{64}$/.test(privateKey)) {
-        throw new Error('The imported keystore does not contain a valid private key.');
-      }
-      const { privateKeyToAccount } = await import('viem/accounts');
-      const account = privateKeyToAccount(privateKey as Hex);
-      if (account.address.toLowerCase() !== address.toLowerCase()) {
-        throw new Error('Keystore address does not match its key.');
-      }
-      const encryptedPrivateKey = await encryptWithPassphrase(keystorePassphrase, privateKey);
-      const local: LocalWallet = {
-        address: account.address,
-        name: `${normalizeUsername(user.name ?? '') ?? 'city-explorer'}.devcity.fun`,
-        pinProtected: true,
-        encryptedPrivateKey,
-        backupConsent: false,
-        createdAt: Date.now(),
-      };
-      await saveLocalWallet(local);
-      setWallet(local);
-      setPhase('ready');
-      setKeystoreFile(null);
-      setKeystorePassphrase('');
-      onNotify?.('Wallet imported from keystore file.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not import keystore.');
-    } finally {
-      setImportingKeystore(false);
-    }
-  }
-
-  async function handleTip() {
-    if (!wallet || !unlockedKey) {
-      setError('Unlock your wallet first.');
-      return;
-    }
-    if (!isAddress(tipTo)) {
-      setError('Enter a valid recipient address.');
-      return;
-    }
-    const token = tipToken === 'CELO'
-      ? null
-      : fees.find((f) => f.symbol === tipToken)
-        ?? importedTokens.find((item) => tipToken === `CUSTOM:${item.address}`);
-    if (tipToken !== 'CELO' && !token) {
-      setError('Select a token supported on this network.');
-      return;
-    }
-    if (!tipTo || !tipAmount || Number(tipAmount) <= 0) {
-      setError('Enter a recipient and amount.');
-      return;
-    }
-    setTipping(true);
-    setError('');
-    try {
-      const account = privateKeyToAccount(unlockedKey);
-      const client = createWalletClient({
-        account,
-        chain: ACTIVE_CHAIN,
-        transport: http(ACTIVE_CHAIN.rpcUrls.default.http[0]),
-      });
-      const gasCurrency = toGasCurrency(chainId, feeSymbol);
-      let hash: Hex;
-      if (token) {
-        const amount = parseUnits(tipAmount, token.decimals);
-        hash = await client.writeContract({
-          address: token.address,
-          abi: ERC20_ABI,
-          functionName: 'transfer',
-          args: [getAddress(tipTo), amount],
-          ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
-        } as any);
-      } else {
-        const amount = parseUnits(tipAmount, 18);
-        hash = await client.sendTransaction({
-          to: getAddress(tipTo),
-          value: amount,
-          ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
-        } as any);
-      }
-      try {
-        await fetch('/api/tips', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fromAddress: wallet.address,
-            toAddress: getAddress(tipTo),
-            tokenSymbol: token ? token.symbol : 'CELO',
-            amount: tipAmount,
-            message: 'Wallet tip',
-          }),
-        });
-      } catch {
-        // DB tip record is best-effort; the on-chain transfer already succeeded.
-      }
-      setError('');
-      setTransactionHash(hash);
-      setTransactionExplorer(ACTIVE_CHAIN.blockExplorers?.default.url ?? '');
-      setTipAmount('');
-      setTipTo('');
-      onNotify?.('Tip sent.');
-    } catch (e: any) {
-      setError(e?.shortMessage || e?.message || 'Tip failed');
-    } finally {
-      setTipping(false);
-    }
-  }
-
-  async function handleCreateDrop() {
-    if (!wallet || !unlockedKey) {
-      setError('Unlock your wallet first.');
-      return;
-    }
-    if (!dropName.trim()) {
-      setError('Give the drop a name.');
-      return;
-    }
-    if (!dropAmount || Number(dropAmount) <= 0) {
-      setError('Enter a drop amount.');
-      return;
-    }
-    const claimants = Number(dropMaxClaimants);
-    if (!Number.isInteger(claimants) || claimants < 1) {
-      setError('Enter a valid number of claimants.');
-      return;
-    }
-    const hours = Number(dropEndsIn);
-    if (!Number.isFinite(hours) || hours <= 0) {
-      setError('Enter how many hours the drop lasts.');
-      return;
-    }
-    const token = dropToken === 'CELO'
-      ? null
-      : fees.find((f) => f.symbol === dropToken) ?? importedTokens.find((item) => dropToken === `CUSTOM:${item.address}`);
-    if (dropToken !== 'CELO' && !token) {
-      setError('Select a token for the drop.');
-      return;
-    }
-    setCreatingDrop(true);
-    setError('');
-    try {
-      const now = Date.now();
-      const res = await fetch('/api/drops', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: dropName.trim(),
-          description: 'Drop created from your wallet.',
-          tokenAddress: token ? token.address : '',
-          amount: dropAmount,
-          maxClaimants: claimants,
-          startsAt: new Date(now).toISOString(),
-          endsAt: new Date(now + hours * 3600 * 1000).toISOString(),
-          creatorAddress: wallet.address,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Could not create drop.');
-      }
-      setDropName('');
-      setDropAmount('');
-      onNotify?.('Drop created.');
-    } catch (e: any) {
-      setError(e?.message || 'Could not create drop.');
-    } finally {
-      setCreatingDrop(false);
-    }
-  }
-
-  async function handleLaunchToken() {
-    if (!wallet || !unlockedKey) {
-      setError('Unlock your wallet first.');
-      return;
-    }
-    if (launchedToken) {
-      setError('You already have a profile token.');
-      return;
-    }
-    setLaunchingToken(true);
-    setError('');
-    try {
-      const name = `${handle}.devcity.fun`;
-      const symbol = handleTicker;
-      const account = privateKeyToAccount(unlockedKey);
-      const client = createWalletClient({
-        account,
-        chain: CHAIN,
-        transport: http(CELO_SEPOLIA.rpcUrl),
-      });
-      const hash = await client.writeContract({
-        address: CELO_SEPOLIA.profileTokenFactory as Address,
-        abi: PROFILE_FACTORY_ABI,
-        functionName: 'createToken',
-        args: [name, symbol, ''],
-      });
-      const publicClient = createPublicClient({
-        chain: CHAIN,
-        transport: http(CELO_SEPOLIA.rpcUrl),
-      });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== 'success') throw new Error('Token launch transaction reverted.');
-      const tokenAddress = await publicClient.readContract({
-        address: CELO_SEPOLIA.profileTokenFactory as Address,
-        abi: PROFILE_FACTORY_ABI,
-        functionName: 'getUserToken',
-        args: [wallet.address as Address],
-      });
-      await fetch('/api/profile-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          creatorAddress: wallet.address,
-          name,
-          symbol,
-          contractAddress: tokenAddress as string,
-          chainId: CHAIN.id,
-          maxSupply: '1000000',
-        }),
-      }).catch(() => {});
-      setLaunchedToken({ address: tokenAddress as string, name, symbol });
-      setTransactionHash(hash);
-      setTransactionExplorer(CELO_SEPOLIA.blockExplorer);
-      onNotify?.(`${symbol} profile token launched.`);
-    } catch (e: any) {
-      setError(e?.shortMessage || e?.message || 'Token launch failed.');
-    } finally {
-      setLaunchingToken(false);
-    }
-  }
-
-  async function handleSend() {
-    if (!wallet || !unlockedKey) {
-      setError('Unlock your wallet first.');
-      return;
-    }
-    const feeCurrency = toGasCurrency(chainId, feeSymbol);
-    if (!isAddress(sendTo)) {
-      setError('Enter a valid recipient address.');
-      return;
-    }
-    const token = sendToken === 'CELO'
-      ? null
-      : fees.find((f) => f.symbol === sendToken)
-        ?? customSendToken;
-    if (sendToken.startsWith('CUSTOM:') && !customSendToken) {
-      setError('That imported token is no longer in your wallet list. Choose another token.');
-      return;
-    }
-    if (sendToken !== 'CELO' && !token) {
-      setError('Select a token supported on this network.');
-      return;
-    }
-    if (!sendTo || !sendAmount || Number(sendAmount) <= 0) {
-      setError('Enter a recipient and amount.');
-      return;
-    }
-    setSending(true);
-    setError('');
-    try {
-      const account = privateKeyToAccount(unlockedKey);
-      const client = createWalletClient({
-        account,
-        chain: ACTIVE_CHAIN,
-        transport: http(ACTIVE_CHAIN.rpcUrls.default.http[0]),
-      });
-      let hash: Hex;
-      if (token) {
-        const amount = parseUnits(sendAmount, token.decimals);
-        hash = await client.writeContract({
-          address: token.address,
-          abi: ERC20_ABI,
-          functionName: 'transfer',
-          args: [getAddress(sendTo), amount],
-          ...(feeCurrency ? { gasCurrency: feeCurrency as Address } : {}),
-        } as any);
-      } else {
-        const amount = parseUnits(sendAmount, 18);
-        hash = await client.sendTransaction({
-          to: getAddress(sendTo),
-          value: amount,
-          ...(feeCurrency ? { gasCurrency: feeCurrency as Address } : {}),
-        } as any);
-      }
-      setError('');
-      setTransactionHash(hash);
-      setTransactionExplorer(ACTIVE_CHAIN.blockExplorers?.default.url ?? '');
-      setSendAmount('');
-      setSendTo('');
-      onNotify?.('Transaction submitted.');
-    } catch (e: any) {
-      setError(e?.shortMessage || e?.message || 'Send failed');
-    } finally {
-      setSending(false);
     }
   }
 
