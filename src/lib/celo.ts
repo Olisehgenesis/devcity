@@ -25,15 +25,15 @@ export interface FeeCurrency {
  */
 export const FEE_CURRENCIES: Record<number, FeeCurrency[]> = {
   [CELO_MAINNET_ID]: [
-    { symbol: 'USDT', name: 'Tether USD', address: '0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5c', decimals: 6 },
+    { symbol: 'USDT', name: 'Tether USD', address: '0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e', decimals: 6 },
     { symbol: 'USDC', name: 'USD Coin', address: '0xcebA9300f2b948710d2653dD7B07f33A8B32118C', decimals: 6 },
-    { symbol: 'cUSD', name: 'Celo Dollar', address: '0x765DE816845861e75A25fCA122bb6898B9B2c9a2', decimals: 18 },
+    { symbol: 'cUSD', name: 'Celo Dollar', address: '0x765DE816845861e75A25fCA122bb6898B8B1282a', decimals: 18 },
     { symbol: 'cEUR', name: 'Celo Euro', address: '0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA07', decimals: 18 },
     { symbol: 'cREAL', name: 'Celo Brazilian Real', address: '0xe8537a3d056DA446677B9E5d6AE5beA3bCEfC335', decimals: 18 },
   ],
   [CELO_SEPOLIA_ID]: [
-    { symbol: 'USDT', name: 'Tether USD', address: '0xCe539590e98D9F63747ff5E24e0CeC7A8F9bE2c0', decimals: 6 },
-    { symbol: 'USDC', name: 'USD Coin', address: '0x2F25deB3848C207fc8E0c34035B3Ba7fC7e2A3C9', decimals: 6 },
+    { symbol: 'USDT', name: 'Tether USD', address: '0xd077A400968890Eacc75cdc901F0356c943e4fDb', decimals: 6 },
+    { symbol: 'USDC', name: 'USD Coin', address: '0x01C5C0122039549AD1493B8220cABEdD739BC44E', decimals: 6 },
     { symbol: 'cUSD', name: 'Celo Dollar', address: '0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1', decimals: 18 },
   ],
 };

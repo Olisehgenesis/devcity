@@ -29,6 +29,7 @@ import { WalletDropTab } from './wallet/WalletDropTab';
 import { WalletTokenTab } from './wallet/WalletTokenTab';
 import { WalletSecurityTab } from './wallet/WalletSecurityTab';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
+import { useProfileToken } from '../hooks/useProfileToken';
 
 type Phase = 'signed-out' | 'registering' | 'ready' | 'restore' | 'backup-required';
 
@@ -154,6 +155,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
       cUSD: fmt(cusdBal.data, 18),
     };
   }, [usdtBal.data, usdcBal.data, cusdBal.data]);
+
+  const { token: profileToken, reload: reloadProfileToken } = useProfileToken(wallet?.address);
   async function refreshSession() {
     try {
       const res = await authClient.getSession();
@@ -535,6 +538,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
         address={wallet?.address}
         pinProtected={wallet?.pinProtected}
         celoBalance={(Number(celoBalance?.value ?? BigInt(0)) / 10 ** (celoBalance?.decimals ?? 18)).toFixed(4)}
+        profileToken={profileToken}
         copied={copied}
         onCopy={() => void copyWalletAddress()}
         tab={tab}
@@ -548,6 +552,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
           chainId={chainId}
           chainLabel={chainLabel}
           stableBalances={stableBalances}
+          profileToken={profileToken}
           unlockedKey={unlockedKey}
           onUnlockKey={(key) => setUnlockedKey(key)}
           onTokensChange={onImportedTokensChange}

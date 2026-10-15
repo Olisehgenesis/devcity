@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, X, Users, Radio, Sparkles, Hash } from 'lucide-react';
+import { MessageCircle, Search, X, Users, Radio, Sparkles, Hash } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { useSearch, type SearchResult } from '../hooks/useSearch';
 
 interface SearchSheetProps {
   open: boolean;
   onClose: () => void;
+  onMessageUser?: (address: string, username: string) => void;
 }
 
 type SearchTab = 'all' | 'users' | 'broadcasts' | 'events' | 'hashtags';
@@ -20,7 +21,7 @@ const TABS: { id: SearchTab; label: string; icon: any }[] = [
   { id: 'hashtags', label: 'Tags', icon: Hash },
 ];
 
-export function SearchSheet({ open, onClose }: SearchSheetProps) {
+export function SearchSheet({ open, onClose, onMessageUser }: SearchSheetProps) {
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<SearchTab>('all');
   const { search, results, loading, error, clearResults } = useSearch();
@@ -104,8 +105,17 @@ export function SearchSheet({ open, onClose }: SearchSheetProps) {
                         )}
                         <div className="search-item-content">
                           <strong>{user.username || user.name || 'Anonymous'}</strong>
-                          <span>{user.walletAddress?.slice(0, 8)}…</span>
+                          <span>{user.walletAddress ? `${user.walletAddress.slice(0, 8)}…` : 'No wallet linked'}</span>
                         </div>
+                        {user.walletAddress && onMessageUser && (
+                          <button
+                            className="search-message-button"
+                            onClick={() => onMessageUser(user.walletAddress!, user.username || user.name || '')}
+                            aria-label={`Message ${user.username || user.name}`}
+                          >
+                            <MessageCircle size={15} /> Message
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>

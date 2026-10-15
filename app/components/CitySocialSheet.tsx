@@ -48,6 +48,7 @@ interface CitySocialSheetProps {
   notificationsEnabled: boolean;
   onClose: () => void;
   onTip: (name: string, initials: string, color: string, address?: string) => void;
+  startChatAddress?: string | null;
 }
 
 type PresenceUser = {
@@ -75,10 +76,13 @@ function initialsFor(username: string) {
     .join('') || username.slice(0, 2).toUpperCase();
 }
 
-export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip }: CitySocialSheetProps) {
+export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
   const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
+  const [friends, setFriends] = useState<PresenceUser[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friendsError, setFriendsError] = useState('');
   const [broadcasts, setBroadcasts] = useState<FeedBroadcast[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState('');
@@ -100,6 +104,13 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const fileInput = useRef<HTMLInputElement>(null);
   const xmtp = useXmtpChat(open && view === 'chat', onNotify);
   const connectWithLocalWallet = xmtp.connectWithLocalWallet;
+
+  useEffect(() => {
+    if (startChatAddress) {
+      setRecipient(startChatAddress);
+      xmtp.setActiveThreadId(null);
+    }
+  }, [startChatAddress, xmtp]);
 
   useEffect(() => {
     if (!open || view !== 'chat' || profileStatus !== 'ready' || !userAddress) {
@@ -173,6 +184,38 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       cancelled = true;
     };
   }, [open, view]);
+
+  useEffect(() => {
+    if (!open || view !== 'chat' || !userAddress) return;
+    let cancelled = false;
+    setFriendsLoading(true);
+    setFriendsError('');
+    void (async () => {
+      try {
+        const [followingResponse, presenceResponse] = await Promise.all([
+          fetch(`/api/follows?address=${encodeURIComponent(userAddress)}&type=following`),
+          fetch('/api/presence/nearby?lat=19.0662&lng=72.8697&radius=500'),
+        ]);
+        const followingData = await followingResponse.json() as { following?: Array<{ walletAddress: string; username: string; avatarUrl: string | null; name: string | null }>; error?: string };
+        if (!followingResponse.ok) throw new Error(followingData.error || 'Could not load your friends.');
+        const presenceData = await presenceResponse.json() as { users?: PresenceUser[] };
+        const online = new Set((presenceData.users ?? []).map((user) => user.userId.replace(/^user_/, '').toLowerCase()));
+        const rows = (followingData.following ?? []).map((friend) => ({
+          userId: `user_${friend.walletAddress.toLowerCase()}`,
+          username: friend.username || friend.name || friend.walletAddress.slice(0, 6),
+          avatarUrl: friend.avatarUrl,
+          status: online.has(friend.walletAddress.toLowerCase()) ? 'online' : 'offline',
+          distance: 0,
+        }));
+        if (!cancelled) setFriends(rows);
+      } catch (error) {
+        if (!cancelled) setFriendsError(error instanceof Error ? error.message : 'Could not load your friends.');
+      } finally {
+        if (!cancelled) setFriendsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, view, userAddress]);
 
   async function toggleFollow(person: PresenceUser) {
     const self = await import('@/lib/keystore');
@@ -516,6 +559,29 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
             <>
               <div className="social-live-line"><span className="live-dot" /> XMTP · ENCRYPTED INBOX</div>
               {!notificationsEnabled && <button className="xmtp-notification-toggle" onClick={onEnableNotifications}>Enable message notifications</button>}
+              <div className="inbox-friends">
+                <p className="social-section-label">YOUR FRIENDS <span>{friends.length}</span></p>
+                {friendsLoading && <p className="social-empty" role="status">Loading your friends…</p>}
+                {friendsError && <p className="feed-error" role="alert">{friendsError}</p>}
+                {!friendsLoading && !friendsError && friends.length === 0 && <p className="social-empty">No friends yet. Follow people from the map or People tab to message them here.</p>}
+                {friends.map((friend) => (
+                  <article className="people-item" key={friend.userId}>
+                    <span className={`people-avatar tone-${toneForUsername(friend.username)}`}><img src={friend.avatarUrl ?? dicebearAvatarUrl(friend.username, avatarBackgroundForColor(toneForUsername(friend.username)))} alt={`${friend.username}'s avatar`} /><i className={friend.status === 'online' ? 'is-online' : ''} /></span>
+                    <div className="people-copy"><strong>{friend.username}</strong><span>{friend.status === 'online' ? 'Online now' : 'Offline'}</span></div>
+                    <button
+                      className="people-message"
+                      onClick={() => {
+                        const address = friend.userId.replace(/^user_/, '');
+                        if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return;
+                        setRecipient(address);
+                        void xmtp.startConversation(address).catch((error: unknown) => setChatActionError(error instanceof Error ? error.message : 'Could not start this chat.'));
+                      }}
+                      aria-label={`Message ${friend.username}`}
+                      title={`Message ${friend.username}`}
+                    ><MessageCircle size={17} /></button>
+                  </article>
+                ))}
+              </div>
               <form className="xmtp-new-chat" onSubmit={startConversation}>
                 <input value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="Start a chat with 0x wallet address" aria-label="Recipient wallet address" />
                 <button type="submit" disabled={!recipient.trim()} aria-label="Start encrypted chat"><MessageCircle size={16} /></button>

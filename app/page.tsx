@@ -30,6 +30,7 @@ import { TipSheet, type TipTarget } from "./components/TipSheet";
 import { Sheet } from "./components/Sheet";
 import { CitySocialSheet, type FeedProfileStatus, type SocialView } from "./components/CitySocialSheet";
 import { ScanSheet } from "./components/ScanSheet";
+import { SearchSheet } from "./components/SearchSheet";
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
@@ -212,6 +213,8 @@ export default function CityHome() {
   const [feedProfileStatus, setFeedProfileStatus] = useState<FeedProfileStatus>("checking");
   const [feedUserAddress, setFeedUserAddress] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
+  const [searchSheetOpen, setSearchSheetOpen] = useState(false);
+  const [startChatAddress, setStartChatAddress] = useState<string | null>(null);
   const [socialView, setSocialView] = useState<SocialView | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
@@ -735,6 +738,14 @@ export default function CityHome() {
     }
   }
 
+  function messageUser(address: string, username: string) {
+    setSearchSheetOpen(false);
+    setStartChatAddress(address);
+    setSocialView('chat');
+    setActiveTab('chat');
+    setNotice(`Start a chat with ${username || address.slice(0, 6)}…${address.slice(-4)}`);
+  }
+
   async function enableChatNotifications() {
     if (typeof Notification === 'undefined') {
       setNotice('This browser does not support desktop notifications. In-app alerts remain on.');
@@ -781,8 +792,7 @@ export default function CityHome() {
             <p>South Mumbai{cityCount > 0 && <> <b>·</b> {cityCount} in the city</>}</p>
           </div>
           <div className="top-actions">
-            {searchOpen && <label className="search-field"><Search size={16} /><input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Find a person or place" /><button onClick={() => { setSearchOpen(false); setSearchTerm(""); }} aria-label="Close search"><X size={16} /></button></label>}
-            <button className="round-action" onClick={() => setSearchOpen((open) => !open)} aria-label={searchOpen ? "Close search" : "Search the city"}><Search size={18} /></button>
+            <button className="round-action" onClick={() => setSearchSheetOpen(true)} aria-label="Search the city"><Search size={18} /></button>
             <button className="invite-button" onClick={() => setNotice("Your invite link is ready to share.")}><Plus size={15} /> Invite</button>
             <button className={`top-profile-button${youOpen ? " is-active" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
               <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" />
@@ -893,6 +903,11 @@ export default function CityHome() {
         onClose={() => setScanOpen(false)}
         onTip={(target) => { setScanOpen(false); setTipTarget(target); }}
       />
+      <SearchSheet
+        open={searchSheetOpen}
+        onClose={() => setSearchSheetOpen(false)}
+        onMessageUser={messageUser}
+      />
       <CitySocialSheet
         open={socialView !== null}
         view={socialView}
@@ -906,6 +921,7 @@ export default function CityHome() {
         notificationsEnabled={typeof Notification !== 'undefined' && Notification.permission === 'granted'}
         onClose={() => { setSocialView(null); setActiveTab("map"); }}
         onTip={(name, initials, color, address) => { setSocialView(null); setTipTarget({ name, initials, color, address }); }}
+        startChatAddress={startChatAddress}
       />
       <TipSheet
         open={tipTarget !== null}

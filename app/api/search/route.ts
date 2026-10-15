@@ -15,6 +15,13 @@ export async function GET(request: Request) {
       throw new ApiError(400, 'Search query must be at least 2 characters');
     }
 
+    // Allow searching by handle like "oliseh.devcity" or "oliseh.devcity.fun"
+    const handleQuery = query
+      .toLowerCase()
+      .replace(/\.devcity\.fun$/i, '')
+      .replace(/\.devcity$/i, '')
+      .trim();
+
     const results: any = {
       users: [],
       broadcasts: [],
@@ -27,9 +34,10 @@ export async function GET(request: Request) {
       const users = await prisma.user.findMany({
         where: {
           OR: [
-            { username: { contains: query, mode: 'insensitive' } },
-            { name: { contains: query, mode: 'insensitive' } },
-            { email: { contains: query, mode: 'insensitive' } },
+            { username: { contains: handleQuery, mode: 'insensitive' } },
+            { name: { contains: handleQuery, mode: 'insensitive' } },
+            { email: { contains: handleQuery, mode: 'insensitive' } },
+            { walletAddress: { contains: query, mode: 'insensitive' } },
           ],
         },
         take: limit,
