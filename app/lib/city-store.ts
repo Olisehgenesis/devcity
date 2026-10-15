@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { bidirectionalSync, type SyncData, type ServerSyncResponse } from '@/lib/sync';
 
 export type Visibility = 'invisible' | 'event-only' | 'approximate' | 'visible';
 export type ProfilePrivacy = 'public' | 'private';
 export type PresenceStatus = 'online' | 'away' | 'offline';
 export type AvatarMode = 'dicebear' | 'initials' | 'upload';
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 
 export interface ClaimRecord {
   dropId: string;
@@ -51,6 +53,9 @@ interface CityStore {
   avatarMode: AvatarMode;
   avatarSeed: string;
   avatarImageData: string | null;
+  syncStatus: SyncStatus;
+  lastSyncedAt: number | null;
+  autoSyncEnabled: boolean;
   claim: (dropId: string, dropName: string, tokenSymbol: string, amount: string) => void;
   sendTip: (toName: string, tokenSymbol: string, amount: string) => void;
   setVisibility: (v: Visibility) => void;
@@ -63,11 +68,14 @@ interface CityStore {
   markEventAttended: (eventId: string) => void;
   removeSavedEvent: (eventId: string) => void;
   reset: () => void;
+  syncToServer: () => Promise<void>;
+  syncFromServer: () => Promise<void>;
+  setAutoSync: (enabled: boolean) => void;
 }
 
 export const useCityStore = create<CityStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       claimed: {},
       tips: [],
       activity: [],
@@ -79,6 +87,9 @@ export const useCityStore = create<CityStore>()(
       avatarMode: 'dicebear',
       avatarSeed: '',
       avatarImageData: null,
+      syncStatus: 'idle',
+      lastSyncedAt: null,
+      autoSyncEnabled: true,
 
       claim: (dropId, dropName, tokenSymbol, amount) =>
         set((state) => {
@@ -140,6 +151,81 @@ export const useCityStore = create<CityStore>()(
         set((state) => ({ savedEvents: state.savedEvents.filter((event) => event.id !== eventId) })),
 
       reset: () => set({ claimed: {}, tips: [], activity: [], savedEvents: [], avatarMode: 'dicebear', avatarSeed: '', avatarImageData: null }),
+
+      syncToServer: async () => {
+        const state = get();
+        if (!state.autoSyncEnabled) return;
+
+        set({ syncStatus: 'syncing' });
+
+        try {
+          const syncData: SyncData = {
+            savedEvents: state.savedEvents,
+            activity: state.activity.map((a) => ({
+              id: a.id,
+              kind: a.kind,
+              text: a.text,
+              refId: a.kind === 'claim' || a.kind === 'tip' ? undefined : a.id,
+              timestamp: new Date(a.at).toISOString(),
+            })),
+            preferences: {
+              visibility: state.visibility,
+              profilePrivacy: state.profilePrivacy,
+              avatarMode: state.avatarMode,
+            },
+          };
+
+          const result = await bidirectionalSync(syncData);
+
+          // Merge server data back to local
+          set((state) => ({
+            activity: result.activity.map((a) => ({
+              id: a.id,
+              kind: a.kind as any,
+              text: a.text,
+              refId: a.refId,
+              at: new Date(a.timestamp).getTime(),
+            })),
+            syncStatus: 'success',
+            lastSyncedAt: Date.now(),
+          }));
+        } catch (error) {
+          console.error('Sync failed:', error);
+          set({ syncStatus: 'error' });
+        }
+      },
+
+      syncFromServer: async () => {
+        const state = get();
+        if (!state.autoSyncEnabled) return;
+
+        set({ syncStatus: 'syncing' });
+
+        try {
+          const { syncFromServer } = await import('@/lib/sync');
+          const result = await syncFromServer();
+
+          if (result.settings) {
+            set((state) => ({
+              savedEvents: result.settings?.savedEvents || state.savedEvents,
+              activity: result.activity.map((a) => ({
+                id: a.id,
+                kind: a.kind as any,
+                text: a.text,
+                refId: a.refId,
+                at: new Date(a.timestamp).getTime(),
+              })),
+              syncStatus: 'success',
+              lastSyncedAt: Date.now(),
+            }));
+          }
+        } catch (error) {
+          console.error('Sync from server failed:', error);
+          set({ syncStatus: 'error' });
+        }
+      },
+
+      setAutoSync: (enabled) => set({ autoSyncEnabled: enabled }),
     }),
     {
       name: 'devcity-city',

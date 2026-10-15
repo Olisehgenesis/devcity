@@ -388,6 +388,7 @@ export function serializeBroadcast(broadcast: any, viewerAddress?: string) {
   return {
     id: broadcast.id,
     text: broadcast.text,
+    mediaUrl: broadcast.mediaUrl ?? null,
     userId: broadcast.userId,
     username: broadcast.user?.username ?? null,
     avatarUrl: broadcast.user?.avatarUrl ?? null,
@@ -404,6 +405,13 @@ export function serializeBroadcast(broadcast: any, viewerAddress?: string) {
       avatarUrl: c.user?.avatarUrl ?? null,
       createdAt: toIso(c.createdAt),
     })),
+    reactions: (broadcast.broadcastReactions ?? []).map((r: any) => ({
+      id: r.id,
+      emoji: r.emoji,
+      userId: r.userId,
+      username: r.user?.username ?? null,
+      createdAt: toIso(r.createdAt),
+    })),
   };
 }
 
@@ -414,6 +422,7 @@ export async function listBroadcasts(viewerAddress?: string) {
       _count: { select: { broadcastLikes: true, broadcastComments: true } },
       broadcastLikes: viewerAddress ? { where: { userId: `user_${normalizeAddress(viewerAddress)}` } } : false,
       broadcastComments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
+      broadcastReactions: { include: { user: true } },
     },
     orderBy: { createdAt: 'desc' },
     take: 50,
@@ -421,7 +430,7 @@ export async function listBroadcasts(viewerAddress?: string) {
   return broadcasts.map((b) => serializeBroadcast(b, viewerAddress));
 }
 
-export async function createBroadcast(userAddress: string, text: string, request?: NextRequest) {
+export async function createBroadcast(userAddress: string, text: string, mediaUrl?: string, request?: NextRequest) {
   if (request) {
     const clientId = getClientIdentifier(request);
     const rlResult = rateLimit(`broadcast:${clientId}`, RATE_LIMITS.createBroadcast);
@@ -432,10 +441,10 @@ export async function createBroadcast(userAddress: string, text: string, request
 
   const user = await getOrCreateUser(userAddress);
   const trimmed = text.trim().slice(0, 240);
-  if (!trimmed) throw new ApiError(400, 'text is required');
+  if (!trimmed && !mediaUrl) throw new ApiError(400, 'text or media is required');
 
   const broadcast = await prisma.broadcast.create({
-    data: { userId: user.id, text: trimmed },
+    data: { userId: user.id, text: trimmed, mediaUrl: mediaUrl || null },
     include: { user: true, broadcastLikes: true, broadcastComments: { include: { user: true } } },
   });
 
@@ -533,7 +542,7 @@ export async function listStories() {
   return stories.map(serializeStory);
 }
 
-export async function createStory(userAddress: string, content: string, request?: NextRequest) {
+export async function createStory(userAddress: string, content: string, mediaUrl?: string, request?: NextRequest) {
   if (request) {
     const clientId = getClientIdentifier(request);
     const rlResult = rateLimit(`story:${clientId}`, RATE_LIMITS.createStory);
@@ -544,12 +553,13 @@ export async function createStory(userAddress: string, content: string, request?
 
   const user = await getOrCreateUser(userAddress);
   const trimmed = content.trim().slice(0, 1000);
-  if (!trimmed) throw new ApiError(400, 'content is required');
+  if (!trimmed && !mediaUrl) throw new ApiError(400, 'content or media is required');
 
   const story = await prisma.story.create({
     data: {
       userId: user.id,
       content: trimmed,
+      mediaUrl: mediaUrl || null,
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     include: { user: true },
@@ -953,4 +963,43 @@ export async function listTips(userAddress: string, type: 'sent' | 'received' = 
     txHash: r.txHash,
     createdAt: toIso(r.createdAt),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Profile tokens (user-launched ERC-20s)
+// ---------------------------------------------------------------------------
+
+export async function recordProfileToken(input: {
+  creatorAddress: string;
+  name: string;
+  symbol: string;
+  contractAddress: string;
+  chainId: number;
+  maxSupply: string;
+}) {
+  const creator = await getOrCreateUser(input.creatorAddress);
+  const contractAddress = input.contractAddress.trim().toLowerCase();
+  const token = await prisma.token.upsert({
+    where: { chainId_contractAddress: { chainId: input.chainId, contractAddress } },
+    create: {
+      creatorId: creator.id,
+      name: input.name,
+      symbol: input.symbol,
+      chainId: input.chainId,
+      contractAddress,
+      maxSupply: toDecimal(input.maxSupply),
+    },
+    update: {
+      name: input.name,
+      symbol: input.symbol,
+    },
+  });
+  return {
+    id: token.id,
+    name: token.name,
+    symbol: token.symbol,
+    contractAddress: token.contractAddress,
+    chainId: token.chainId,
+    maxSupply: token.maxSupply.toString(),
+  };
 }

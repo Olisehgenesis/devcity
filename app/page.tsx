@@ -30,6 +30,7 @@ import { TipSheet, type TipTarget } from "./components/TipSheet";
 import { Sheet } from "./components/Sheet";
 import { CitySocialSheet, type FeedProfileStatus, type SocialView } from "./components/CitySocialSheet";
 import { ScanSheet } from "./components/ScanSheet";
+import { OnboardingFlow } from "./components/OnboardingFlow";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
 
@@ -215,6 +216,8 @@ export default function CityHome() {
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const introMount = useRef(Date.now());
   const [locationState, setLocationState] = useState<"checking" | "inside" | "outside" | "denied" | "unavailable">("checking");
   const [locationPromptOpen, setLocationPromptOpen] = useState(false);
@@ -460,6 +463,27 @@ export default function CityHome() {
     }, 4500);
     return () => window.clearTimeout(timer);
   }, [mapError, mapReady]);
+
+  // Check onboarding status
+  useEffect(() => {
+    const completed = localStorage.getItem('devcity_onboarding_completed');
+    setHasCompletedOnboarding(!!completed);
+
+    if (!completed && !showIntro && mapReady) {
+      setShowOnboarding(true);
+    }
+  }, [showIntro, mapReady]);
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('devcity_onboarding_completed', 'true');
+    setHasCompletedOnboarding(true);
+    setShowOnboarding(false);
+  };
+
+  const handleOnboardingSkip = () => {
+    setHasCompletedOnboarding(true);
+    setShowOnboarding(false);
+  };
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -742,6 +766,9 @@ export default function CityHome() {
           <span className="intro-edition">MUMBAI EDITION</span>
           <span className="intro-loading">{mapReady ? "CITY READY" : mapError ? "CITY MAP IS SLOW" : "LOADING CITY"}<i /><i /><i /></span>
         </div>}
+        {showOnboarding && !hasCompletedOnboarding && (
+          <OnboardingFlow onComplete={handleOnboardingComplete} onSkip={handleOnboardingSkip} />
+        )}
         {mapError && <div className="map-load-notice" role="status">
           <span>{mapReady ? "Some map details are taking a moment." : "The map is taking a moment to arrive."}</span>
           <button onClick={() => window.location.reload()}>Retry</button>

@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const story = await createStory(body.userAddress, body.content);
+    const story = await createStory(body.userAddress, body.content, body.mediaUrl);
     return NextResponse.json({ story }, { status: 201 });
   } catch (err) {
     if (err instanceof ApiError) {

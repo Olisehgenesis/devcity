@@ -33,17 +33,24 @@ model User {
   broadcasts        Broadcast[]
   broadcastLikes    BroadcastLike[]
   broadcastComments BroadcastComment[]
+  broadcastReactions BroadcastReaction[]
   tipsSent          Tip[]                @relation("TipFrom")
   tipsReceived      Tip[]                @relation("TipTo")
   stories           Story[]
   activity          Activity[]
   avatarSettings    AvatarSettings?
-  stalls            Stall[]
-  booths            Booth[]
-  following         Follow[]              @relation("FollowFollower")
-  followers         Follow[]              @relation("FollowFollowing")
+  userSettings      UserSettings?
+  syncedActivity    UserActivity[]
+  eventRsvps        EventRsvp[]
+  eventMessages     EventMessage[]
+  notifications     Notification[]
+stalls            Stall[]
+   booths            Booth[]
+   following         Follow[]              @relation("FollowFollower")
+   followers         Follow[]              @relation("FollowFollowing")
+   walletBackups     WalletBackup[]
 
-  @@map("users")
+   @@map("users")
 }
 
 model Session {
@@ -149,8 +156,11 @@ model Wallet {
 // Opt-in encrypted cloud backup of a client-side wallet key.
 // Stores ONLY the client-encrypted blob (AES-GCM ciphertext + KDF params).
 // The server never sees the private key or the passphrase.
+// `userId` lets an authenticated session restore its wallet on a new device
+// without the client having to remember the wallet address.
 model WalletBackup {
   id         String   @id @default(cuid())
+  userId     String
   address    String   @unique
   iv         String
   data       String   @db.Text
@@ -158,7 +168,9 @@ model WalletBackup {
   iterations Int      @default(250000)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("wallet_backups")
 }
 
@@ -241,11 +253,42 @@ model Event {
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   timetable  TimetableSlot[]
+  rsvps      EventRsvp[]
+  messages   EventMessage[]
 
   @@unique([source, externalId])
   @@index([startDate])
   @@index([region, category])
   @@map("events")
+}
+
+model EventRsvp {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  status    String   @default("going") // going, interested, attended
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@map("event_rsvps")
+}
+
+model EventMessage {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  text      String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, createdAt])
+  @@index([userId])
+  @@map("event_messages")
 }
 
 model TimetableSlot {
@@ -381,11 +424,14 @@ model Broadcast {
   id                String             @id @default(cuid())
   userId            String
   text              String             @db.VarChar(240)
+  mediaUrl          String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   broadcastLikes    BroadcastLike[]
   broadcastComments BroadcastComment[]
+  broadcastReactions BroadcastReaction[]
+  broadcastHashtags BroadcastHashtag[]
 
   @@index([userId, createdAt])
   @@map("broadcasts")
@@ -415,6 +461,21 @@ model BroadcastComment {
   @@index([broadcastId, createdAt])
   @@index([userId, createdAt])
   @@map("broadcast_comments")
+}
+
+model BroadcastReaction {
+  id          String   @id @default(cuid())
+  broadcastId String
+  userId      String
+  emoji       String   @db.VarChar(50)
+  createdAt   DateTime @default(now())
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, userId, emoji])
+  @@index([broadcastId])
+  @@index([userId])
+  @@map("broadcast_reactions")
 }
 
 model Presence {
@@ -488,6 +549,35 @@ model AvatarSettings {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("avatar_settings")
+}
+
+// Cloud-synced user settings and data
+model UserSettings {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  savedEvents     Json     // JSON array of saved event IDs with attendance status
+  preferences     Json     // User preferences (notifications, privacy, etc.)
+  lastSyncedAt    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+// Cloud-synced user activity (replaces local-only activity)
+model UserActivity {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String   @db.VarChar(32)
+  text      String   @db.VarChar(280)
+  refId     String?
+  timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, timestamp])
+  @@map("user_activity")
 }
 
 // Off-chain map-anchored storefront. A stall is a seller's physical spot
@@ -592,4 +682,41 @@ enum ClaimStatus {
   PENDING
   CONFIRMED
   FAILED
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // message, like, comment, reaction, follow, event_update, drop_claimed, etc.
+  title     String
+  body      String   @db.VarChar(280)
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+  @@map("notifications")
+}
+
+model Hashtag {
+  id         String   @id @default(cuid())
+  tag        String   @unique
+  usageCount Int      @default(0)
+  createdAt DateTime @default(now())
+  broadcasts BroadcastHashtag[]
+
+  @@map("hashtags")
+}
+
+model BroadcastHashtag {
+  id          String   @id @default(cuid())
+  broadcastId String
+  hashtagId   String
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  hashtag     Hashtag  @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, hashtagId])
+  @@index([hashtagId])
+  @@map("broadcast_hashtags")
 }

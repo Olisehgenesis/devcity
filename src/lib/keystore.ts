@@ -167,3 +167,138 @@ export async function uploadEncryptedBackup(address: Address, payload: Encrypted
   const json = await res.json();
   return json.ref as string;
 }
+
+export interface BackupBlob {
+  address: string;
+  iv: string;
+  data: string;
+  salt: string;
+  iterations: number;
+}
+
+/**
+ * Fetch the server-side encrypted backup for the signed-in user.
+ * Used to restore a wallet on a new device. The caller must supply the
+ * passphrase/PIN to decrypt the blob; this function only retrieves ciphertext.
+ */
+export async function loadBackupForUser(userId: string): Promise<BackupBlob | null> {
+  const res = await fetch(`/api/wallet/backup?userId=${encodeURIComponent(userId)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Could not load your wallet backup.');
+  return (await res.json()) as BackupBlob;
+}
+
+/**
+ * Fetch the server-side encrypted backup for a specific wallet address.
+ * Ownership is enforced server-side against the signed-in session.
+ */
+export async function loadBackupForAddress(address: Address): Promise<BackupBlob | null> {
+  const res = await fetch(`/api/wallet/backup?address=${encodeURIComponent(address)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Could not load your wallet backup.');
+  return (await res.json()) as BackupBlob;
+}
+
+// ─── Encrypted keystore export (no plaintext ever leaves the device) ────────
+
+export interface EncryptedKeystoreFile {
+  version: 1;
+  address: Address;
+  /** Base64 AES-GCM ciphertext of the private key. */
+  data: string;
+  /** Base64 IV. */
+  iv: string;
+  /** Base64 salt used for PBKDF2. */
+  salt: string;
+  iterations: number;
+  kdf: 'PBKDF2-SHA256';
+  cipher: 'AES-256-GCM';
+  exportedAt: number;
+}
+
+/**
+ * Build an encrypted keystore blob the user can save to disk and re-import
+ * later — on any device, in any app that supports the same format. The
+ * private key is never shown in plaintext.
+ */
+export async function exportEncryptedKeystore(
+  address: Address,
+  privateKey: string,
+  passphrase: string,
+): Promise<EncryptedKeystoreFile> {
+  const encrypted = await encryptWithPassphrase(passphrase, privateKey);
+  return {
+    version: 1,
+    address,
+    data: encrypted.data,
+    iv: encrypted.iv,
+    salt: encrypted.salt,
+    iterations: encrypted.iterations,
+    kdf: 'PBKDF2-SHA256',
+    cipher: 'AES-256-GCM',
+    exportedAt: Date.now(),
+  };
+}
+
+/**
+ * Decrypt a keystore file previously produced by `exportEncryptedKeystore`.
+ * Throws if the passphrase is wrong or the file is malformed.
+ */
+export async function importEncryptedKeystore(
+  file: EncryptedKeystoreFile,
+  passphrase: string,
+): Promise<{ address: Address; privateKey: string }> {
+  if (file.version !== 1) throw new Error('Unsupported keystore version.');
+  if (file.kdf !== 'PBKDF2-SHA256' || file.cipher !== 'AES-256-GCM') {
+    throw new Error('Unsupported keystore encryption parameters.');
+  }
+  const privateKey = await decryptWithPassphrase(passphrase, {
+    iv: file.iv,
+    data: file.data,
+    salt: file.salt,
+    iterations: file.iterations,
+  });
+  return { address: file.address, privateKey };
+}
+
+function downloadBlob(filename: string, text: string): void {
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Trigger a browser download of an encrypted keystore file.
+ */
+export function downloadEncryptedKeystore(file: EncryptedKeystoreFile, address: Address): void {
+  const safe = address.slice(2, 10).toLowerCase();
+  downloadBlob(`devcity-wallet-${safe}.keystore.json`, JSON.stringify(file, null, 2));
+}
+
+/**
+ * Read an encrypted keystore file the user selected via an <input type="file">.
+ */
+export async function readEncryptedKeystoreFile(file: File): Promise<EncryptedKeystoreFile> {
+  const text = await file.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error('That file is not a valid DEVCITY keystore file.');
+  }
+  if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid keystore file.');
+  const obj = parsed as Record<string, unknown>;
+  if (obj.version !== 1 || obj.kdf !== 'PBKDF2-SHA256' || obj.cipher !== 'AES-256-GCM') {
+    throw new Error('Unsupported keystore version or encryption.');
+  }
+  if (typeof obj.data !== 'string' || typeof obj.iv !== 'string' || typeof obj.salt !== 'string') {
+    throw new Error('Invalid keystore payload.');
+  }
+  return obj as unknown as EncryptedKeystoreFile;
+}

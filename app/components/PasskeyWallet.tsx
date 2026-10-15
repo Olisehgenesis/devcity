@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDownToLine, ArrowUpRight, Check, Copy, KeyRound, ShieldCheck } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpRight, Check, Copy, KeyRound, LandPlot, ShieldCheck, Send as SendIcon, Sparkles, Wallet as WalletIcon } from 'lucide-react';
 import { useBalance, useReadContract } from 'wagmi';
-import { createWalletClient, getAddress, http, isAddress, parseUnits } from 'viem';
+import { createWalletClient, createPublicClient, getAddress, http, isAddress, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { authClient } from '@/lib/auth-client';
 import { normalizeUsername } from '@/lib/usernames';
@@ -16,15 +16,35 @@ import {
   listLocalWallets,
   uploadEncryptedBackup,
   decryptWithPassphrase,
+  loadBackupForUser,
+  exportEncryptedKeystore,
+  downloadEncryptedKeystore,
+  readEncryptedKeystoreFile,
+  importEncryptedKeystore,
   type LocalWallet,
+  type EncryptedKeystoreFile,
 } from '@/lib/keystore';
 import { CELO_MAINNET_ID, CELO_SEPOLIA_ID, IS_MAINNET, ACTIVE_CHAIN, feeCurrenciesFor, toGasCurrency } from '@/lib/celo';
-import { ERC20_ABI } from '@/lib/chain';
+import { CELO_SEPOLIA, CHAIN, ERC20_ABI } from '@/lib/chain';
 import type { Hex, Address } from 'viem';
 import { WalletTokenTools } from './WalletTokenTools';
+import { WalletTradeTab } from './wallet/WalletTradeTab';
+import { WalletOverview } from './wallet/WalletOverview';
+import { WalletAssetsTab } from './wallet/WalletAssetsTab';
+import { WalletSendTab } from './wallet/WalletSendTab';
+import { WalletTipTab } from './wallet/WalletTipTab';
+import { WalletDropTab } from './wallet/WalletDropTab';
+import { WalletTokenTab } from './wallet/WalletTokenTab';
+import { WalletSecurityTab } from './wallet/WalletSecurityTab';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
 
-type Phase = 'signed-out' | 'registering' | 'ready';
+type Phase = 'signed-out' | 'registering' | 'ready' | 'restore' | 'backup-required';
+type WalletTab = 'assets' | 'send' | 'tip' | 'drop' | 'token' | 'trade' | 'security';
+
+const PROFILE_FACTORY_ABI = [
+  { type: 'function', name: 'getUserToken', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'createToken', stateMutability: 'nonpayable', inputs: [{ name: 'name', type: 'string' }, { name: 'symbol', type: 'string' }, { name: 'tokenURI', type: 'string' }], outputs: [{ type: 'address' }] },
+] as const;
 
 interface SessionUser {
   id: string;
@@ -53,9 +73,14 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupDone, setBackupDone] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [walletAction, setWalletAction] = useState<'receive' | 'send' | null>(null);
+  const [tab, setTab] = useState<WalletTab>('assets');
   const [transactionHash, setTransactionHash] = useState('');
   const [transactionExplorer, setTransactionExplorer] = useState('');
+  const [exportingKeystore, setExportingKeystore] = useState(false);
+  const [importingKeystore, setImportingKeystore] = useState(false);
+  const [keystoreFile, setKeystoreFile] = useState<EncryptedKeystoreFile | null>(null);
+  const [keystorePassphrase, setKeystorePassphrase] = useState('');
+  const [restoreAddress, setRestoreAddress] = useState<string | null>(null);
 
   // Fee currency selection (default USDT, then USDC, cUSD, ...)
   const [feeSymbol, setFeeSymbol] = useState('USDT');
@@ -66,10 +91,30 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
   const [importedTokens, setImportedTokens] = useState<ImportedWalletToken[]>([]);
   const onImportedTokensChange = useCallback((tokens: ImportedWalletToken[]) => setImportedTokens(tokens), []);
 
+  // Tip
+  const [tipTo, setTipTo] = useState('');
+  const [tipAmount, setTipAmount] = useState('');
+  const [tipToken, setTipToken] = useState('USDT');
+  const [tipping, setTipping] = useState(false);
+
+  // Create drop
+  const [dropName, setDropName] = useState('');
+  const [dropAmount, setDropAmount] = useState('');
+  const [dropMaxClaimants, setDropMaxClaimants] = useState('100');
+  const [dropEndsIn, setDropEndsIn] = useState('24');
+  const [creatingDrop, setCreatingDrop] = useState(false);
+  const [dropToken, setDropToken] = useState('USDT');
+
+  // Profile token launch
+  const [launchingToken, setLaunchingToken] = useState(false);
+  const [launchedToken, setLaunchedToken] = useState<{ address: string; name: string; symbol: string } | null>(null);
+
   const chainId = IS_MAINNET ? CELO_MAINNET_ID : CELO_SEPOLIA_ID;
   const chainLabel = IS_MAINNET ? 'Celo' : 'Celo Sepolia';
   const addr = wallet?.address;
   const fees = feeCurrenciesFor(chainId);
+  const handle = normalizeUsername(username) ?? normalizeUsername(user?.name ?? '') ?? 'city-explorer';
+  const handleTicker = handle.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10) || 'CITY';
 
   async function copyWalletAddress() {
     if (!wallet) return;
@@ -193,6 +238,20 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
       setPhase('ready');
       return;
     }
+
+    // No wallet on this device — check for a server backup tied to this account.
+    try {
+      const backup = await loadBackupForUser(uid);
+      if (backup) {
+        setRestoreAddress(backup.address);
+        setPhase('restore');
+        return;
+      }
+    } catch (restoreError) {
+      // Non-fatal: fall through to wallet creation if the lookup itself fails.
+      setError(restoreError instanceof Error ? restoreError.message : 'Could not check for a wallet backup.');
+    }
+
     setPhase('registering');
     setError('');
   }
@@ -238,7 +297,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
     try {
       const { address, privateKey } = createEOA();
       const encryptedPrivateKey = await encryptWithPassphrase(pin, privateKey);
-      const handle = normalizeUsername(username) ?? normalizeUsername(user?.name ?? '') ?? 'city-explorer';
       const local: LocalWallet = {
         address,
         name: `${handle}.devcity.fun`,
@@ -249,7 +307,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
       };
       await saveLocalWallet(local);
       setWallet(local);
-      setPhase('ready');
+      // A brand-new wallet is not recoverable until it is backed up.
+      setPhase('backup-required');
       setError('');
       setPin('');
     } catch (e) {
@@ -280,6 +339,58 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
     }
   }
 
+  async function handleRestoreFromBackup() {
+    if (!restoreAddress || !user) return;
+    if (!pin) {
+      setError('Enter your 6-digit wallet PIN.');
+      return;
+    }
+    if (!/^\d{6}$/.test(pin)) {
+      setError('Your wallet PIN must be 6 digits.');
+      return;
+    }
+    setBackupSaving(true);
+    setError('');
+    try {
+      const backup = await loadBackupForUser(user.id);
+      if (!backup || backup.address.toLowerCase() !== restoreAddress.toLowerCase()) {
+        throw new Error('No backup found for this account.');
+      }
+      const privateKey = (await decryptWithPassphrase(pin, {
+        iv: backup.iv,
+        data: backup.data,
+        salt: backup.salt,
+        iterations: backup.iterations,
+      })) as Hex;
+      const { privateKeyToAccount } = await import('viem/accounts');
+      const account = privateKeyToAccount(privateKey);
+      if (account.address.toLowerCase() !== restoreAddress.toLowerCase()) {
+        throw new Error('The restored key does not match the backed-up address.');
+      }
+      const local: LocalWallet = {
+        address: account.address,
+        name: wallet?.name ?? `${normalizeUsername(user.name ?? '') ?? 'city-explorer'}.devcity.fun`,
+        pinProtected: true,
+        encryptedPrivateKey: { iv: backup.iv, data: backup.data, salt: backup.salt, iterations: backup.iterations },
+        backupConsent: true,
+        backupRef: backup.address,
+        createdAt: Date.now(),
+      };
+      await saveLocalWallet(local);
+      setWallet(local);
+      setUnlockedKey(privateKey);
+      rememberUnlockedWallet(local.address, privateKey);
+      setRestoreAddress(null);
+      setPhase('ready');
+      setPin('');
+      onNotify?.('Wallet restored from backup.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not restore your wallet.');
+    } finally {
+      setBackupSaving(false);
+    }
+  }
+
   async function handleBackup(consent: boolean) {
     if (!wallet || !consent) {
       setWallet(wallet ? { ...wallet, backupConsent: false } : null);
@@ -296,6 +407,282 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
       setError(e instanceof Error ? e.message : 'Backup failed');
     } finally {
       setBackupSaving(false);
+    }
+  }
+
+  async function handleExportKeystore() {
+    if (!wallet || !unlockedKey) {
+      setError('Unlock your wallet before exporting.');
+      return;
+    }
+    if (!keystorePassphrase) {
+      setError('Choose a passphrase for the keystore file.');
+      return;
+    }
+    setExportingKeystore(true);
+    setError('');
+    try {
+      const file = await exportEncryptedKeystore(wallet.address, unlockedKey, keystorePassphrase);
+      downloadEncryptedKeystore(file, wallet.address);
+      setKeystorePassphrase('');
+      onNotify?.('Encrypted keystore file downloaded.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not export keystore.');
+    } finally {
+      setExportingKeystore(false);
+    }
+  }
+
+  async function handleImportKeystore(file: File) {
+    if (!user) return;
+    setImportingKeystore(true);
+    setError('');
+    try {
+      const parsed = await readEncryptedKeystoreFile(file);
+      setKeystoreFile(parsed);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not read keystore file.');
+      setImportingKeystore(false);
+    }
+  }
+
+  async function confirmImportKeystore() {
+    if (!keystoreFile || !user) return;
+    if (!keystorePassphrase) {
+      setError('Enter the passphrase for this keystore file.');
+      return;
+    }
+    setImportingKeystore(true);
+    setError('');
+    try {
+      const { address, privateKey } = await importEncryptedKeystore(keystoreFile, keystorePassphrase);
+      if (!/^0x[0-9a-f]{64}$/.test(privateKey)) {
+        throw new Error('The imported keystore does not contain a valid private key.');
+      }
+      const { privateKeyToAccount } = await import('viem/accounts');
+      const account = privateKeyToAccount(privateKey as Hex);
+      if (account.address.toLowerCase() !== address.toLowerCase()) {
+        throw new Error('Keystore address does not match its key.');
+      }
+      const encryptedPrivateKey = await encryptWithPassphrase(keystorePassphrase, privateKey);
+      const local: LocalWallet = {
+        address: account.address,
+        name: `${normalizeUsername(user.name ?? '') ?? 'city-explorer'}.devcity.fun`,
+        pinProtected: true,
+        encryptedPrivateKey,
+        backupConsent: false,
+        createdAt: Date.now(),
+      };
+      await saveLocalWallet(local);
+      setWallet(local);
+      setPhase('ready');
+      setKeystoreFile(null);
+      setKeystorePassphrase('');
+      onNotify?.('Wallet imported from keystore file.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not import keystore.');
+    } finally {
+      setImportingKeystore(false);
+    }
+  }
+
+  async function handleTip() {
+    if (!wallet || !unlockedKey) {
+      setError('Unlock your wallet first.');
+      return;
+    }
+    if (!isAddress(tipTo)) {
+      setError('Enter a valid recipient address.');
+      return;
+    }
+    const token = tipToken === 'CELO'
+      ? null
+      : fees.find((f) => f.symbol === tipToken)
+        ?? importedTokens.find((item) => tipToken === `CUSTOM:${item.address}`);
+    if (tipToken !== 'CELO' && !token) {
+      setError('Select a token supported on this network.');
+      return;
+    }
+    if (!tipTo || !tipAmount || Number(tipAmount) <= 0) {
+      setError('Enter a recipient and amount.');
+      return;
+    }
+    setTipping(true);
+    setError('');
+    try {
+      const account = privateKeyToAccount(unlockedKey);
+      const client = createWalletClient({
+        account,
+        chain: ACTIVE_CHAIN,
+        transport: http(ACTIVE_CHAIN.rpcUrls.default.http[0]),
+      });
+      const gasCurrency = toGasCurrency(chainId, feeSymbol);
+      let hash: Hex;
+      if (token) {
+        const amount = parseUnits(tipAmount, token.decimals);
+        hash = await client.writeContract({
+          address: token.address,
+          abi: ERC20_ABI,
+          functionName: 'transfer',
+          args: [getAddress(tipTo), amount],
+          ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
+        } as any);
+      } else {
+        const amount = parseUnits(tipAmount, 18);
+        hash = await client.sendTransaction({
+          to: getAddress(tipTo),
+          value: amount,
+          ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
+        } as any);
+      }
+      try {
+        await fetch('/api/tips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fromAddress: wallet.address,
+            toAddress: getAddress(tipTo),
+            tokenSymbol: token ? token.symbol : 'CELO',
+            amount: tipAmount,
+            message: 'Wallet tip',
+          }),
+        });
+      } catch {
+        // DB tip record is best-effort; the on-chain transfer already succeeded.
+      }
+      setError('');
+      setTransactionHash(hash);
+      setTransactionExplorer(ACTIVE_CHAIN.blockExplorers?.default.url ?? '');
+      setTipAmount('');
+      setTipTo('');
+      onNotify?.('Tip sent.');
+    } catch (e: any) {
+      setError(e?.shortMessage || e?.message || 'Tip failed');
+    } finally {
+      setTipping(false);
+    }
+  }
+
+  async function handleCreateDrop() {
+    if (!wallet || !unlockedKey) {
+      setError('Unlock your wallet first.');
+      return;
+    }
+    if (!dropName.trim()) {
+      setError('Give the drop a name.');
+      return;
+    }
+    if (!dropAmount || Number(dropAmount) <= 0) {
+      setError('Enter a drop amount.');
+      return;
+    }
+    const claimants = Number(dropMaxClaimants);
+    if (!Number.isInteger(claimants) || claimants < 1) {
+      setError('Enter a valid number of claimants.');
+      return;
+    }
+    const hours = Number(dropEndsIn);
+    if (!Number.isFinite(hours) || hours <= 0) {
+      setError('Enter how many hours the drop lasts.');
+      return;
+    }
+    const token = dropToken === 'CELO'
+      ? null
+      : fees.find((f) => f.symbol === dropToken) ?? importedTokens.find((item) => dropToken === `CUSTOM:${item.address}`);
+    if (dropToken !== 'CELO' && !token) {
+      setError('Select a token for the drop.');
+      return;
+    }
+    setCreatingDrop(true);
+    setError('');
+    try {
+      const now = Date.now();
+      const res = await fetch('/api/drops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: dropName.trim(),
+          description: 'Drop created from your wallet.',
+          tokenAddress: token ? token.address : '',
+          amount: dropAmount,
+          maxClaimants: claimants,
+          startsAt: new Date(now).toISOString(),
+          endsAt: new Date(now + hours * 3600 * 1000).toISOString(),
+          creatorAddress: wallet.address,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Could not create drop.');
+      }
+      setDropName('');
+      setDropAmount('');
+      onNotify?.('Drop created.');
+    } catch (e: any) {
+      setError(e?.message || 'Could not create drop.');
+    } finally {
+      setCreatingDrop(false);
+    }
+  }
+
+  async function handleLaunchToken() {
+    if (!wallet || !unlockedKey) {
+      setError('Unlock your wallet first.');
+      return;
+    }
+    if (launchedToken) {
+      setError('You already have a profile token.');
+      return;
+    }
+    setLaunchingToken(true);
+    setError('');
+    try {
+      const name = `${handle}.devcity.fun`;
+      const symbol = handleTicker;
+      const account = privateKeyToAccount(unlockedKey);
+      const client = createWalletClient({
+        account,
+        chain: CHAIN,
+        transport: http(CELO_SEPOLIA.rpcUrl),
+      });
+      const hash = await client.writeContract({
+        address: CELO_SEPOLIA.profileTokenFactory as Address,
+        abi: PROFILE_FACTORY_ABI,
+        functionName: 'createToken',
+        args: [name, symbol, ''],
+      });
+      const publicClient = createPublicClient({
+        chain: CHAIN,
+        transport: http(CELO_SEPOLIA.rpcUrl),
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== 'success') throw new Error('Token launch transaction reverted.');
+      const tokenAddress = await publicClient.readContract({
+        address: CELO_SEPOLIA.profileTokenFactory as Address,
+        abi: PROFILE_FACTORY_ABI,
+        functionName: 'getUserToken',
+        args: [wallet.address as Address],
+      });
+      await fetch('/api/profile-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creatorAddress: wallet.address,
+          name,
+          symbol,
+          contractAddress: tokenAddress as string,
+          chainId: CHAIN.id,
+          maxSupply: '1000000',
+        }),
+      }).catch(() => {});
+      setLaunchedToken({ address: tokenAddress as string, name, symbol });
+      setTransactionHash(hash);
+      setTransactionExplorer(CELO_SEPOLIA.blockExplorer);
+      onNotify?.(`${symbol} profile token launched.`);
+    } catch (e: any) {
+      setError(e?.shortMessage || e?.message || 'Token launch failed.');
+    } finally {
+      setLaunchingToken(false);
     }
   }
 
@@ -487,180 +874,167 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
     );
   }
 
+  if (phase === 'restore') {
+    return (
+      <div className="you-connect wallet-auth-gate">
+        <p className="you-sheet-lede">
+          We found an encrypted backup for <strong>{restoreAddress?.slice(0, 8)}…{restoreAddress?.slice(-6)}</strong> on your account.
+        </p>
+        <p className="you-note">
+          Enter your 6-digit wallet PIN to decrypt the backup and restore this wallet to this device.
+        </p>
+        <input
+          type="password"
+          className="you-passphrase"
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          placeholder="6-digit wallet PIN"
+          aria-label="6-digit wallet PIN"
+          inputMode="numeric"
+          autoComplete="current-password"
+          maxLength={6}
+        />
+        <button className="you-connect-primary" disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
+          {backupSaving ? 'Restoring…' : 'Restore wallet'}
+        </button>
+        <button
+          className="you-connect-secondary"
+          disabled={backupSaving}
+          onClick={() => { setRestoreAddress(null); setPhase('registering'); setPin(''); setError(''); }}
+        >
+          Create a new wallet instead
+        </button>
+        {error && <p className="you-error">{error}</p>}
+      </div>
+    );
+  }
+
+  if (phase === 'backup-required') {
+    return (
+      <div className="you-connect wallet-auth-gate">
+        <p className="you-sheet-lede">
+          Your wallet is ready. Back it up so you can restore it on another device.
+        </p>
+        <p className="you-note">
+          We encrypt your private key with your 6-digit PIN and store only the ciphertext on our server. The server can never read your key.
+        </p>
+        <label className="you-checkbox">
+          <input type="checkbox" checked={wallet?.backupConsent ?? false} disabled={backupSaving} onChange={(e) => void handleBackup(e.target.checked)} />
+          <span>Save an encrypted backup</span>
+        </label>
+        {backupSaving && <p className="you-note">Encrypting and uploading…</p>}
+        {backupDone && <p className="you-note">Encrypted backup saved. You can now sign in on any device.</p>}
+        <button
+          className="you-connect-primary"
+          disabled={backupSaving || !wallet?.backupConsent}
+          onClick={() => { setPhase('ready'); }}
+        >
+          Continue to wallet
+        </button>
+        {error && <p className="you-error">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="wallet-screen">
-      <section className="wallet-overview">
-        <div className="wallet-overview-topline">
-          <span className="wallet-network"><i /> {chainLabel}</span>
-          <span className="wallet-security-status"><ShieldCheck size={13} /> {wallet?.pinProtected ? 'PIN protected' : 'Passphrase protected'}</span>
-        </div>
-        <div className="wallet-owner">{wallet?.name || user.name || 'My wallet'}</div>
-        <button className="wallet-address-copy" onClick={() => void copyWalletAddress()} aria-label={copied ? 'Wallet address copied' : 'Copy this wallet address'}>
-          <span>{wallet?.address.slice(0, 10)}…{wallet?.address.slice(-8)}</span>
-          {copied ? <Check size={16} /> : <Copy size={16} />}
-          <small>{copied ? 'Copied' : 'Copy address'}</small>
-        </button>
-        <div className="wallet-main-balance">
-          <span>CELO balance</span>
-          <strong>{(Number(celoBalance?.value ?? BigInt(0)) / 10 ** (celoBalance?.decimals ?? 18)).toFixed(4)} <small>CELO</small></strong>
-        </div>
-        <div className="wallet-primary-actions">
-          <button onClick={() => { setError(''); setWalletAction(walletAction === 'receive' ? null : 'receive'); setTransactionHash(''); }}>
-            <ArrowDownToLine size={17} /> Receive
-          </button>
-          <button onClick={() => { setError(''); setWalletAction(walletAction === 'send' ? null : 'send'); setTransactionHash(''); }}>
-            <ArrowUpRight size={17} /> Send
-          </button>
-        </div>
-      </section>
+      <WalletOverview
+        chainLabel={chainLabel}
+        chainId={chainId}
+        name={wallet?.name}
+        address={wallet?.address}
+        pinProtected={wallet?.pinProtected}
+        celoBalance={(Number(celoBalance?.value ?? BigInt(0)) / 10 ** (celoBalance?.decimals ?? 18)).toFixed(4)}
+        copied={copied}
+        onCopy={() => void copyWalletAddress()}
+        tab={tab}
+        onTab={(t) => { setTab(t); setError(''); }}
+      />
 
-      <section className="wallet-token-section" aria-labelledby="wallet-assets-title">
-        <div className="wallet-section-heading"><h3 id="wallet-assets-title">Your assets</h3><span>On {chainLabel}</span></div>
-        <div className="wallet-token-list">
-          {(['USDT', 'USDC', 'cUSD'] as const).map((sym) => (
-            <div className="wallet-token-row" key={sym}>
-              <span className={`wallet-token-mark wallet-token-${sym.toLowerCase()}`}>{sym.slice(0, 1)}</span>
-              <span className="wallet-token-name"><strong>{sym}</strong><small>{sym === 'cUSD' ? 'Celo Dollar' : sym === 'USDT' ? 'Tether USD' : 'USD Coin'}</small></span>
-              <strong className="wallet-token-balance">{stableBalances[sym].toFixed(sym === 'cUSD' ? 4 : 2)}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {wallet && (
-        <WalletTokenTools
+      {tab === 'assets' && wallet && (
+        <WalletAssetsTab
           wallet={wallet}
           username={user.name ?? ''}
-          assetChainId={chainId}
-          assetChainLabel={chainLabel}
+          chainId={chainId}
+          chainLabel={chainLabel}
+          stableBalances={stableBalances}
           unlockedKey={unlockedKey}
-          onUnlockKey={(privateKey) => setUnlockedKey(privateKey)}
+          onUnlockKey={(key) => setUnlockedKey(key)}
           onTokensChange={onImportedTokensChange}
           notify={onNotify}
         />
       )}
 
-      {walletAction === 'receive' && (
-        <section className="wallet-action-panel" aria-labelledby="wallet-receive-title">
-          <div className="wallet-section-heading">
-            <h3 id="wallet-receive-title">Receive to this wallet</h3>
-            <button onClick={() => setWalletAction(null)} aria-label="Close receive details">Close</button>
-          </div>
-          <p className="wallet-receive-network">Copy this wallet address to receive funds. Only send assets on <strong>{chainLabel}</strong>.</p>
-          <button className="wallet-address-copy wallet-address-copy-full" onClick={() => void copyWalletAddress()}>
-            <span>{wallet?.address}</span>{copied ? <Check size={17} /> : <Copy size={17} />}
-          </button>
-        </section>
+      {tab === 'send' && wallet && (
+        <WalletSendTab
+          address={wallet.address}
+          pinProtected={wallet.pinProtected}
+          unlockedKey={unlockedKey}
+          fees={fees}
+          importedTokens={importedTokens}
+          feeSymbol={feeSymbol}
+          setFeeSymbol={setFeeSymbol}
+          notify={onNotify}
+        />
       )}
 
-      {walletAction === 'send' && (
-        <section className="wallet-action-panel" aria-labelledby="wallet-send-title">
-          <div className="wallet-section-heading">
-            <h3 id="wallet-send-title">Send from this wallet</h3>
-            <button onClick={() => setWalletAction(null)} aria-label="Close send form">Close</button>
-          </div>
-          {!unlockedKey ? (
-            <div className="wallet-unlock">
-              <p>Unlock to review and send a transaction.</p>
-              <input
-                type="password"
-                className="you-passphrase"
-                value={pin}
-                onChange={(e) => setPin(wallet?.pinProtected ? e.target.value.replace(/\D/g, '').slice(0, 6) : e.target.value)}
-                placeholder={wallet?.pinProtected ? '6-digit wallet PIN' : 'Wallet passphrase'}
-                aria-label={wallet?.pinProtected ? '6-digit wallet PIN' : 'Wallet passphrase'}
-                inputMode={wallet?.pinProtected ? 'numeric' : undefined}
-                maxLength={wallet?.pinProtected ? 6 : undefined}
-                autoComplete="current-password"
-              />
-              <button className="you-connect-primary" disabled={!pin || Boolean(wallet?.pinProtected && pin.length !== 6)} onClick={() => void handleUnlock()}>
-                <KeyRound size={16} /> Unlock wallet
-              </button>
-            </div>
-          ) : (
-            <>
-              <label className="wallet-field-label" htmlFor="wallet-send-recipient">Recipient address</label>
-              <input
-                id="wallet-send-recipient"
-                className="you-passphrase"
-                value={sendTo}
-                onChange={(e) => setSendTo(e.target.value)}
-                placeholder="0x…"
-                autoComplete="off"
-              />
-              <label className="wallet-field-label" htmlFor="wallet-send-amount">Amount</label>
-              <div className="wallet-send-amount-row">
-                <input
-                  id="wallet-send-amount"
-                  className="you-passphrase"
-                  value={sendAmount}
-                  onChange={(e) => setSendAmount(e.target.value)}
-                  placeholder="0.00"
-                  inputMode="decimal"
-                />
-                <select
-                  className="send-token-select"
-                  value={sendToken}
-                  onChange={(e) => setSendToken(e.target.value)}
-                  aria-label="Token to send"
-                >
-                  <option value="CELO">CELO</option>
-                  {fees.map((fee) => <option key={fee.symbol} value={fee.symbol}>{fee.symbol}</option>)}
-                  {importedTokens.map((customToken) => (
-                    <option key={customToken.address} value={`CUSTOM:${customToken.address}`}>
-                      {customToken.symbol} · {customToken.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed.</p>
-              <button className="you-connect-primary" disabled={sending || !sendTo || !sendAmount} onClick={() => void handleSend()}>
-                {sending ? 'Sending…' : `Send ${sendTokenLabel} · gas in ${customSendToken ? 'CELO on Sepolia' : feeSymbol}`}
-              </button>
-            </>
-          )}
-          {transactionHash && <p className="wallet-transaction-status" role="status">Transaction submitted: <a href={`${transactionExplorer}/tx/${transactionHash}`} target="_blank" rel="noreferrer">{transactionHash.slice(0, 10)}…</a></p>}
-        </section>
+      {tab === 'tip' && wallet && (
+        <WalletTipTab
+          address={wallet.address}
+          pinProtected={wallet.pinProtected}
+          unlockedKey={unlockedKey}
+          fees={fees}
+          importedTokens={importedTokens}
+          notify={onNotify}
+        />
       )}
 
-      <details className="wallet-security-details">
-        <summary><ShieldCheck size={17} /> Security, fees & backup <span>Manage</span></summary>
-        <div className="wallet-security-content">
-          <p className="profile-control-hint">
-            Your signing key stays encrypted on this device with {wallet?.pinProtected ? 'your 6-digit PIN' : 'your wallet passphrase'}. {wallet?.pinProtected ? 'There is no recovery phrase; if you forget your PIN, this wallet cannot be unlocked.' : 'Keep your passphrase private.'}
-          </p>
-          <h3 className="you-section-title">Pay network fees with</h3>
-          <div className="fee-currency-row">
-            {fees.map((f) => (
-              <button key={f.symbol} className={`fee-currency-chip${feeSymbol === f.symbol ? ' is-selected' : ''}`} onClick={() => setFeeSymbol(f.symbol)}>
-                {f.symbol}
-              </button>
-            ))}
-          </div>
-          <h3 className="you-section-title wallet-backup-title">Encrypted backup</h3>
-          <label className="you-checkbox">
-            <input type="checkbox" checked={wallet?.backupConsent ?? false} disabled={backupSaving} onChange={(e) => void handleBackup(e.target.checked)} />
-            <span>Save an encrypted backup</span>
-          </label>
-          {backupSaving && <p className="you-note">Encrypting and uploading…</p>}
-          {backupDone && <p className="you-note">Encrypted backup saved.</p>}
-          <button
-            className="you-disconnect wallet-signout"
-            onClick={() => {
-              void authClient.signOut();
-              clearUnlockedWallet();
-              setUser(null);
-              onSessionChange?.(null);
-              setWallet(null);
-              setUnlockedKey(null);
-              setPhase('signed-out');
-              onNotify?.('Signed out of DEVCITY.');
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      </details>
+      {tab === 'drop' && wallet && (
+        <WalletDropTab
+          address={wallet.address}
+          pinProtected={wallet.pinProtected}
+          unlockedKey={unlockedKey}
+          fees={fees}
+          importedTokens={importedTokens}
+          notify={onNotify}
+        />
+      )}
+
+      {tab === 'token' && wallet && (
+        <WalletTokenTab
+          address={wallet.address}
+          pinProtected={wallet.pinProtected}
+          unlockedKey={unlockedKey}
+          handle={handle}
+          handleTicker={handleTicker}
+          notify={onNotify}
+        />
+      )}
+
+      {tab === 'trade' && wallet && (
+        <WalletTradeTab />
+      )}
+
+      {tab === 'security' && wallet && (
+        <WalletSecurityTab
+          wallet={wallet}
+          unlockedKey={unlockedKey}
+          fees={fees}
+          feeSymbol={feeSymbol}
+          setFeeSymbol={setFeeSymbol}
+          onWalletChange={(next) => setWallet(next)}
+          onUnlockKey={(key) => setUnlockedKey(key)}
+          onSignOut={() => {
+            setUser(null);
+            setWallet(null);
+            setUnlockedKey(null);
+            setPhase('signed-out');
+            onSessionChange?.(null);
+            onNotify?.('Signed out of DEVCITY.');
+          }}
+          notify={onNotify}
+        />
+      )}
 
       {error && <p className="you-error" role="alert">{error}</p>}
     </div>

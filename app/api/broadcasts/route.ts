@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const broadcast = await createBroadcast(body.userAddress, body.text, request);
+    const broadcast = await createBroadcast(body.userAddress, body.text, body.mediaUrl, request);
     return NextResponse.json({ broadcast }, { status: 201 });
   } catch (err) {
     if (err instanceof ApiError) {
