@@ -1,87 +1,58 @@
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
-/* ============================================================
-   DEVCITY26 · GAME TOKENS
-   Derived from public/devcity-mark.svg:
-   - dark pine #1c2925, lime #d6ff55, coral #ff795f
-   - sky #83d8ee, pink #f5a6c6, corner radius 30 / 11
-   ============================================================ */
+/* DEVCITY26 — original warm light theme */
 :root {
-  --ink: #1c2925;
-  --ink-2: #0f1a16;
-  --muted: #66736c;
-  --map-base: #eef2e4;
-  --lime: #d6ff55;
-  --coral: #ff795f;
-  --blue: #83d8ee;
-  --pink: #f5a6c6;
-  --orange: #ffb35c;
-  --mint: #8bffcc;
-  --yellow: #ffe27a;
-  --snap: #ffb35c;
-  --paper: #fffef9;
-  --line: rgba(28, 41, 37, .13);
-  --card: #fffdf6;
-  --surface: #f1f4e6;
-  --ring: rgba(28, 41, 37, .14);
-  --street: rgba(28, 41, 37, .08);
-  --street-major: rgba(28, 41, 37, .13);
-  --block: rgba(28, 41, 37, .05);
-  --green: rgba(147, 190, 96, .3);
-  --green-deep: rgba(122, 168, 76, .36);
-  --water: rgba(131, 216, 238, .42);
-  --shadow-card: 0 18px 44px rgba(28, 41, 37, .16);
-  --shadow-pop: 0 8px 24px rgba(28, 41, 37, .14);
-  --shadow-chunky: 0 6px 0 rgba(28, 41, 37, .16);
+  --ink: #30211d;
+  --ink-2: #231713;
+  --muted: #786a60;
+  --map-base: #e9e4d5;
+  --lime: #b8ce91;
+  --coral: #b86543;
+  --blue: #9cbcaf;
+  --pink: #dfb9a4;
+  --orange: #e79818;
+  --mint: #b6cba5;
+  --yellow: #e6b34c;
+  --snap: #e79818;
+  --paper: #fffcf4;
+  --line: rgba(48, 33, 29, .13);
+  --card: #fffdf8;
+  --surface: #f2efe5;
+  --ring: rgba(48, 33, 29, .13);
+  --street: rgba(48, 33, 29, .08);
+  --street-major: rgba(48, 33, 29, .13);
+  --block: rgba(48, 33, 29, .05);
+  --green: rgba(130, 158, 112, .28);
+  --green-deep: rgba(110, 143, 92, .34);
+  --water: rgba(130, 174, 182, .5);
+  --shadow-card: 0 18px 44px rgba(48, 33, 29, .14);
+  --shadow-pop: 0 8px 24px rgba(48, 33, 29, .13);
+  --shadow-chunky: 0 6px 0 rgba(48, 33, 29, .16);
   --radius-lg: 30px;
   --radius-md: 18px;
-  --font-display: "Baloo 2", "Fredoka", var(--font-inter), system-ui, sans-serif;
-  --font-body: var(--font-inter), "Avenir Next", system-ui, sans-serif;
+  --font-display: "Open Sans", "Avenir Next", "SF Pro Display", var(--font-inter), system-ui, sans-serif;
+  --font-body: "Open Sans", "Avenir Next", "SF Pro Text", var(--font-inter), system-ui, sans-serif;
   color-scheme: light;
-}
-
-.dark {
-  --ink: #eef5ee;
-  --ink-2: #ffffff;
-  --muted: #9fb0a6;
-  --map-base: #0c1512;
-  --paper: #16201b;
-  --line: rgba(238, 245, 238, .14);
-  --card: #16201b;
-  --surface: #121c17;
-  --ring: rgba(238, 245, 238, .16);
-  --street: rgba(238, 245, 238, .07);
-  --street-major: rgba(238, 245, 238, .12);
-  --block: rgba(238, 245, 238, .05);
-  --green: rgba(120, 190, 90, .24);
-  --green-deep: rgba(100, 170, 78, .3);
-  --water: rgba(80, 170, 210, .32);
-  --shadow-card: 0 18px 44px rgba(0, 0, 0, .5);
-  --shadow-pop: 0 8px 24px rgba(0, 0, 0, .42);
-  --shadow-chunky: 0 6px 0 rgba(0, 0, 0, .4);
-  color-scheme: dark;
 }
 
 /* Tailwind v4 theme — expose the brand palette as utility tokens */
 @theme {
-  --color-ink: #1c2925;
-  --color-pine: #0f1a16;
-  --color-lime: #d6ff55;
-  --color-coral: #ff795f;
-  --color-sky: #83d8ee;
-  --color-blush: #f5a6c6;
-  --color-sun: #ffb35c;
-  --color-mint: #8bffcc;
-  --color-butter: #ffe27a;
-  --color-paper: #fffef9;
-  --color-forest: #16201b;
+  --color-ink: #30211d;
+  --color-pine: #231713;
+  --color-lime: #b8ce91;
+  --color-coral: #b86543;
+  --color-sky: #9cbcaf;
+  --color-blush: #dfb9a4;
+  --color-sun: #e79818;
+  --color-mint: #b6cba5;
+  --color-butter: #e6b34c;
+  --color-paper: #fffcf4;
+  --color-forest: #f2efe5;
   --radius-game: 30px;
   --radius-tile: 18px;
-  --font-display: "Baloo 2", "Fredoka", var(--font-inter), system-ui, sans-serif;
-  --font-body: var(--font-inter), system-ui, sans-serif;
+  --font-display: "Open Sans", "Avenir Next", "SF Pro Display", var(--font-inter), system-ui, sans-serif;
+  --font-body: "Open Sans", "Avenir Next", "SF Pro Text", var(--font-inter), system-ui, sans-serif;
 }
 
 html, body { margin: 0; min-height: 100%; height: 100%; }
