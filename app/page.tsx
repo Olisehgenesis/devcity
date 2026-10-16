@@ -10,16 +10,12 @@ import {
   ArrowUpRight,
   Gift,
   LocateFixed,
-  Map,
   MapPin,
   MessageCircle,
   Plus,
-  QrCode,
-  Radio,
   Search,
   Sparkles,
   UsersRound,
-  Wallet,
   X,
 } from "lucide-react";
 import { eventMarkerSvg } from "./components/EventMapMarker";
@@ -34,6 +30,16 @@ import { SearchSheet } from "./components/SearchSheet";
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
+import { GameIcon } from "./components/game/GameIcons";
+import { HudBar } from "./components/game/HudBar";
+import { BuildingSprite } from "./components/game/Buildings";
+import { useGameStore } from "./lib/game-store";
+import { TrendingSheet } from "./components/TrendingSheet";
+import { LeaderboardSheet } from "./components/LeaderboardSheet";
+import { NotificationSheet } from "./components/NotificationSheet";
+import { SuggestedUsersSheet } from "./components/SuggestedUsersSheet";
+import { StoryViewer } from "./components/StoryViewer";
+import type { Story } from "./lib/stories";
 
 type MarkerKind = "drop" | "person" | "place" | "event";
 type CityMarker = {
@@ -156,11 +162,6 @@ function dropToMarker(drop: DropApiItem): CityMarker | null {
 }
 
 // Inline lucide icon SVG for imperative DOM markers (no React needed).
-function lucideSvg(paths: string, size = 18): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
-}
-const LUCIDE_GIFT = '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>';
-
 const MUMBAI_CENTER: [number, number] = [72.833, 18.932];
 // Jio World Centre, BKC — the Devcon venue the map opens on.
 const DEVCON_VENUE: [number, number] = [72.8697, 19.0662];
@@ -251,6 +252,18 @@ export default function CityHome() {
   const [tipTarget, setTipTarget] = useState<TipTarget | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [trendingOpen, setTrendingOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [cityMenuOpen, setCityMenuOpen] = useState(false);
+  const [suggestedOpen, setSuggestedOpen] = useState(false);
+  const [activeStory, setActiveStory] = useState<Story | null>(null);
+
+  const loadGame = useGameStore((s) => s.load);
+  const gameStreak = useGameStore((s) => s.streak);
+  useEffect(() => {
+    if (feedUserAddress) void loadGame(feedUserAddress);
+  }, [feedUserAddress, loadGame]);
 
   const refreshFeedProfile = useCallback(async () => {
     setFeedProfileStatus("checking");
@@ -433,11 +446,11 @@ export default function CityHome() {
     for (const marker of dropMarkers) {
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `map-marker marker-drop tone-${marker.color}`;
+      element.className = `map-marker marker-drop tone-${marker.color}${claimedMap[marker.id] ? " is-claimed" : ""}`;
       element.setAttribute("aria-label", `${marker.name}, ${marker.detail}`);
       const icon = document.createElement("span");
       icon.className = "marker-icon-content";
-      icon.innerHTML = `<span class="marker-drop-gift">${lucideSvg(LUCIDE_GIFT, 20)}</span><span class="marker-token">${marker.amount}<small>${marker.tokenSymbol}</small></span>`;
+      icon.innerHTML = `<span class="marker-drop-crate"><svg width="30" height="30" viewBox="0 0 120 120" fill="none" aria-hidden="true"><g stroke="#1c2925" stroke-width="3" stroke-linejoin="round"><path d="M30 52 60 36l30 16-30 16-30-16Z" fill="#ffb35c"/><path d="M30 52v20l30 16V68L30 52Z" fill="#e28a2a"/><path d="M90 52v20L60 88V68l30-16Z" fill="#f4a03e"/><path d="M60 36v32" fill="none"/></g><g stroke="#1c2925" stroke-width="3" stroke-linejoin="round"><path d="M60 48v20" stroke="#ffe27a"/><path d="M60 58l-12 6m12-6 12 6" stroke="#ffe27a"/></g></svg></span><span class="marker-token">${marker.amount}<small>${marker.tokenSymbol}</small></span>`;
       element.append(icon);
       element.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -770,6 +783,7 @@ export default function CityHome() {
     <main className="app-shell">
       <section className="city-stage" id="city" aria-label="Live Mumbai city map">
         <div ref={mapContainer} className="real-city-map" aria-label="Map of Mumbai with city activity" />
+        <div className="map-tint vignette" aria-hidden="true" />
         {showIntro && <div className={`city-intro${mapReady ? " is-leaving" : ""}`} aria-live="polite">
           <Image className="city-loader-art" src="/assets/loading.svg" alt="DEVCITY26" width={104} height={104} priority unoptimized />
           <strong>DEVCITY26</strong>
@@ -792,7 +806,14 @@ export default function CityHome() {
             <p>South Mumbai{cityCount > 0 && <> <b>·</b> {cityCount} in the city</>}</p>
           </div>
           <div className="top-actions">
+            <div className="hudbar-slot"><HudBar streak={gameStreak} /></div>
             <button className="round-action" onClick={() => setSearchSheetOpen(true)} aria-label="Search the city"><Search size={18} /></button>
+            <button className="round-action" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">
+              <GameIcon name="spark" size={20} />
+            </button>
+            <button className="notification-bell round-action" onClick={() => setNotificationsOpen(true)} aria-label="Notifications" title="Notifications">
+              <GameIcon name="inbox" size={20} />
+            </button>
             <button className="invite-button" onClick={() => setNotice("Your invite link is ready to share.")}><Plus size={15} /> Invite</button>
             <button className={`top-profile-button${youOpen ? " is-active" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
               <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" />
@@ -808,10 +829,18 @@ export default function CityHome() {
           <button className="locate-button" onClick={() => setCreateMenuOpen((v) => !v)} aria-label="Create a stall or booth" title="Create"><Plus size={18} /></button>
         </div>
 
-        {createMenuOpen && (
-          <div className="create-menu" role="menu">
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateMenuOpen(false); }}><Gift size={16} /> Create stall</button>
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateMenuOpen(false); }}><MapPin size={16} /> Create booth</button>
+        {(createMenuOpen || cityMenuOpen) && (
+          <div className="create-menu city-hub" role="menu">
+            <span className="city-hub-label">{createMenuOpen ? 'Create in the city' : 'City hub'}</span>
+            {createMenuOpen && (
+              <>
+                <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateMenuOpen(false); }}><BuildingSprite id="cafe" size={30} /> Create stall</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateMenuOpen(false); }}><BuildingSprite id="booth" size={30} /> Create booth</button>
+              </>
+            )}
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setTrendingOpen(true); }}><Sparkles size={16} /> Trending</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setLeaderboardOpen(true); }}><Sparkles size={16} /> Leaderboard</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
           </div>
         )}
 
@@ -888,11 +917,11 @@ export default function CityHome() {
         {notice && <div className="notice-toast" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
 
         <nav className="mobile-nav" aria-label="Main navigation">
-          <button className={activeTab === "map" ? "is-active" : ""} onClick={() => chooseTab("map")} aria-label="Map"><Map size={19} /><span>Map</span></button>
-          <button className={activeTab === "feed" ? "is-active" : ""} onClick={() => chooseTab("feed")} aria-label="Feed"><Radio size={19} /><span>Feed</span></button>
-          <button className="mobile-scan-button" onClick={() => { setSocialView(null); setScanOpen(true); }} aria-label="Scan a QR code"><QrCode size={21} /><span>Scan</span></button>
-          <button className={activeTab === "chat" ? "is-active" : ""} onClick={() => chooseTab("chat")} aria-label="Inbox"><MessageCircle size={19} /><span>Inbox</span></button>
-          <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Wallet"><Wallet size={19} /><span>Wallet</span></button>
+          <button className={activeTab === "map" ? "is-active" : ""} onClick={() => chooseTab("map")} aria-label="Map"><GameIcon name="map" /><span>Map</span></button>
+          <button className={activeTab === "feed" ? "is-active" : ""} onClick={() => chooseTab("feed")} aria-label="Feed"><GameIcon name="feed" /><span>Feed</span></button>
+          <button className="mobile-scan-button" onClick={() => { setSocialView(null); setScanOpen(true); }} aria-label="Scan a QR code"><GameIcon name="scan" /><span>Scan</span></button>
+          <button className={activeTab === "chat" ? "is-active" : ""} onClick={() => chooseTab("chat")} aria-label="Inbox"><GameIcon name="inbox" /><span>Inbox</span></button>
+          <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Wallet"><GameIcon name="vault" /><span>Wallet</span></button>
         </nav>
       </section>
 
@@ -922,6 +951,7 @@ export default function CityHome() {
         onClose={() => { setSocialView(null); setActiveTab("map"); }}
         onTip={(name, initials, color, address) => { setSocialView(null); setTipTarget({ name, initials, color, address }); }}
         startChatAddress={startChatAddress}
+        onOpenStory={setActiveStory}
       />
       <TipSheet
         open={tipTarget !== null}
@@ -930,6 +960,16 @@ export default function CityHome() {
         onNeedWallet={openWallet}
         notify={setNotice}
       />
+      <TrendingSheet open={trendingOpen} onClose={() => setTrendingOpen(false)} />
+      <LeaderboardSheet open={leaderboardOpen} onClose={() => setLeaderboardOpen(false)} />
+      <NotificationSheet open={notificationsOpen} userAddress={feedUserAddress} onClose={() => setNotificationsOpen(false)} />
+      <SuggestedUsersSheet
+        open={suggestedOpen}
+        userAddress={feedUserAddress}
+        onClose={() => setSuggestedOpen(false)}
+        onFollow={() => setNotice("Following that person.")}
+      />
+      <StoryViewer story={activeStory} onClose={() => setActiveStory(null)} />
       {createKind && (
         <Sheet
           open

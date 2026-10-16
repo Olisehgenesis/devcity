@@ -4,7 +4,10 @@ import { useState } from 'react';
 import { useLeaderboards, type LeaderboardEntry } from '../hooks/useLeaderboards';
 import { Sheet } from './Sheet';
 import { Trophy, Gift, Heart, UsersRound, Radio } from 'lucide-react';
-import { avatarBackgroundForColor } from '../lib/avatars';
+import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
+import { DexMascot } from './game/DexMascot';
+import { AvatarBubble } from './game/AvatarBubble';
+import { useGameStore } from '../lib/game-store';
 
 interface LeaderboardSheetProps {
   open: boolean;
@@ -21,44 +24,27 @@ const TABS: { id: LeaderboardType; label: string; icon: any }[] = [
 ];
 
 function LeaderboardEntry({ entry, index }: { entry: LeaderboardEntry; index: number }) {
-  const initials =
-    entry.username
-      .split(/[\s._-]+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((p) => p[0].toUpperCase())
-      .join('') || entry.username.slice(0, 2).toUpperCase();
-
   const tone = (() => {
     let hash = 0;
-    for (let i = 0; i < entry.username.length; i++)
-      hash = (hash * 31 + entry.username.charCodeAt(i)) >>> 0;
+    for (let i = 0; i < entry.username.length; i++) hash = (hash * 31 + entry.username.charCodeAt(i)) >>> 0;
     const tones = ['coral', 'yellow', 'blue', 'pink', 'mint', 'lime', 'orange'];
     return tones[hash % tones.length];
   })();
 
-  const rankColors = ['text-yellow-500', 'text-gray-400', 'text-orange-400'];
-
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-      <div className={`w-8 text-center font-bold ${index < 3 ? rankColors[index] : 'text-gray-500'}`}>
-        #{entry.rank}
+    <div className="gsheet-row">
+      <span className={`gsheet-rank${index < 3 ? ' top' : ''}`}>#{entry.rank}</span>
+      <AvatarBubble
+        src={entry.avatarUrl}
+        name={entry.username}
+        tone={tone}
+        size={40}
+      />
+      <div className="gsheet-copy">
+        <strong>@{entry.username}</strong>
+        <span>City explorer</span>
       </div>
-      {entry.avatarUrl ? (
-        <img src={entry.avatarUrl} alt={entry.username} className="w-10 h-10 rounded-full object-cover" />
-      ) : (
-        <div
-          className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ${avatarBackgroundForColor(tone)}`}
-        >
-          {initials}
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-sm truncate">@{entry.username}</p>
-      </div>
-      <div className="text-right">
-        <span className="font-semibold text-sm">{entry.count}</span>
-      </div>
+      <span className="gsheet-stat">{entry.count}</span>
     </div>
   );
 }
@@ -66,63 +52,66 @@ function LeaderboardEntry({ entry, index }: { entry: LeaderboardEntry; index: nu
 export function LeaderboardSheet({ open, onClose }: LeaderboardSheetProps) {
   const [activeTab, setActiveTab] = useState<LeaderboardType>('drops');
   const { leaderboards, loading, error } = useLeaderboards(activeTab);
+  const lbOptIn = useGameStore((s) => s.leaderboardsOptIn);
 
-  const entries =
-    leaderboards?.[
-      activeTab === 'drops'
-        ? 'dropsClaimed'
-        : activeTab === 'tips'
-          ? 'tipsSent'
-          : activeTab === 'followers'
-            ? 'followers'
-            : 'activity'
-    ] || [];
+  const entries = leaderboards?.[
+    activeTab === 'drops' ? 'dropsClaimed' : activeTab === 'tips' ? 'tipsSent' : activeTab === 'followers' ? 'followers' : 'activity'
+  ] || [];
 
   return (
-    <Sheet open={open} onClose={onClose} title="Leaderboard">
-      <div className="flex flex-col h-full">
-        {/* Tabs */}
-        <div className="flex gap-1 px-4 py-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          })}
+    <Sheet open={open} onClose={onClose} eyebrow="Mumbai · the city ranks" title="Leaderboard">
+      <div className="gsheet">
+        <div className="gsheet-section">
+          <div className="search-tabs">
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`gsheet-chip ${activeTab === tab.id ? 'is-active' : ''}`}>
+                  <Icon size={14} />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full" />
-            </div>
-          ) : error ? (
-            <div className="p-4 text-center text-red-500">{error}</div>
-          ) : entries.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-gray-500">
-              <Trophy className="w-12 h-12 mb-2 opacity-50" />
-              <p>No data yet</p>
-              <p className="text-sm">Be the first to top this leaderboard</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {entries.map((entry, index) => (
-                <LeaderboardEntry key={entry.userId} entry={entry} index={index} />
-              ))}
-            </div>
-          )}
+        {loading ? (
+          <div className="gsheet-loading">Racking up the scores…</div>
+        ) : error ? (
+          <div className="gsheet-error">{error}</div>
+        ) : entries.length === 0 ? (
+          <div className="gsheet-empty">
+            <DexMascot size={84} />
+            <strong>No rankings yet</strong>
+            <p>Be the first to top this leaderboard.</p>
+          </div>
+        ) : (
+          <div className="gsheet">
+            {entries.map((entry, index) => <LeaderboardEntry key={entry.userId} entry={entry} index={index} />)}
+          </div>
+        )}
+
+        <div className="gsheet-card vault-room" style={{ marginTop: 12 }}>
+          <div className="vault-room-head">
+            <h3>Appear on leaderboards?</h3>
+            <span>{lbOptIn ? 'On' : 'Off'}</span>
+          </div>
+          <p style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.5 }}>
+            Leaderboards are a friendly, non-financial game. Turn them on to let other
+            explorers see your level and badges.
+          </p>
+          <button
+            className="gsheet-action"
+            style={{ marginTop: 10 }}
+            onClick={async () => {
+              const { listLocalWallets } = await import('@/lib/keystore');
+              const address = (await listLocalWallets())[0]?.address;
+              if (!address) { onClose(); return; }
+              await useGameStore.getState().setLeaderboardsOptIn(address, !lbOptIn);
+            }}
+          >
+            {lbOptIn ? 'Turn off' : 'Turn on'}
+          </button>
         </div>
       </div>
     </Sheet>

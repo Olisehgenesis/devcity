@@ -5,6 +5,8 @@ import { ArrowLeft, Heart, KeyRound, MapPin, MessageCircle, Paperclip, Search, S
 import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
+import { stories, type Story } from '../lib/stories';
+import { AvatarBubble } from './game/AvatarBubble';
 import { useXmtpChat, type XmtpUiMessage } from '../hooks/useXmtpChat';
 import type { Attachment } from '@xmtp/browser-sdk';
 import type { Hex } from 'viem';
@@ -49,6 +51,7 @@ interface CitySocialSheetProps {
   onClose: () => void;
   onTip: (name: string, initials: string, color: string, address?: string) => void;
   startChatAddress?: string | null;
+  onOpenStory?: (story: Story) => void;
 }
 
 type PresenceUser = {
@@ -76,7 +79,7 @@ function initialsFor(username: string) {
     .join('') || username.slice(0, 2).toUpperCase();
 }
 
-export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress }: CitySocialSheetProps) {
+export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress, onOpenStory }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
   const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
@@ -400,6 +403,19 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       {view === 'feed' && (
         <div className="social-feed">
           <div className="social-live-line"><span className="live-dot" /> SHARED CITY FEED <span>·</span> posts sync across devices</div>
+          {onOpenStory && (
+            <div className="stories-rail" aria-label="City stories">
+              {Object.entries(stories).map(([key]) => {
+                const s = stories[key];
+                return (
+                  <button key={key} className="story-ring" onClick={() => onOpenStory?.(s)} aria-label={`View ${s.name}'s story`}>
+                    <AvatarBubble name={s.name} tone={s.color} size={46} />
+                    <small>{s.name}</small>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {profileStatus === 'ready' ? (
             <form className="broadcast-composer" onSubmit={sendBroadcast}>
               <span className="broadcast-composer-avatar">{avatarSrc ? <img src={avatarSrc} alt="" /> : 'Y'}</span>

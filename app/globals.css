@@ -1,56 +1,87 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ============================================================
+   DEVCITY26 · GAME TOKENS
+   Derived from public/devcity-mark.svg:
+   - dark pine #1c2925, lime #d6ff55, coral #ff795f
+   - sky #83d8ee, pink #f5a6c6, corner radius 30 / 11
+   ============================================================ */
 :root {
-  --ink: #30211d;
-  --muted: #786a60;
-  --map-base: #e9e4d5;
-  --lime: #b8ce91;
-  --coral: #b86543;
-  --blue: #9cbcaf;
-  --pink: #dfb9a4;
-  --orange: #e79818;
-  --mint: #b6cba5;
-  --yellow: #e6b34c;
-  --snap: #e79818;
-  --paper: #fffcf4;
-  --line: rgba(48, 33, 29, .13);
-  --card: #fffdf8;
-  --surface: #f2efe5;
-  --ring: rgba(48, 33, 29, .13);
-  --street: rgba(48, 33, 29, .08);
-  --street-major: rgba(48, 33, 29, .13);
-  --block: rgba(48, 33, 29, .05);
-  --green: rgba(130, 158, 112, .28);
-  --green-deep: rgba(110, 143, 92, .34);
-  --water: rgba(130, 174, 182, .5);
-  --shadow-card: 0 18px 44px rgba(48, 33, 29, .14);
-  --shadow-pop: 0 8px 24px rgba(48, 33, 29, .13);
-  --font-display: "Avenir Next", "Trebuchet MS", var(--font-inter), system-ui, sans-serif;
+  --ink: #1c2925;
+  --ink-2: #0f1a16;
+  --muted: #66736c;
+  --map-base: #eef2e4;
+  --lime: #d6ff55;
+  --coral: #ff795f;
+  --blue: #83d8ee;
+  --pink: #f5a6c6;
+  --orange: #ffb35c;
+  --mint: #8bffcc;
+  --yellow: #ffe27a;
+  --snap: #ffb35c;
+  --paper: #fffef9;
+  --line: rgba(28, 41, 37, .13);
+  --card: #fffdf6;
+  --surface: #f1f4e6;
+  --ring: rgba(28, 41, 37, .14);
+  --street: rgba(28, 41, 37, .08);
+  --street-major: rgba(28, 41, 37, .13);
+  --block: rgba(28, 41, 37, .05);
+  --green: rgba(147, 190, 96, .3);
+  --green-deep: rgba(122, 168, 76, .36);
+  --water: rgba(131, 216, 238, .42);
+  --shadow-card: 0 18px 44px rgba(28, 41, 37, .16);
+  --shadow-pop: 0 8px 24px rgba(28, 41, 37, .14);
+  --shadow-chunky: 0 6px 0 rgba(28, 41, 37, .16);
+  --radius-lg: 30px;
+  --radius-md: 18px;
+  --font-display: "Baloo 2", "Fredoka", var(--font-inter), system-ui, sans-serif;
   --font-body: var(--font-inter), "Avenir Next", system-ui, sans-serif;
   color-scheme: light;
 }
 
 .dark {
-  --ink: #e8efe9;
-  --muted: #9aa79e;
-  --map-base: #101a17;
-  --paper: #1b2621;
-  --line: rgba(232, 239, 233, .14);
-  --card: #1b2621;
-  --surface: #15201c;
-  --ring: rgba(232, 239, 233, .16);
-  --street: rgba(232, 239, 233, .07);
-  --street-major: rgba(232, 239, 233, .12);
-  --block: rgba(232, 239, 233, .05);
-  --green: rgba(90, 140, 80, .22);
-  --green-deep: rgba(70, 120, 70, .3);
-  --water: rgba(70, 130, 170, .35);
+  --ink: #eef5ee;
+  --ink-2: #ffffff;
+  --muted: #9fb0a6;
+  --map-base: #0c1512;
+  --paper: #16201b;
+  --line: rgba(238, 245, 238, .14);
+  --card: #16201b;
+  --surface: #121c17;
+  --ring: rgba(238, 245, 238, .16);
+  --street: rgba(238, 245, 238, .07);
+  --street-major: rgba(238, 245, 238, .12);
+  --block: rgba(238, 245, 238, .05);
+  --green: rgba(120, 190, 90, .24);
+  --green-deep: rgba(100, 170, 78, .3);
+  --water: rgba(80, 170, 210, .32);
   --shadow-card: 0 18px 44px rgba(0, 0, 0, .5);
-  --shadow-pop: 0 8px 24px rgba(0, 0, 0, .4);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, .42);
+  --shadow-chunky: 0 6px 0 rgba(0, 0, 0, .4);
   color-scheme: dark;
+}
+
+/* Tailwind v4 theme — expose the brand palette as utility tokens */
+@theme {
+  --color-ink: #1c2925;
+  --color-pine: #0f1a16;
+  --color-lime: #d6ff55;
+  --color-coral: #ff795f;
+  --color-sky: #83d8ee;
+  --color-blush: #f5a6c6;
+  --color-sun: #ffb35c;
+  --color-mint: #8bffcc;
+  --color-butter: #ffe27a;
+  --color-paper: #fffef9;
+  --color-forest: #16201b;
+  --radius-game: 30px;
+  --radius-tile: 18px;
+  --font-display: "Baloo 2", "Fredoka", var(--font-inter), system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
 }
 
 html, body { margin: 0; min-height: 100%; height: 100%; }
@@ -3816,4 +3847,353 @@ h1, h2, h3, p { margin: 0; }
   color: var(--coral);
   font-size: 13px;
   margin-top: 8px;
+}
+
+/* ============================================================
+   DEVCITY26 · GAME UI LAYER
+   Casual mobile game look built on the brand tokens.
+   ============================================================ */
+
+/* ---- Game icons (nav) ---- */
+.game-icon { display: inline-flex; align-items: center; justify-content: center; }
+.mobile-nav .game-icon svg { width: 21px; height: 21px; }
+
+/* ---- HudBar ---- */
+.hud-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 8px;
+  border: 2px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-pop);
+}
+.hud-meta { min-width: 0; flex: 1; }
+.hud-line { display: flex; align-items: baseline; gap: 7px; }
+.hud-line strong { font-family: var(--font-display); font-size: 16px; font-weight: 800; color: var(--ink); }
+.hud-xp { color: var(--muted); font-size: 11px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.hud-streak { color: #c0560f; font-size: 10.5px; font-weight: 800; }
+.hud-track {
+  height: 9px;
+  margin-top: 5px;
+  border: 2px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  border-radius: 999px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.hud-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--lime), var(--coral));
+  transition: width .3s cubic-bezier(.23, 1, .32, 1);
+}
+.hud-badges { margin-top: 4px; }
+.hud-badge-count { color: var(--muted); font-size: 9.5px; font-weight: 750; letter-spacing: .02em; }
+
+/* ---- Avatar bubbles / presence clouds ---- */
+.avatar-bubble {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 2.5px solid var(--paper);
+  border-radius: 50%;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 14%, transparent), 0 4px 12px rgba(28,41,37,.16);
+  overflow: visible;
+}
+.avatar-bubble img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.avatar-bubble.is-ghost { opacity: .55; }
+.avatar-bubble-ghost { font-size: 26px; line-height: 1; }
+.avatar-bubble .avatar-live { position: absolute; right: -2px; bottom: -1px; }
+.presence-cloud { display: inline-flex; flex-direction: column; align-items: center; gap: 5px; }
+.presence-cloud small { max-width: 60px; overflow: hidden; color: var(--muted); font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Token cards ---- */
+.token-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 2px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: var(--radius-tile);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+}
+.token-card .token-coin { flex: none; }
+.token-card-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.token-card-copy strong { color: var(--ink); font-size: 13.5px; font-weight: 850; }
+.token-card-copy span { color: var(--muted); font-size: 10px; }
+.token-card-copy small { color: var(--muted); font-size: 9px; }
+.token-card-balance { color: var(--ink); font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; }
+
+/* ---- Badge stickers ---- */
+.badge-sticker { transition: scale .2s cubic-bezier(.34, 1.56, .64, 1); }
+.badge-sticker:hover { scale: 1.06; }
+.badge-locked { filter: grayscale(.9); opacity: .6; }
+
+/* ---- Drop crate ---- */
+.drop-crate { filter: drop-shadow(0 8px 10px rgba(28,41,37,.22)); }
+.drop-crate > circle { animation: beacon-pulse 2.4s ease-in-out infinite; }
+@keyframes beacon-pulse { 0%,100% { opacity: .12; } 50% { opacity: .3; } }
+
+/* ---- Buildings ---- */
+.building-sprite { display: block; filter: drop-shadow(0 6px 7px rgba(28,41,37,.2)); }
+
+/* ---- Chunky game CTA ---- */
+.game-cta {
+  border: 2px solid var(--ink) !important;
+  border-radius: 15px !important;
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--ink) 28%, transparent) !important;
+}
+.game-cta:active { transform: translateY(2px); box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 28%, transparent) !important; }
+.game-cta.is-claimed { box-shadow: none !important; }
+
+/* ---- Empty state mascot ---- */
+.dex-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.dex-empty p { color: var(--muted); font-size: 12px; max-width: 30ch; line-height: 1.5; }
+.dex-empty strong { color: var(--ink); font-size: 14px; font-weight: 850; }
+
+/* ---- Sheet mascot ---- */
+.sheet-mascot { display: flex; justify-content: center; margin: 4px 0 10px; }
+
+/* ---- Drop marker (map) ---- */
+.drop-marker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 5px;
+  border: 2.5px solid var(--paper);
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 16%, transparent), 0 6px 14px rgba(28,41,37,.22);
+  cursor: pointer;
+  animation: marker-pop .34s cubic-bezier(.34, 1.56, .64, 1) both, drop-hover 2.6s ease-in-out .4s infinite;
+}
+.drop-marker-amount { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; }
+.drop-marker-amount strong { font-size: 12.5px; font-weight: 900; }
+.drop-marker-amount small { font-size: 7.5px; font-weight: 800; letter-spacing: .06em; opacity: .7; }
+.drop-marker.is-claimed { filter: grayscale(.7); opacity: .7; }
+
+/* ---- Stories rail (feed) ---- */
+.stories-rail {
+  display: flex;
+  gap: 10px;
+  padding: 4px 2px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stories-rail::-webkit-scrollbar { display: none; }
+.story-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 58px;
+  cursor: pointer;
+}
+.story-ring .avatar-bubble { border: 2.5px solid var(--coral); box-shadow: 0 0 0 2.5px var(--paper), 0 0 0 4.5px var(--coral); }
+.story-ring small { max-width: 58px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Dormant-sheet shared game styling ---- */
+.gsheet { display: flex; flex-direction: column; gap: 6px; }
+.gsheet-section { padding: 6px 2px; }
+.gsheet-section h3 { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; color: var(--ink); font-family: var(--font-display); font-size: 14px; font-weight: 800; }
+.gsheet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 2px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+  box-shadow: var(--shadow-pop);
+  transition: scale .15s ease, background .15s ease;
+}
+.gsheet-chip:hover { scale: 1.04; background: var(--lime); }
+.gsheet-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 60px;
+  padding: 9px 4px;
+  border-top: 1px solid var(--line);
+}
+.gsheet-row .gsheet-rank { width: 26px; text-align: center; color: var(--muted); font-weight: 900; font-variant-numeric: tabular-nums; }
+.gsheet-row .gsheet-rank.top { color: #c0560f; }
+.gsheet-copy { flex: 1; min-width: 0; }
+.gsheet-copy strong { color: var(--ink); font-size: 13px; font-weight: 800; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsheet-copy span { color: var(--muted); font-size: 10.5px; }
+.gsheet-stat { color: var(--ink); font-weight: 900; font-variant-numeric: tabular-nums; }
+.gsheet-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 26px 12px; color: var(--muted); text-align: center; }
+.gsheet-empty strong { color: var(--ink); font-size: 13px; }
+.gsheet-loading, .gsheet-error { padding: 24px 8px; color: var(--muted); text-align: center; font-size: 12px; }
+.gsheet-error { color: #a63c2c; }
+.gsheet-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 850;
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--ink) 26%, transparent);
+}
+.gsheet-action:active { transform: translateY(2px); box-shadow: none; }
+.gsheet-card {
+  padding: 12px;
+  border: 2px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: var(--radius-tile);
+  background: var(--card);
+  box-shadow: var(--shadow-pop);
+}
+.gsheet-card p { color: var(--ink); font-size: 13px; line-height: 1.45; }
+.gsheet-card small { display: flex; gap: 10px; margin-top: 8px; color: var(--muted); font-size: 10px; font-weight: 650; }
+
+/* ---- Vault (wallet) restyle ---- */
+.vault-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 18px;
+  border: 2px solid color-mix(in srgb, var(--paper) 22%, transparent);
+  border-radius: 26px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: var(--shadow-card);
+}
+.vault-hero::after {
+  content: "";
+  position: absolute;
+  top: -60px; right: -50px;
+  width: 180px; height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--lime) 26%, transparent), transparent 68%);
+  pointer-events: none;
+}
+.vault-identity { position: relative; z-index: 1; display: flex; align-items: center; gap: 11px; }
+.vault-identity .you-avatar-lg { margin: 0; }
+.vault-identity-text { display: flex; flex-direction: column; min-width: 0; }
+.vault-identity-text strong { overflow: hidden; color: var(--paper); font-size: 15px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
+.vault-identity-text span { color: color-mix(in srgb, var(--paper) 62%, transparent); font-size: 10px; font-weight: 650; }
+.vault-balance { position: relative; z-index: 1; margin-top: 18px; }
+.vault-balance > span { color: color-mix(in srgb, var(--paper) 64%, transparent); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+.vault-balance > strong { display: block; margin-top: 3px; color: var(--lime); font-size: clamp(30px, 9vw, 42px); font-variant-numeric: tabular-nums; letter-spacing: -.045em; line-height: 1.05; }
+.vault-balance > strong small { color: var(--paper); font-size: 12px; font-weight: 750; }
+.vault-actions { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; }
+.vault-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 62px;
+  padding: 9px 4px;
+  border: 2px solid color-mix(in srgb, var(--paper) 26%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--paper) 8%, transparent);
+  color: var(--paper);
+  font-size: 10px;
+  font-weight: 800;
+  transition: scale .16s cubic-bezier(.34, 1.56, .64, 1), background .16s ease;
+}
+.vault-action:hover { scale: 1.05; background: color-mix(in srgb, var(--paper) 16%, transparent); }
+.vault-action:active { scale: .96; }
+.vault-action svg { color: var(--lime); }
+.vault-address { position: relative; z-index: 1; margin-top: 14px; }
+.vault-security { border: 2px solid color-mix(in srgb, var(--ink) 12%, transparent); border-radius: var(--radius-tile); background: var(--surface); overflow: hidden; }
+.vault-security > summary { display: flex; align-items: center; gap: 9px; min-height: 50px; padding: 0 14px; color: var(--ink); cursor: pointer; font-size: 12px; font-weight: 850; list-style: none; }
+.vault-security > summary::-webkit-details-marker { display: none; }
+.vault-security > summary::after { margin-left: auto; color: var(--muted); content: "+"; font-size: 19px; font-weight: 500; }
+.vault-security[open] > summary::after { content: "−"; }
+.vault-security-body { padding: 2px 14px 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-crate > circle, .drop-marker, .story-ring .avatar-bubble { animation: none; }
+}
+
+/* ---- City hub menu ---- */
+.city-hub { gap: 4px; }
+.city-hub-label {
+  padding: 4px 12px 6px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.create-menu-item { border-radius: 12px; }
+
+/* ---- HudBar placement ---- */
+.hudbar-slot { display: block; }
+.topbar { gap: 12px; }
+
+@media (max-width: 720px) {
+  .hudbar-slot { display: none; }
+}
+
+/* ---- Vault refinements ---- */
+.vault-identity-text { flex: 1; }
+.vault-identity .you-avatar-lg { margin: 0; }
+.vault-more { margin-top: 16px; }
+.vault-more button { color: color-mix(in srgb, var(--paper) 78%, transparent); }
+.vault-more button.is-active { background: var(--lime); color: var(--ink); }
+.vault-action.is-active { background: var(--lime); color: var(--ink); box-shadow: 0 4px 0 color-mix(in srgb, var(--ink) 30%, transparent); }
+.vault-action.is-active svg { color: var(--ink); }
+.wallet-profile-token-balance .wallet-profile-token-mark { font-size: 14px; }
+
+/* ---- Sticker album + security room (Vault) ---- */
+.sticker-album {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 12px;
+  padding: 4px 2px;
+}
+.sticker-slot { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.sticker-slot small { color: var(--muted); font-size: 9px; font-weight: 750; text-align: center; }
+.vault-room { margin-top: 18px; }
+.vault-room-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.vault-room-head h3 { display: flex; align-items: center; gap: 7px; color: var(--ink); font-family: var(--font-display); font-size: 14px; font-weight: 800; }
+.vault-room-head > span { color: var(--muted); font-size: 10px; font-weight: 700; }
+.vault-room-title { cursor: pointer; }
+
+/* ---- Game drop markers ---- */
+.marker-drop-crate { display: inline-flex; filter: drop-shadow(0 5px 6px rgba(28,41,37,.25)); }
+.marker-drop.is-claimed .marker-drop-crate { filter: grayscale(.6) drop-shadow(0 3px 4px rgba(28,41,37,.2)); }
+.marker-drop .marker-token { line-height: 1.05; }
+.marker-drop .marker-token strong { font-size: 12px; font-weight: 900; }
+.marker-drop .marker-token small { font-size: 7px; letter-spacing: .05em; }
+
+/* ---- Day/dusk tint + vignette over the real map ---- */
+.map-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 18;
+  background:
+    radial-gradient(ellipse at 50% 118%, rgba(255, 140, 110, .16), transparent 46%),
+    linear-gradient(to bottom, rgba(28,41,37,.05), transparent 22%);
+}
+.map-tint.vignette::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 120px rgba(28,41,37,.28);
+  border-radius: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marker-drop .marker-drop-crate { animation: none; }
 }

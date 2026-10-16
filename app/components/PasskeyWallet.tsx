@@ -30,6 +30,8 @@ import { WalletTokenTab } from './wallet/WalletTokenTab';
 import { WalletSecurityTab } from './wallet/WalletSecurityTab';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
 import { useProfileToken } from '../hooks/useProfileToken';
+import { useGameStore, STICKER_DEFS } from '../lib/game-store';
+import { TokenCoin } from './game/TokenCard';
 
 type Phase = 'signed-out' | 'registering' | 'ready' | 'restore' | 'backup-required';
 
@@ -544,6 +546,24 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
         tab={tab}
         onTab={(t) => { setTab(t); setError(''); }}
       />
+
+      <section className="vault-room" aria-labelledby="vault-stickers-title">
+        <div className="vault-room-head">
+          <h3 id="vault-stickers-title">Token sticker album</h3>
+          <span>Collect city stickers</span>
+        </div>
+        <div className="sticker-album">
+          {STICKER_DEFS.map((s) => {
+            const collected = useGameStore.getState().stickers[s.id] ?? 0;
+            return (
+              <div className="sticker-slot" key={s.id}>
+                <TokenCoin tone={(s.tone as any) || 'lime'} empty={collected === 0} size={48} />
+                <small>{collected > 0 ? `${collected}` : 'locked'}</small>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {tab === 'assets' && wallet && (
         <WalletAssetsTab

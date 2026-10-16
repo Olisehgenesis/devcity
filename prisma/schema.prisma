@@ -49,8 +49,29 @@ stalls            Stall[]
    following         Follow[]              @relation("FollowFollower")
    followers         Follow[]              @relation("FollowFollowing")
    walletBackups     WalletBackup[]
+   game              GameProfile?
 
    @@map("users")
+}
+
+// Cosmetic, non-financial game layer (streak, badges, sticker album).
+// Stored in the database and keyed to a user so progress follows the account.
+// Progression is derived from REAL on-chain/DB activity (claims, tips, drops,
+// events), never from fake points. GameProfile itself holds no value.
+model GameProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  streak            Int      @default(0)
+  lastVisitDay      String?
+  badges            String[] @default([])
+  stickers          Json     @default("{}")
+  leaderboardsOptIn Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([leaderboardsOptIn, updatedAt])
+  @@map("game_profiles")
 }
 
 model Session {

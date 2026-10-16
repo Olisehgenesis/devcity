@@ -234,6 +234,12 @@ export async function authorizeClaim(dropId: string, userAddress: string, reques
     });
   });
 
+  // Real drop claim → award the first-claim badge + a city sticker.
+  await applyGameActions(userAddress, {
+    awardBadge: 'first-claim',
+    collectSticker: 'city',
+  });
+
   return {
     signature,
     dropId,
@@ -780,6 +786,7 @@ export async function createStall(input: {
       tags: input.tags ?? [],
     },
   });
+  await applyGameActions(input.ownerId, { awardBadge: 'event-host' });
   return serializeStall(stall);
 }
 
@@ -934,6 +941,10 @@ export async function createTip(input: {
       message: input.message,
     },
   });
+
+  // Real tip → generous-tipper badge.
+  await applyGameActions(input.fromAddress, { awardBadge: 'generous-tipper' });
+
   return {
     id: tip.id,
     toId: to.id,
@@ -962,6 +973,162 @@ export async function listTips(userAddress: string, type: 'sent' | 'received' = 
     to: r.toUser.walletAddress,
     txHash: r.txHash,
     createdAt: toIso(r.createdAt),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Game layer (cosmetic, non-financial: streak, badges, stickers).
+// Progression is derived from REAL on-chain activity (claims, tips, events,
+// hosted spots, broadcasts), never from fake points.
+// ---------------------------------------------------------------------------
+
+// One level per tier of real actions (claims, tips, events, spots, posts).
+const ACTIONS_PER_LEVEL = 5;
+
+// Real-action counters for a user (from the DB, not synthetic).
+export async function activityCounts(userId: string) {
+  const [claims, tipsSent, events, spots, broadcasts] = await Promise.all([
+    prisma.dropClaim.count({ where: { userId } }),
+    prisma.tip.count({ where: { fromUserId: userId } }),
+    prisma.eventRsvp.count({ where: { userId, status: { in: ['going', 'attended'] } } }),
+    prisma.$queryRawUnsafe<Array<{ c: bigint }>>(
+      `SELECT (SELECT COUNT(*) FROM stalls WHERE "ownerId" = $1) +
+              (SELECT COUNT(*) FROM booths WHERE "ownerId" = $1) AS c`,
+      userId,
+    ),
+    prisma.broadcast.count({ where: { userId } }),
+  ]);
+  const spotsN = Number(spots?.[0]?.c ?? BigInt(0));
+  const total = claims + tipsSent + events + spotsN + broadcasts;
+  return { claims, tipsSent, events, spots: spotsN, broadcasts, total };
+}
+
+export function levelFromActions(total: number): number {
+  return Math.floor(total / ACTIONS_PER_LEVEL) + 1;
+}
+
+export async function getGameProfile(userAddress: string) {
+  const user = await getOrCreateUser(userAddress);
+  const [game, counts] = await Promise.all([
+    prisma.gameProfile.findUnique({ where: { userId: user.id } }),
+    activityCounts(user.id),
+  ]);
+  return {
+    level: levelFromActions(counts.total),
+    counts,
+    streak: game?.streak ?? 0,
+    lastVisitDay: game?.lastVisitDay ?? null,
+    badges: game?.badges ?? [],
+    stickers: game?.stickers ?? {},
+    leaderboardsOptIn: game?.leaderboardsOptIn ?? false,
+  };
+}
+
+/**
+ * Apply game mutations (daily touch, badge, sticker, leaderboard opt-in) and
+ * always recompute the level from real activity. Returns the refreshed profile.
+ * Badge awards themselves are triggered from the real flows that earn them
+ * (claims, tips, RSVPs, hosted spots) — this just persists them.
+ */
+export async function applyGameActions(
+  userAddress: string,
+  input: {
+    touch?: boolean;
+    awardBadge?: string | null;
+    collectSticker?: string | null;
+    leaderboardsOptIn?: boolean;
+  },
+) {
+  const user = await getOrCreateUser(userAddress);
+  const existing = await prisma.gameProfile.findUnique({ where: { userId: user.id } });
+
+  const now = new Date();
+  const dayKey = now.toISOString().slice(0, 10);
+  const yesterdayKey = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+
+  const badges = new Set<string>(existing?.badges ?? []);
+  let streak = existing?.streak ?? 0;
+  let lastVisitDay = existing?.lastVisitDay ?? null;
+
+  if (input.touch) {
+    if (lastVisitDay !== dayKey) {
+      streak = lastVisitDay === yesterdayKey ? streak + 1 : 1;
+      lastVisitDay = dayKey;
+    }
+    if (streak >= 3) badges.add('early-bird');
+    if (streak >= 7) badges.add('streak-flame');
+    const hour = now.getHours();
+    if (hour >= 22 || hour < 4) badges.add('night-owl');
+  }
+
+  if (input.awardBadge) badges.add(input.awardBadge);
+
+  const stickers = existing?.stickers && typeof existing.stickers === 'object'
+    ? { ...(existing.stickers as Record<string, number>) }
+    : {};
+  if (input.collectSticker) {
+    stickers[input.collectSticker] = (stickers[input.collectSticker] ?? 0) + 1;
+  }
+
+  // Level is derived from real activity, so a genuine milestone earns the badge.
+  const counts = await activityCounts(user.id);
+  if (levelFromActions(counts.total) >= 3) badges.add('level-up');
+
+  const leaderboardsOptIn = input.leaderboardsOptIn ?? existing?.leaderboardsOptIn ?? false;
+
+  const game = await prisma.gameProfile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      streak,
+      lastVisitDay,
+      badges: [...badges],
+      stickers,
+      leaderboardsOptIn,
+    },
+    update: {
+      streak,
+      lastVisitDay,
+      badges: [...badges],
+      stickers,
+      leaderboardsOptIn,
+    },
+  });
+
+  return {
+    level: levelFromActions(counts.total),
+    counts,
+    streak: game.streak,
+    lastVisitDay: game.lastVisitDay,
+    badges: game.badges,
+    stickers: game.stickers,
+    leaderboardsOptIn: game.leaderboardsOptIn,
+  };
+}
+
+export async function gameLeaderboard(userAddress: string, limit = 10) {
+  await getOrCreateUser(userAddress); // ensure a valid caller; entries are opt-in to appear
+  const rows = await prisma.gameProfile.findMany({
+    where: { leaderboardsOptIn: true },
+    include: { user: true },
+    orderBy: [{ updatedAt: 'asc' }],
+    take: Math.max(1, Math.min(limit, 100)),
+  });
+  const ranked = await Promise.all(rows.map(async (r) => {
+    const counts = await activityCounts(r.userId);
+    return { r, counts };
+  }));
+  ranked.sort((a, b) => b.counts.total - a.counts.total);
+  return ranked.map(({ r, counts }, i) => ({
+    rank: i + 1,
+    userId: r.userId,
+    username: r.user.username ?? r.user.walletAddress?.slice(0, 6) ?? 'explorer',
+    avatarUrl: r.user.avatarUrl,
+    level: levelFromActions(counts.total),
+    total: counts.total,
+    claims: counts.claims,
+    streak: r.streak,
+    badges: r.badges.length,
   }));
 }
 

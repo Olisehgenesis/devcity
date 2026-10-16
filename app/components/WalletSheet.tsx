@@ -15,7 +15,7 @@ export function WalletSheet({ open, onClose, notify }: WalletSheetProps) {
   const { disconnect } = useDisconnect();
 
   return (
-    <Sheet open={open} onClose={onClose} eyebrow="Your money in the city" title="Wallet">
+    <Sheet open={open} onClose={onClose} eyebrow="Your city vault" title="Vault">
       <PasskeyWallet onNotify={notify} />
       {isConnected && address && (
         <section className="external-wallet-section">
