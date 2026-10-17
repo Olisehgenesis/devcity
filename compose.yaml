@@ -33,6 +33,7 @@ services:
       - "127.0.0.1:3001:3000"
     volumes:
       - ./.env:/app/.env:ro
+      - ./scripts/dotenvx-preload.cjs:/app/scripts/dotenvx-preload.cjs:ro
     command: ["node", "-r", "./scripts/dotenvx-preload.cjs", "server.js"]
     depends_on:
       postgres:
