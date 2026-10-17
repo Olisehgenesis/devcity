@@ -127,40 +127,52 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   }, [showSignup, username]);
 
   // ─── On-chain balances (read for the EOA, always called) ──────────────
-  const { data: celoBalance } = useBalance({ address: addr as Address, query: { enabled: !!addr } });
+  const { data: celoBalance, isError: celoError, refetch: refetchCelo } = useBalance({
+    address: addr as Address,
+    query: { enabled: !!addr, placeholderData: (previous) => previous },
+  });
   const usdtBal = useReadContract({
     address: fees.find((f) => f.symbol === 'USDT')?.address as Address,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: addr ? [addr as Address] : undefined,
-    query: { enabled: !!addr },
+    query: { enabled: !!addr, placeholderData: (previous) => previous },
   });
   const usdcBal = useReadContract({
     address: fees.find((f) => f.symbol === 'USDC')?.address as Address,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: addr ? [addr as Address] : undefined,
-    query: { enabled: !!addr },
+    query: { enabled: !!addr, placeholderData: (previous) => previous },
   });
   const cusdBal = useReadContract({
     address: fees.find((f) => f.symbol === 'cUSD')?.address as Address,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: addr ? [addr as Address] : undefined,
-    query: { enabled: !!addr },
+    query: { enabled: !!addr, placeholderData: (previous) => previous },
   });
 
-  const stableBalances: Record<string, number> = useMemo(() => {
-    const fmt = (raw: unknown, decimals: number) => {
-      if (raw == null) return 0;
-      return Number(raw) / 10 ** decimals;
-    };
+  const stableBalances = useMemo(() => {
+    const fmt = (raw: unknown, decimals: number) => raw == null ? null : Number(raw) / 10 ** decimals;
     return {
       USDT: fmt(usdtBal.data, 6),
       USDC: fmt(usdcBal.data, 6),
       cUSD: fmt(cusdBal.data, 18),
     };
   }, [usdtBal.data, usdcBal.data, cusdBal.data]);
+  const holdingStatus = {
+    CELO: celoBalance ? 'ready' as const : celoError ? 'error' as const : 'loading' as const,
+    USDT: usdtBal.data != null ? 'ready' as const : usdtBal.isError ? 'error' as const : 'loading' as const,
+    USDC: usdcBal.data != null ? 'ready' as const : usdcBal.isError ? 'error' as const : 'loading' as const,
+    cUSD: cusdBal.data != null ? 'ready' as const : cusdBal.isError ? 'error' as const : 'loading' as const,
+  };
+  const retryHolding = (symbol: 'CELO' | 'USDT' | 'USDC' | 'cUSD') => {
+    if (symbol === 'CELO') void refetchCelo();
+    if (symbol === 'USDT') void usdtBal.refetch();
+    if (symbol === 'USDC') void usdcBal.refetch();
+    if (symbol === 'cUSD') void cusdBal.refetch();
+  };
 
   const { token: profileToken, loading: profileLoading } = useProfileToken(wallet?.address);
   const usdPrices = useUsdPrices();
@@ -599,13 +611,15 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
     );
   }
 
-  const celoAmount = Number(celoBalance?.value ?? BigInt(0)) / 10 ** (celoBalance?.decimals ?? 18);
-  const celoLabel = celoAmount.toFixed(4);
+  const celoKnown = celoBalance != null;
+  const celoAmount = celoKnown ? Number(celoBalance.value) / 10 ** celoBalance.decimals : null;
+  const celoLabel = celoAmount != null ? celoAmount.toFixed(4) : '';
+  const balanceLoading = holdingStatus.CELO === 'loading' && holdingStatus.USDT === 'loading' && holdingStatus.USDC === 'loading';
   const pricedHoldings = [
-    usdPrices.CELO != null ? celoAmount * usdPrices.CELO : null,
-    usdPrices.USDT != null ? (stableBalances.USDT ?? 0) * usdPrices.USDT : null,
-    usdPrices.USDC != null ? (stableBalances.USDC ?? 0) * usdPrices.USDC : null,
-    usdPrices.cUSD != null ? (stableBalances.cUSD ?? 0) * usdPrices.cUSD : null,
+    celoAmount != null && usdPrices.CELO != null ? celoAmount * usdPrices.CELO : null,
+    stableBalances.USDT != null && usdPrices.USDT != null ? stableBalances.USDT * usdPrices.USDT : null,
+    stableBalances.USDC != null && usdPrices.USDC != null ? stableBalances.USDC * usdPrices.USDC : null,
+    stableBalances.cUSD != null && usdPrices.cUSD != null ? stableBalances.cUSD * usdPrices.cUSD : null,
   ].filter((value): value is number => value != null && value > 0);
   const usdBalance = pricedHoldings.length > 0 ? formatUsd(pricedHoldings.reduce((sum, value) => sum + value, 0)) : null;
   const explorerBase = ACTIVE_CHAIN.blockExplorers?.default.url;
@@ -649,6 +663,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             address={wallet.address}
             celoBalance={celoLabel}
             usdBalance={usdBalance}
+            balanceLoading={balanceLoading && !usdBalance && !celoLabel}
             onSend={() => setScreen({ id: 'send' })}
             onReceive={() => setScreen({ id: 'receive' })}
             onSwap={() => setScreen({ id: 'swap' })}
@@ -660,6 +675,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           <WalletHome
             celoBalance={celoLabel}
             stableBalances={stableBalances}
+            holdingStatus={holdingStatus}
+            onRetryHolding={retryHolding}
             usdPrices={usdPrices}
             profileToken={profileToken}
             profileLoading={profileLoading}
@@ -780,6 +797,12 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           <WalletTokenDetail
             token={screen.token}
             explorerBase={explorerBase}
+            balanceLoading={
+              (screen.token.symbol === 'CELO' && holdingStatus.CELO === 'loading')
+              || (screen.token.symbol === 'USDT' && holdingStatus.USDT === 'loading')
+              || (screen.token.symbol === 'USDC' && holdingStatus.USDC === 'loading')
+              || (screen.token.symbol === 'cUSD' && holdingStatus.cUSD === 'loading')
+            }
             onSend={() => setScreen({ id: 'send', token: screen.token.sendToken })}
             onReceive={() => setScreen({ id: 'receive', symbol: screen.token.symbol })}
             onRemove={screen.token.kind === 'imported' && screen.token.contract ? () => {

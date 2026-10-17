@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, Gift, LocateFixed, MapPin, Search, X } from 'luc
 import {
   createPublicClient,
   createWalletClient,
+  encodeFunctionData,
   formatUnits,
   http,
   keccak256,
@@ -18,6 +19,9 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ACTIVE_CHAIN, feeCurrenciesFor } from '@/lib/celo';
+import { writeContractWithFee, type TxRequest } from '@/lib/gas';
+import { useFeeQuote } from '../hooks/useFeeQuote';
+import { FeePreview } from './wallet/FeePreview';
 import { ERC20_ABI, CELO_SEPOLIA } from '@/lib/chain';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { getUnlockedPrivateKey, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
@@ -302,6 +306,19 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
   const amountError = selectedToken && amountNum > 0 && Number.isFinite(claimantsNum) && claimantsNum >= 1 && totalAllocated > selectedToken.balance
     ? `Total ${totalAllocated.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${selectedToken.symbol} exceeds your balance of ${selectedToken.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })}.`
     : '';
+  const publishFeeRequest = useMemo<TxRequest | null>(() => {
+    if (!selectedToken || !amountValid) return null;
+    const total = parseUnits(String(amountNum), selectedToken.decimals) * BigInt(claimantsNum);
+    return {
+      to: selectedToken.address as Address,
+      data: encodeFunctionData({
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [CELO_SEPOLIA.dropClaim as Address, total],
+      }),
+    };
+  }, [amountNum, amountValid, claimantsNum, selectedToken]);
+  const publishFee = useFeeQuote(walletAddress, step === 'review' ? publishFeeRequest : null);
 
   async function ensureUnlocked(): Promise<Hex> {
     if (!walletAddress) throw new Error('Connect a wallet first.');
@@ -359,7 +376,8 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
         args: [walletAddress as Address, dropClaim],
       }).catch(() => BigInt(0));
       if (allowance < totalAmountWei) {
-        const approveHash = await walletClient.writeContract({
+        const approveHash = await writeContractWithFee(walletClient, {
+          account,
           address: selectedToken.address as Address,
           abi: ERC20_ABI,
           functionName: 'approve',
@@ -372,7 +390,8 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
       // 6) Create the real on-chain drop (pulls totalAmount tokens into DropClaim).
       const nowSeconds = Math.floor(Date.now() / 1000);
       const hours = Number(endsIn) || 24;
-      const createHash = await walletClient.writeContract({
+      const createHash = await writeContractWithFee(walletClient, {
+        account,
         address: dropClaim,
         abi: DROP_CREATE_ABI,
         functionName: 'createDrop',
@@ -592,6 +611,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                   <div className="create-drop-review-row"><span>Duration</span><strong>{endsIn || 24} hours</strong></div>
                 </div>
                 <p className="wallet-send-caution">Publishing signs a real transaction: it approves and funds the on-chain DropClaim contract with your {selectedToken.symbol}, then records the drop on the map. Your tokens are locked for claims.</p>
+                <FeePreview quote={publishFee.quote} error={publishFee.error} loading={publishFee.loading} />
 
                 {needsUnlock && (
                   <div className="wallet-unlock">
@@ -623,7 +643,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 {publishState !== 'success' && (
                   <div className="create-drop-actions">
                     <button className="you-connect-secondary" onClick={() => setStep('amount')}><ArrowLeft size={16} /> Back</button>
-                    <button className="claim-button" disabled={publishing || publishState === 'pending'} onClick={() => void publish()}>
+                    <button className="claim-button" disabled={publishing || publishState === 'pending' || publishFee.loading || Boolean(publishFee.error)} onClick={() => void publish()}>
                       <Gift size={16} /> {publishing ? 'Publishing…' : 'Publish drop'}
                     </button>
                   </div>

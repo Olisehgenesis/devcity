@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Heart, KeyRound } from 'lucide-react';
-import { getAddress, isAddress, createWalletClient, http, parseUnits, type Address, type Hex } from 'viem';
+import { encodeFunctionData, getAddress, isAddress, createWalletClient, http, parseUnits, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ERC20_ABI } from '@/lib/chain';
-import { ACTIVE_CHAIN, toGasCurrency } from '@/lib/celo';
+import { ACTIVE_CHAIN } from '@/lib/celo';
+import { sendTransactionWithFee, writeContractWithFee, type TxRequest } from '@/lib/gas';
+import { useFeeQuote } from '../../hooks/useFeeQuote';
+import { FeePreview } from './FeePreview';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { clearUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
@@ -39,6 +42,21 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
 
   const effectiveKey = unlockedKey ?? localKey;
   const token = tipToken === 'CELO' ? null : fees.find((f) => f.symbol === tipToken) ?? importedTokens.find((item) => tipToken === `CUSTOM:${item.address}`);
+  const feeRequest = useMemo<TxRequest | null>(() => {
+    if (!isAddress(tipTo) || !tipAmount || Number(tipAmount) <= 0) return null;
+    if (token) {
+      return {
+        to: token.address,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'transfer',
+          args: [getAddress(tipTo), parseUnits(tipAmount, token.decimals)],
+        }),
+      };
+    }
+    return { to: getAddress(tipTo), value: parseUnits(tipAmount, 18) };
+  }, [tipAmount, tipTo, token]);
+  const networkFee = useFeeQuote(address, feeRequest);
 
   async function handleUnlock() {
     if (!pin) {
@@ -84,24 +102,23 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
         chain: ACTIVE_CHAIN,
         transport: http(ACTIVE_CHAIN.rpcUrls.default.http[0]),
       });
-      const gasCurrency = toGasCurrency(ACTIVE_CHAIN.id);
       let txHash: Hex;
       if (token) {
         const amount = parseUnits(tipAmount, token.decimals);
-        txHash = await client.writeContract({
+        txHash = await writeContractWithFee(client, {
+          account,
           address: token.address,
           abi: ERC20_ABI,
           functionName: 'transfer',
           args: [getAddress(tipTo), amount],
-          ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
-        } as any);
+        });
       } else {
         const amount = parseUnits(tipAmount, 18);
-        txHash = await client.sendTransaction({
+        txHash = await sendTransactionWithFee(client, {
+          account,
           to: getAddress(tipTo),
           value: amount,
-          ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
-        } as any);
+        });
       }
       try {
         await fetch('/api/tips', {
@@ -189,8 +206,9 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
               ))}
             </select>
           </div>
-          <p className="wallet-send-caution">A tip is a real transfer. Confirm the recipient address before sending.</p>
-          <button className="you-connect-primary" disabled={tipping || !tipTo || !tipAmount} onClick={() => void handleTip()}>
+          <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
+          <p className="wallet-send-caution">A tip is a real transfer. Confirm the recipient address before sending. Gas is paid in CELO, then USDT, then USDC.</p>
+          <button className="you-connect-primary" disabled={tipping || !tipTo || !tipAmount || networkFee.loading || Boolean(networkFee.error)} onClick={() => void handleTip()}>
             <Heart size={16} /> {tipping ? 'Tipping…' : 'Send tip'}
           </button>
         </>

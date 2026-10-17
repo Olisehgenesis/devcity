@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowUpDown, Info, Loader2 } from 'lucide-react';
 import { useAccount, useWriteContract, useReadContract } from 'wagmi';
-import { parseUnits, formatUnits, parseAbi } from 'viem';
+import { encodeFunctionData, parseUnits, formatUnits, parseAbi, type Address } from 'viem';
 import { CELO_SEPOLIA, DEVCITY26_TOKEN_ABI, ERC20_ABI } from '@/lib/chain';
+import { feeTransactionFields, quoteCeloFee } from '@/lib/gas';
+import { useFeeQuote } from '../../hooks/useFeeQuote';
+import { FeePreview } from './FeePreview';
 import { buildBuyCallData, encodeSell, encodeApprove } from '@/lib/trade';
 
 export function WalletTradeTab() {
@@ -16,20 +19,20 @@ export function WalletTradeTab() {
   const [approving, setApproving] = useState(false);
 
   // Read balances
-  const { data: usdtBalance } = useReadContract({
+  const { data: usdtBalance, isLoading: usdtLoading, isError: usdtError, refetch: refetchUsdt } = useReadContract({
     address: CELO_SEPOLIA.usdt,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    query: { enabled: !!address, placeholderData: (previous) => previous },
   });
 
-  const { data: dev26Balance } = useReadContract({
+  const { data: dev26Balance, isLoading: dev26Loading, isError: dev26Error, refetch: refetchDev } = useReadContract({
     address: CELO_SEPOLIA.devcityToken,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    query: { enabled: !!address, placeholderData: (previous) => previous },
   });
 
   // Read allowances
@@ -61,6 +64,21 @@ export function WalletTradeTab() {
   const needsApproval = currentAllowance && amount
     ? parseUnits(amount || '0', 6) > currentAllowance
     : true;
+  const swapFeeRequest = useMemo(() => {
+    if (!address || !amount || Number(amount) <= 0) return null;
+    try {
+      const amountBigInt = parseUnits(amount, 6);
+      const tokenAddress = (isBuy ? CELO_SEPOLIA.usdt : CELO_SEPOLIA.devcityToken) as Address;
+      const spender = (isBuy ? CELO_SEPOLIA.universalRouter : CELO_SEPOLIA.devcityToken) as Address;
+      return {
+        to: tokenAddress,
+        data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [spender, amountBigInt] }),
+      };
+    } catch {
+      return null;
+    }
+  }, [address, amount, isBuy]);
+  const networkFee = useFeeQuote(address, swapFeeRequest);
 
   const handleApprove = async () => {
     if (!address || !amount) return;
@@ -71,11 +89,16 @@ export function WalletTradeTab() {
       const spender = isBuy ? CELO_SEPOLIA.universalRouter : CELO_SEPOLIA.devcityToken;
       const tokenAddress = isBuy ? CELO_SEPOLIA.usdt : CELO_SEPOLIA.devcityToken;
 
+      const quote = await quoteCeloFee(address, {
+        to: tokenAddress as Address,
+        data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [spender as Address, amountBigInt] }),
+      });
       approveToken({
         address: tokenAddress,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [spender, amountBigInt],
+        ...feeTransactionFields(quote),
       });
     } catch (error) {
       console.error('Approval failed:', error);
@@ -95,26 +118,38 @@ export function WalletTradeTab() {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 1800); // 30 minutes
 
       if (isBuy) {
-        // Buy: USDT -> DEV26 via UniversalRouter
         const callData = buildBuyCallData(amountBigInt, minOut, deadline);
+        const quote = await quoteCeloFee(address, {
+          to: CELO_SEPOLIA.universalRouter as Address,
+          data: encodeFunctionData({
+            abi: parseAbi(['function execute(bytes commands, bytes[] inputs, uint256 deadline) payable']),
+            functionName: 'execute',
+            args: ['0x10', [callData], deadline],
+          }),
+        });
         executeSwap({
           address: CELO_SEPOLIA.universalRouter,
           abi: parseAbi(['function execute(bytes commands, bytes[] inputs, uint256 deadline) payable']),
           functionName: 'execute',
           args: [
-            '0x10', // V4_SWAP command
+            '0x10',
             [callData],
             deadline,
           ],
+          ...feeTransactionFields(quote),
         });
       } else {
-        // Sell: DEV26 -> USDT via burnForUSDT
         const callData = encodeSell(amountBigInt, minOut, deadline);
+        const quote = await quoteCeloFee(address, {
+          to: CELO_SEPOLIA.devcityToken as Address,
+          data: callData,
+        });
         executeSwap({
           address: CELO_SEPOLIA.devcityToken,
           abi: DEVCITY26_TOKEN_ABI,
           functionName: 'burnForUSDT',
           args: [amountBigInt, minOut, deadline],
+          ...feeTransactionFields(quote),
         });
       }
     } catch (error) {
@@ -159,7 +194,7 @@ export function WalletTradeTab() {
             <span className="trade-token-badge">{inputToken}</span>
           </div>
           <span className="trade-balance">
-            Balance: {inputBalance ? formatUnits(inputBalance, 6) : '0'} {inputToken}
+            Balance: {(isBuy ? usdtLoading : dev26Loading) && inputBalance == null ? <span className="balance-skeleton" /> : (isBuy ? usdtError : dev26Error) && inputBalance == null ? <button type="button" className="wallet-retry" onClick={() => void (isBuy ? refetchUsdt() : refetchDev())}>Retry</button> : `${inputBalance ? formatUnits(inputBalance, 6) : '0'}`} {inputToken}
           </span>
         </div>
 
@@ -176,7 +211,7 @@ export function WalletTradeTab() {
             <span className="trade-token-badge">{outputToken}</span>
           </div>
           <span className="trade-balance">
-            Balance: {isBuy ? (dev26Balance ? formatUnits(dev26Balance, 6) : '0') : (usdtBalance ? formatUnits(usdtBalance, 6) : '0')} {outputToken}
+            Balance: {(isBuy ? dev26Loading : usdtLoading) && (isBuy ? dev26Balance : usdtBalance) == null ? <span className="balance-skeleton" /> : `${(isBuy ? dev26Balance : usdtBalance) ? formatUnits((isBuy ? dev26Balance : usdtBalance) as bigint, 6) : '0'}`} {outputToken}
           </span>
         </div>
       </div>
@@ -210,11 +245,12 @@ export function WalletTradeTab() {
         <Info size={14} />
         <span>Estimated output shown (actual may vary based on slippage)</span>
       </div>
+      <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
 
       {needsApproval ? (
         <button
           onClick={handleApprove}
-          disabled={approving || !amount}
+          disabled={approving || !amount || networkFee.loading || Boolean(networkFee.error)}
           className="trade-button trade-button-approve"
         >
           {approving ? <Loader2 size={16} className="animate-spin" /> : 'Approve ' + inputToken}
@@ -222,7 +258,7 @@ export function WalletTradeTab() {
       ) : (
         <button
           onClick={handleSwap}
-          disabled={swapping || !amount}
+          disabled={swapping || !amount || networkFee.loading || Boolean(networkFee.error)}
           className="trade-button trade-button-swap"
         >
           {swapping ? <Loader2 size={16} className="animate-spin" /> : `Swap ${inputToken} → ${outputToken}`}

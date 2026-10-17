@@ -8,6 +8,7 @@ interface WalletOverviewProps {
   address?: string;
   celoBalance: string;
   usdBalance?: string | null;
+  balanceLoading?: boolean;
   onSend: () => void;
   onReceive: () => void;
   onSwap: () => void;
@@ -24,7 +25,7 @@ const ACTIONS = [
   { id: 'drop', label: 'Drop' },
 ] as const;
 
-export function WalletOverview({ chainLabel, name, address, celoBalance, usdBalance, onSend, onReceive, onSwap, onDrop, onActivity, onSettings, onSignOut }: WalletOverviewProps) {
+export function WalletOverview({ chainLabel, name, address, celoBalance, usdBalance, balanceLoading, onSend, onReceive, onSwap, onDrop, onActivity, onSettings, onSignOut }: WalletOverviewProps) {
   const actions: Record<(typeof ACTIONS)[number]['id'], () => void> = {
     send: onSend,
     receive: onReceive,
@@ -52,8 +53,8 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, usdBala
 
       <div className="vault-balance">
         <span>Your balance</span>
-        <strong>{usdBalance ?? celoBalance}</strong>
-        <em>{usdBalance ? `${celoBalance} CELO` : 'CELO'}</em>
+        <strong>{balanceLoading ? <span className="balance-skeleton balance-skeleton-lg" /> : (usdBalance ?? celoBalance)}</strong>
+        <em>{balanceLoading ? <span className="balance-skeleton" /> : usdBalance ? `${celoBalance} CELO` : 'CELO'}</em>
       </div>
 
       <div className="vault-actions" aria-label="Wallet actions">

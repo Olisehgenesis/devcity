@@ -5,7 +5,8 @@ import { getNonce } from '../../contracts/interact';
 import { parseUnits, type Hex } from 'viem';
 import { rateLimit, RATE_LIMITS, getClientIdentifier } from './rate-limit';
 import { NextRequest } from 'next/server';
-import { CLAIM_RADIUS_M, distanceMeters, formatDistance } from './geo';
+import { CLAIM_RADIUS_M, distanceMeters } from './geo';
+import { claimOutOfRangeMessage, parseClaimCoordinate } from './claim-eligibility';
 
 export class ApiError extends Error {
   status: number;
@@ -208,16 +209,17 @@ export async function authorizeClaim(
 
   const dropLat = toNumber(drop.latitude);
   const dropLng = toNumber(drop.longitude);
-  if (dropLat != null && dropLng != null) {
-    const lat = Number(coords?.lat);
-    const lng = Number(coords?.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      throw new ApiError(400, 'Turn on location. You need to be within 100 m of this drop to claim.');
-    }
-    const meters = distanceMeters(lat, lng, dropLat, dropLng);
-    if (meters > CLAIM_RADIUS_M) {
-      throw new ApiError(400, `You are ${formatDistance(meters)} away. Get within 100 m of this drop to claim.`);
-    }
+  if (dropLat == null || dropLng == null) {
+    throw new ApiError(400, 'This drop has no location, so it cannot be claimed.');
+  }
+  const lat = parseClaimCoordinate(coords?.lat, -90, 90);
+  const lng = parseClaimCoordinate(coords?.lng, -180, 180);
+  if (lat == null || lng == null) {
+    throw new ApiError(400, 'Location permission is required. Turn on location and try again. Claims stay off until your position is verified.');
+  }
+  const meters = distanceMeters(lat, lng, dropLat, dropLng);
+  if (meters > CLAIM_RADIUS_M) {
+    throw new ApiError(400, claimOutOfRangeMessage(meters));
   }
 
   const existing = await prisma.dropClaim.findUnique({

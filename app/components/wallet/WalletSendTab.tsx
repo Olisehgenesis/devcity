@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { KeyRound } from 'lucide-react';
-import { getAddress, isAddress, createWalletClient, http, parseUnits, type Address, type Hex } from 'viem';
+import { encodeFunctionData, getAddress, isAddress, createWalletClient, http, parseUnits, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ERC20_ABI } from '@/lib/chain';
-import { ACTIVE_CHAIN, toGasCurrency } from '@/lib/celo';
+import { ACTIVE_CHAIN } from '@/lib/celo';
+import { sendTransactionWithFee, writeContractWithFee, type TxRequest } from '@/lib/gas';
+import { useFeeQuote } from '../../hooks/useFeeQuote';
+import { FeePreview } from './FeePreview';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { clearUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
 import { resolveRecipient } from '../../lib/resolve-user';
@@ -30,7 +33,7 @@ interface WalletSendTabProps {
   notify?: (message: string) => void;
 }
 
-export function WalletSendTab({ address, pinProtected, unlockedKey, fees, importedTokens, feeSymbol, setFeeSymbol, initialToken, notify }: WalletSendTabProps) {
+export function WalletSendTab({ address, pinProtected, unlockedKey, fees, importedTokens, initialToken, notify }: WalletSendTabProps) {
   const [sendTo, setSendTo] = useState('');
   const [sendAmount, setSendAmount] = useState('');
   const [sendToken, setSendToken] = useState(initialToken || 'USDT');
@@ -45,6 +48,21 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
   const customToken = importedTokens.find((item) => sendToken === `CUSTOM:${item.address}`);
   const token = sendToken === 'CELO' ? null : fees.find((f) => f.symbol === sendToken) ?? customToken;
   const sendTokenLabel = customToken?.symbol ?? sendToken;
+  const feeRequest = useMemo<TxRequest | null>(() => {
+    if (!isAddress(sendTo) || !sendAmount || Number(sendAmount) <= 0) return null;
+    if (token) {
+      return {
+        to: token.address,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: 'transfer',
+          args: [getAddress(sendTo), parseUnits(sendAmount, token.decimals)],
+        }),
+      };
+    }
+    return { to: getAddress(sendTo), value: parseUnits(sendAmount, 18) };
+  }, [sendAmount, sendTo, token]);
+  const networkFee = useFeeQuote(address, feeRequest);
 
   async function handleUnlock() {
     if (!pin) {
@@ -93,24 +111,23 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
         chain: ACTIVE_CHAIN,
         transport: http(ACTIVE_CHAIN.rpcUrls.default.http[0]),
       });
-      const gasCurrency = toGasCurrency(ACTIVE_CHAIN.id, feeSymbol);
       let txHash: Hex;
       if (token) {
         const amount = parseUnits(sendAmount, token.decimals);
-        txHash = await client.writeContract({
+        txHash = await writeContractWithFee(client, {
+          account,
           address: token.address,
           abi: ERC20_ABI,
           functionName: 'transfer',
           args: [getAddress(toAddress), amount],
-          ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
-        } as any);
+        });
       } else {
         const amount = parseUnits(sendAmount, 18);
-        txHash = await client.sendTransaction({
+        txHash = await sendTransactionWithFee(client, {
+          account,
           to: getAddress(toAddress),
           value: amount,
-          ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
-        } as any);
+        });
       }
       setHash(txHash);
       setExplorer(ACTIVE_CHAIN.blockExplorers?.default.url ?? '');
@@ -183,16 +200,9 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
               ))}
             </select>
           </div>
-          <p className="wallet-field-label">Network fee paid in</p>
-          <div className="fee-currency-row" role="group" aria-label="Fee currency">
-            {fees.map((fee) => (
-              <button key={fee.symbol} type="button" className={`fee-currency-chip${feeSymbol === fee.symbol ? ' is-selected' : ''}`} onClick={() => setFeeSymbol(fee.symbol)}>
-                {fee.symbol}
-              </button>
-            ))}
-          </div>
-          <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed. The fee currency can also be changed in Settings.</p>
-          <button className="you-connect-primary" disabled={sending || !sendTo || !sendAmount} onClick={() => void handleSend()}>
+          <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
+          <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed. Gas is paid in CELO when you have it, otherwise USDT, then USDC, then another fee currency you hold.</p>
+          <button className="you-connect-primary" disabled={sending || !sendTo || !sendAmount || networkFee.loading || Boolean(networkFee.error)} onClick={() => void handleSend()}>
             {sending ? 'Sending…' : `Send ${sendTokenLabel}`}
           </button>
         </>

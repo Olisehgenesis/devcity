@@ -5,6 +5,7 @@ import { ArrowDownToLine, ArrowUpRight, CirclePlus, Copy, ExternalLink, RefreshC
 import {
   createPublicClient,
   createWalletClient,
+  encodeFunctionData,
   formatUnits,
   getAddress,
   http,
@@ -25,6 +26,9 @@ import {
   loadLocalWallet,
   type LocalWallet,
 } from '@/lib/keystore';
+import { writeContractWithFee, type TxRequest } from '@/lib/gas';
+import { useFeeQuote } from '../hooks/useFeeQuote';
+import { FeePreview } from './wallet/FeePreview';
 import {
   getImportedWalletTokens,
   removeImportedWalletToken,
@@ -174,6 +178,59 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     [username],
   );
   const initialPricePreview = Number(liquidityUsdtAmount) / Number(liquidityTokenAmount);
+  const launchFeeRequest = useMemo<TxRequest | null>(() => {
+    if (profileToken) return null;
+    const name = (tokenName.trim() || `${username || 'Your name'}.devcity.fun`).slice(0, 32);
+    const symbol = (tokenSymbol.trim() || normalizedUsername).toUpperCase();
+    if (name.length < 2 || !/^[A-Z0-9]{2,10}$/.test(symbol)) return null;
+    return {
+      to: CELO_SEPOLIA.profileTokenFactory as Address,
+      data: encodeFunctionData({ abi: PROFILE_FACTORY_ABI, functionName: 'createToken', args: [name, symbol, 'https://devcity.fun/token'] }),
+    };
+  }, [normalizedUsername, profileToken, tokenName, tokenSymbol, username]);
+  const launchFee = useFeeQuote(wallet.address, launchFeeRequest);
+  const tipFeeRequest = useMemo<TxRequest | null>(() => {
+    if (!profileToken || !isAddress(recipient) || !tipAmount) return null;
+    try {
+      const amount = parseUnits(tipAmount, profileToken.decimals);
+      if (amount <= BigInt(0)) return null;
+      return {
+        to: profileToken.address,
+        data: encodeFunctionData({ abi: PROFILE_TOKEN_ABI, functionName: 'tip', args: [getAddress(recipient), amount] }),
+      };
+    } catch {
+      return null;
+    }
+  }, [profileToken, recipient, tipAmount]);
+  const tipFee = useFeeQuote(wallet.address, tipFeeRequest);
+  const buyFeeRequest = useMemo<TxRequest | null>(() => {
+    if (!profileToken?.poolCreated || !buyUsdtAmount) return null;
+    try {
+      const amount = parseUnits(buyUsdtAmount, 6);
+      if (amount <= BigInt(0)) return null;
+      return {
+        to: profileToken.address,
+        data: encodeFunctionData({ abi: PROFILE_TOKEN_ABI, functionName: 'buyWithUSDT', args: [amount, BigInt(0), BigInt(0)] }),
+      };
+    } catch {
+      return null;
+    }
+  }, [buyUsdtAmount, profileToken]);
+  const buyFee = useFeeQuote(wallet.address, buyFeeRequest);
+  const sellFeeRequest = useMemo<TxRequest | null>(() => {
+    if (!profileToken?.poolCreated || !sellTokenAmount) return null;
+    try {
+      const amount = parseUnits(sellTokenAmount, profileToken.decimals);
+      if (amount <= BigInt(0)) return null;
+      return {
+        to: profileToken.address,
+        data: encodeFunctionData({ abi: PROFILE_TOKEN_ABI, functionName: 'sellForUSDT', args: [amount, BigInt(0), BigInt(0)] }),
+      };
+    } catch {
+      return null;
+    }
+  }, [profileToken, sellTokenAmount]);
+  const sellFee = useFeeQuote(wallet.address, sellFeeRequest);
 
   const loadTokens = useCallback(async () => {
     setError('');
@@ -390,7 +447,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     setTransactionHash('');
     try {
       const client = await walletClient();
-      const hash = await client.writeContract({
+      const hash = await writeContractWithFee(client, {
         address: CELO_SEPOLIA.profileTokenFactory as Address,
         abi: PROFILE_FACTORY_ABI,
         functionName: 'createToken',
@@ -452,7 +509,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     setTransactionHash('');
     try {
       const client = await walletClient();
-      const hash = await client.writeContract({
+      const hash = await writeContractWithFee(client, {
         address: profileToken.address,
         abi: PROFILE_TOKEN_ABI,
         functionName: 'tip',
@@ -492,7 +549,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
       const minimumTokensOut = minimumOutFromSpot(amountIn, profileToken.price ?? 0, profileToken.decimals, true);
       const client = await walletClient();
       if (allowance < amountIn) {
-        const approval = await client.writeContract({
+        const approval = await writeContractWithFee(client, {
           address: SEPOLIA_USDT,
           abi: ERC20_ABI,
           functionName: 'approve',
@@ -500,7 +557,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         });
         await waitForSuccess(approval);
       }
-      const hash = await client.writeContract({
+      const hash = await writeContractWithFee(client, {
         address: profileToken.address,
         abi: PROFILE_TOKEN_ABI,
         functionName: 'buyWithUSDT',
@@ -537,7 +594,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     try {
       const minimumUsdtOut = minimumOutFromSpot(amountIn, profileToken.price ?? 0, profileToken.decimals, false);
       const client = await walletClient();
-      const hash = await client.writeContract({
+      const hash = await writeContractWithFee(client, {
         address: profileToken.address,
         abi: PROFILE_TOKEN_ABI,
         functionName: 'sellForUSDT',
@@ -565,7 +622,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     setTransactionHash('');
     try {
       const client = await walletClient();
-      const hash = await client.writeContract({
+      const hash = await writeContractWithFee(client, {
         address: profileToken.address,
         abi: PROFILE_TOKEN_ABI,
         functionName: 'setTokenURI',
@@ -626,7 +683,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         publicClient.readContract({ address: SEPOLIA_USDT, abi: ERC20_ABI, functionName: 'allowance', args: [wallet.address as Address, factory] }),
       ]);
       if (tokenAllowance < tokenAmount) {
-        const tokenApproval = await client.writeContract({
+        const tokenApproval = await writeContractWithFee(client, {
           address: profileToken.address,
           abi: ERC20_ABI,
           functionName: 'approve',
@@ -635,7 +692,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         await waitForSuccess(tokenApproval);
       }
       if (usdtAllowance < usdtAmount) {
-        const usdtApproval = await client.writeContract({
+        const usdtApproval = await writeContractWithFee(client, {
           address: SEPOLIA_USDT,
           abi: ERC20_ABI,
           functionName: 'approve',
@@ -644,13 +701,13 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         await waitForSuccess(usdtApproval);
       }
       const hash = isInitialPool
-        ? await client.writeContract({
+        ? await writeContractWithFee(client, {
           address: factory,
           abi: PROFILE_FACTORY_ABI,
           functionName: 'createPoolAndAddLiquidityAtPrice',
           args: [amount0, amount1, BigInt(0), BigInt(0), initialSqrtPriceX96, deadline],
         })
-        : await client.writeContract({
+        : await writeContractWithFee(client, {
           address: factory,
           abi: PROFILE_FACTORY_ABI,
           functionName: 'addLiquidity',
@@ -804,7 +861,8 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <input id="profile-token-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
                 </div>
               )}
-              <button className="you-connect-primary" disabled={operation === 'launch'} onClick={() => void launchToken()}>
+              <FeePreview quote={launchFee.quote} error={launchFee.error} loading={launchFee.loading} />
+              <button className="you-connect-primary" disabled={operation === 'launch' || launchFee.loading || Boolean(launchFee.error)} onClick={() => void launchToken()}>
                 {operation === 'launch' ? 'Launching on Sepolia…' : `Launch ${tokenSymbol || normalizedUsername || 'your'} token`}
               </button>
               <p className="wallet-token-footnote">Launching requires a Celo Sepolia transaction and network fees. Your token is named from your handle and saved to your profile.</p>
@@ -849,7 +907,8 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                       <input id="profile-token-buy-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
                     </div>
                   )}
-                  <button className="you-connect-primary" disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount} onClick={() => void buyProfileToken()}>
+                  <FeePreview quote={buyFee.quote} error={buyFee.error} loading={buyFee.loading} />
+                  <button className="you-connect-primary" disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || buyFee.loading || Boolean(buyFee.error)} onClick={() => void buyProfileToken()}>
                     {operation === 'buy' ? 'Buying…' : `Buy ${profileToken.symbol}`}
                   </button>
                   <label className="wallet-field-label" htmlFor="profile-token-sell-amount">Sell {profileToken.symbol}</label>
@@ -860,7 +919,8 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                       <input id="profile-token-sell-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
                     </div>
                   )}
-                  <button className="you-connect-secondary" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount} onClick={() => void sellProfileToken()}>
+                  <FeePreview quote={sellFee.quote} error={sellFee.error} loading={sellFee.loading} />
+                  <button className="you-connect-secondary" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || sellFee.loading || Boolean(sellFee.error)} onClick={() => void sellProfileToken()}>
                     {operation === 'sell' ? 'Selling…' : `Sell ${profileToken.symbol} for USDT`}
                   </button>
                   <p className="wallet-token-footnote">No protocol trade tax. Trades use a 5% minimum-receive tolerance against the displayed spot price; large price moves or price impact can make a trade revert.</p>
@@ -884,7 +944,8 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                     <input id="profile-token-send-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
                   </div>
                 )}
-                <button className="you-connect-primary" disabled={operation === 'tip' || !recipient || !tipAmount} onClick={() => void tipProfileToken()}>
+                <FeePreview quote={tipFee.quote} error={tipFee.error} loading={tipFee.loading} />
+                <button className="you-connect-primary" disabled={operation === 'tip' || !recipient || !tipAmount || tipFee.loading || Boolean(tipFee.error)} onClick={() => void tipProfileToken()}>
                   {operation === 'tip' ? 'Sending…' : <><ArrowUpRight size={16} /> Send {profileToken.symbol}</>}
                 </button>
               </div>

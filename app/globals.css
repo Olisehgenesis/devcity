@@ -5,7 +5,7 @@
 :root {
   --ink: #30211d;
   --ink-2: #231713;
-  --muted: #786a60;
+  --muted: #4e433c;
   --map-base: #e9e4d5;
   --lime: #b8ce91;
   --coral: #b86543;
@@ -2479,7 +2479,46 @@ h1, h2, h3, p { margin: 0; }
 .drop-sheet-meta span { display: inline-flex; align-items: center; gap: 5px; }
 .drop-sheet-content .claim-button { max-width: 360px; }
 .drop-sheet-content .prototype-note { align-self: stretch; }
-.claim-button:disabled { cursor: wait; opacity: .75; transform: none; }
+.claim-flow-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+.claim-flow-status.is-ready { color: var(--ink); }
+.claim-flow-status.is-too-far,
+.claim-flow-status.is-failed,
+.claim-flow-status.is-permission-required,
+.claim-flow-status.is-location-unavailable { color: var(--coral); }
+.claim-flow-status.is-success { color: #3f6b4a; }
+.claim-location-retry { margin: 0 auto 12px; }
+.claim-button:disabled { cursor: not-allowed; opacity: .75; transform: none; }
+.balance-skeleton {
+  display: inline-block;
+  width: 7ch;
+  height: 0.95em;
+  border-radius: 8px;
+  vertical-align: middle;
+  background: linear-gradient(90deg, var(--surface) 20%, #fff 50%, var(--surface) 80%);
+  background-size: 200% 100%;
+  animation: balance-shimmer 1.15s ease-in-out infinite;
+}
+.balance-skeleton-lg { width: 9ch; height: 1.35em; }
+.wallet-retry {
+  border: 0;
+  background: transparent;
+  color: var(--coral);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.wallet-fee-preview { margin: 8px 0 12px; color: var(--ink); font-size: 13px; font-weight: 700; }
+@keyframes balance-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+.claim-button.is-signing:disabled { cursor: wait; }
 
 /* ---------- Feed, chat, and people sheets ---------- */
 

@@ -5,9 +5,13 @@ import { formatUsd } from '../../hooks/useUsdPrices';
 import type { ProfileTokenSummary } from '../../hooks/useProfileToken';
 import type { HeldTokenView } from './types';
 
+type HoldingStatus = 'loading' | 'ready' | 'error';
+
 interface WalletHomeProps {
   celoBalance: string;
-  stableBalances: Record<string, number>;
+  stableBalances: Record<string, number | null>;
+  holdingStatus?: Partial<Record<'CELO' | 'USDT' | 'USDC' | 'cUSD', HoldingStatus>>;
+  onRetryHolding?: (symbol: 'CELO' | 'USDT' | 'USDC' | 'cUSD') => void;
   usdPrices: Record<string, number>;
   profileToken?: ProfileTokenSummary | null;
   profileLoading?: boolean;
@@ -28,10 +32,15 @@ function usdFor(prices: Record<string, number>, symbol: string, amount: number) 
   return amount * price;
 }
 
-export function WalletHome({ celoBalance, stableBalances, usdPrices, profileToken, profileLoading, onOpenToken, onOpenProfile, children }: WalletHomeProps) {
-  const celoAmount = Number(celoBalance);
-  const celoUsd = usdFor(usdPrices, 'CELO', celoAmount);
-  const heldStables = STABLES.filter((token) => (stableBalances[token.symbol] ?? 0) > 0);
+export function WalletHome({ celoBalance, stableBalances, holdingStatus, onRetryHolding, usdPrices, profileToken, profileLoading, onOpenToken, onOpenProfile, children }: WalletHomeProps) {
+  const celoStatus = holdingStatus?.CELO ?? 'ready';
+  const celoAmount = celoStatus === 'ready' ? Number(celoBalance) : null;
+  const celoUsd = celoAmount != null ? usdFor(usdPrices, 'CELO', celoAmount) : null;
+  const heldStables = STABLES.filter((token) => {
+    const status = holdingStatus?.[token.symbol] ?? 'ready';
+    if (status !== 'ready') return true;
+    return (stableBalances[token.symbol] ?? 0) > 0;
+  });
   const profileBalance = profileToken ? Number(profileToken.balance) / 10 ** profileToken.decimals : 0;
 
   return (
@@ -52,14 +61,17 @@ export function WalletHome({ celoBalance, stableBalances, usdPrices, profileToke
           <span className="wallet-token-mark">C</span>
           <span className="wallet-token-name">
             <strong>CELO</strong>
-            <small>{celoUsd != null ? celoBalance : 'Celo'}</small>
+            <small>{celoStatus === 'loading' ? <span className="balance-skeleton" /> : celoStatus === 'error' ? 'Could not load' : celoUsd != null ? celoBalance : 'Celo'}</small>
           </span>
-          <strong className="wallet-token-balance">{celoUsd != null ? formatUsd(celoUsd) : celoBalance}</strong>
+          <strong className="wallet-token-balance">
+            {celoStatus === 'loading' ? <span className="balance-skeleton" /> : celoStatus === 'error' ? <button type="button" className="wallet-retry" onClick={(event) => { event.stopPropagation(); onRetryHolding?.('CELO'); }}>Retry</button> : celoUsd != null ? formatUsd(celoUsd) : celoBalance}
+          </strong>
         </button>
         {heldStables.map((token) => {
+          const status = holdingStatus?.[token.symbol] ?? 'ready';
           const amount = stableBalances[token.symbol];
-          const usd = usdFor(usdPrices, token.symbol, amount);
-          const amountLabel = amount.toFixed(token.digits);
+          const usd = amount != null ? usdFor(usdPrices, token.symbol, amount) : null;
+          const amountLabel = amount != null ? amount.toFixed(token.digits) : '';
           return (
             <button
               type="button"
@@ -76,9 +88,11 @@ export function WalletHome({ celoBalance, stableBalances, usdPrices, profileToke
               <span className={`wallet-token-mark wallet-token-${token.symbol.toLowerCase()}`}>{token.symbol.slice(0, 1)}</span>
               <span className="wallet-token-name">
                 <strong>{token.symbol}</strong>
-                <small>{usd != null ? amountLabel : token.name}</small>
+                <small>{status === 'loading' ? <span className="balance-skeleton" /> : status === 'error' ? 'Could not load' : usd != null ? amountLabel : token.name}</small>
               </span>
-              <strong className="wallet-token-balance">{usd != null ? formatUsd(usd) : amountLabel}</strong>
+              <strong className="wallet-token-balance">
+                {status === 'loading' ? <span className="balance-skeleton" /> : status === 'error' ? <button type="button" className="wallet-retry" onClick={(event) => { event.stopPropagation(); onRetryHolding?.(token.symbol); }}>Retry</button> : usd != null ? formatUsd(usd) : amountLabel}
+              </strong>
             </button>
           );
         })}
@@ -90,7 +104,7 @@ export function WalletHome({ celoBalance, stableBalances, usdPrices, profileToke
               <small>{profileToken.name}</small>
             </span>
             <strong className="wallet-token-balance">
-              {profileBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {profileLoading ? <span className="balance-skeleton" /> : profileBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </strong>
           </button>
         )}

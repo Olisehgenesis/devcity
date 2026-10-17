@@ -27,31 +27,44 @@ export function WalletActivity({ address }: { address: string }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
   const [error, setError] = useState('');
 
+  const [reloadKey, setReloadKey] = useState(0);
+
   useEffect(() => {
     const controller = new AbortController();
-    setStatus('loading');
+    setStatus((current) => current === 'ready' ? current : 'loading');
     fetch(`/api/wallet/transactions?userAddress=${encodeURIComponent(address)}`, { signal: controller.signal })
       .then(async (response) => {
         const data = await response.json() as { transactions?: ActivityItem[]; error?: string };
         if (!response.ok) throw new Error(data.error || 'Could not load activity.');
         const next = data.transactions ?? [];
         setItems(next);
+        setError('');
         setStatus(next.length ? 'ready' : 'empty');
       })
       .catch((loadError: unknown) => {
         if (loadError instanceof DOMException && loadError.name === 'AbortError') return;
         setError(loadError instanceof Error ? loadError.message : 'Could not load activity.');
-        setStatus('error');
+        setStatus((current) => current === 'ready' ? 'ready' : 'error');
       });
     return () => controller.abort();
-  }, [address]);
+  }, [address, reloadKey]);
 
   return (
     <section className="wallet-activity" aria-labelledby="wallet-activity-title">
       <h3 id="wallet-activity-title">Activity</h3>
       <p className="you-note">Tips, claims, and tokens recorded for this wallet. Profile activity on your city profile stays separate.</p>
-      {status === 'loading' && <p className="you-note">Loading activity…</p>}
-      {status === 'error' && <p className="you-error" role="alert">{error}</p>}
+      {status === 'loading' && (
+        <ul className="wallet-activity-list" aria-hidden="true">
+          <li><span className="balance-skeleton balance-skeleton-lg" /></li>
+          <li><span className="balance-skeleton balance-skeleton-lg" /></li>
+          <li><span className="balance-skeleton" /></li>
+        </ul>
+      )}
+      {error && (
+        <p className="you-error" role="alert">
+          {error} <button type="button" className="wallet-retry" onClick={() => setReloadKey((value) => value + 1)}>Retry</button>
+        </p>
+      )}
       {status === 'empty' && <p className="you-note">No recorded activity yet. Claims and tips will show up here.</p>}
       {status === 'ready' && (
         <ul className="wallet-activity-list">

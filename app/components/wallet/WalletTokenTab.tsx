@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Sparkles, KeyRound } from 'lucide-react';
-import { createWalletClient, createPublicClient, http, type Address, type Hex } from 'viem';
+import { createWalletClient, createPublicClient, encodeFunctionData, http, type Address, type Hex } from 'viem';
+import { writeContractWithFee, type TxRequest } from '@/lib/gas';
+import { useFeeQuote } from '../../hooks/useFeeQuote';
+import { FeePreview } from './FeePreview';
 import { privateKeyToAccount } from 'viem/accounts';
 import { CELO_SEPOLIA, CHAIN } from '@/lib/chain';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
@@ -32,6 +35,15 @@ export function WalletTokenTab({ address, pinProtected, unlockedKey, handle, han
 
   const effectiveKey = unlockedKey ?? localKey;
   const tokenName = `${handle}.devcity.fun`;
+  const feeRequest = useMemo<TxRequest>(() => ({
+    to: CELO_SEPOLIA.profileTokenFactory as Address,
+    data: encodeFunctionData({
+      abi: PROFILE_FACTORY_ABI,
+      functionName: 'createToken',
+      args: [tokenName, handleTicker, ''],
+    }),
+  }), [handleTicker, tokenName]);
+  const networkFee = useFeeQuote(effectiveKey ? address : null, feeRequest);
 
   async function handleUnlock() {
     if (!pin) {
@@ -69,7 +81,8 @@ export function WalletTokenTab({ address, pinProtected, unlockedKey, handle, han
         chain: CHAIN,
         transport: http(CELO_SEPOLIA.rpcUrl),
       });
-      const txHash = await client.writeContract({
+      const txHash = await writeContractWithFee(client, {
+        account,
         address: CELO_SEPOLIA.profileTokenFactory as Address,
         abi: PROFILE_FACTORY_ABI,
         functionName: 'createToken',
@@ -144,9 +157,12 @@ export function WalletTokenTab({ address, pinProtected, unlockedKey, handle, han
               </button>
             </div>
           ) : (
-            <button className="you-connect-primary" disabled={launching} onClick={() => void handleLaunch()}>
-              <Sparkles size={16} /> {launching ? 'Launching…' : `Launch ${handleTicker} token`}
-            </button>
+            <>
+              <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
+              <button className="you-connect-primary" disabled={launching || networkFee.loading || Boolean(networkFee.error)} onClick={() => void handleLaunch()}>
+                <Sparkles size={16} /> {launching ? 'Launching…' : `Launch ${handleTicker} token`}
+              </button>
+            </>
           )}
         </>
       )}

@@ -10,14 +10,31 @@ interface ScanSheetProps {
   open: boolean;
   onClose: () => void;
   onTip: (target: TipTarget) => void;
+  onOpenDrop?: (dropId: string) => void;
+}
+
+export function dropIdFromQr(value: string): string | null {
+  const trimmed = value.trim();
+  const path = trimmed.match(/\/drop\/([0-9a-fA-F-]{8,})/);
+  if (path) return path[1];
+  if (trimmed.toLowerCase().startsWith("devcity:drop:")) return trimmed.slice("devcity:drop:".length);
+  try {
+    const parsed = JSON.parse(trimmed) as { type?: string; kind?: string; id?: string };
+    if ((parsed.type === "drop" || parsed.kind === "drop") && parsed.id) return parsed.id;
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function addressFromQr(value: string) {
   return value.match(/0x[a-fA-F0-9]{40}/)?.[0] ?? null;
 }
 
-export function ScanSheet({ open, onClose, onTip }: ScanSheetProps) {
+export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const onOpenDropRef = useRef(onOpenDrop);
+  onOpenDropRef.current = onOpenDrop;
   const [cameraError, setCameraError] = useState('');
   const [scannedValue, setScannedValue] = useState('');
   const [manualValue, setManualValue] = useState('');
@@ -46,10 +63,16 @@ export function ScanSheet({ open, onClose, onTip }: ScanSheetProps) {
         const reader = new BrowserQRCodeReader();
         const controls = await reader.decodeFromVideoDevice(undefined, video, (result) => {
           if (result && !cancelled) {
-            setScannedValue(result.getText());
+            const text = result.getText();
+            const dropId = dropIdFromQr(text);
             cancelled = true;
             setScanning(false);
             controlsStop();
+            if (dropId) {
+              onOpenDropRef.current?.(dropId);
+              return;
+            }
+            setScannedValue(text);
           }
         });
         function controlsStop() {
@@ -71,7 +94,8 @@ export function ScanSheet({ open, onClose, onTip }: ScanSheetProps) {
     };
   }, [open]);
 
-  const scannedAddress = addressFromQr(scannedValue);
+  const scannedDropId = dropIdFromQr(scannedValue);
+  const scannedAddress = scannedDropId ? null : addressFromQr(scannedValue);
   const link = (() => {
     try {
       const parsed = new URL(scannedValue);
@@ -110,8 +134,13 @@ export function ScanSheet({ open, onClose, onTip }: ScanSheetProps) {
         {scannedValue ? (
           <div className="scan-result" role="status">
             <span className="scan-result-icon"><QrCode size={22} /></span>
-            <strong>{scannedAddress ? 'Wallet found' : link ? 'Link found' : 'QR code found'}</strong>
+            <strong>{scannedDropId ? 'Drop found' : scannedAddress ? 'Wallet found' : link ? 'Link found' : 'QR code found'}</strong>
             <p>{scannedAddress ?? scannedValue}</p>
+            {scannedDropId && (
+              <button className="claim-button" onClick={() => onOpenDrop?.(scannedDropId)}>
+                Open claim <Sparkles size={16} />
+              </button>
+            )}
             {scannedAddress && (
               <button
                 className="claim-button"

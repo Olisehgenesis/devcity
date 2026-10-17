@@ -12,6 +12,9 @@ export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: n
 }
 
 export function formatDistance(meters: number): string {
+  if (!Number.isFinite(meters) || meters < 0) return "unknown distance";
   if (meters < 1000) return `${Math.round(meters)} m`;
-  return `${(meters / 1000).toFixed(1)} km`;
+  const km = meters / 1000;
+  if (km < 10) return `${km.toFixed(1)} km`;
+  return `${Math.round(km).toLocaleString("en-US")} km`;
 }

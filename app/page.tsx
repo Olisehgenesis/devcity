@@ -8,6 +8,7 @@ import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   ArrowUpRight,
+  Bell,
   Gift,
   LocateFixed,
   MapPin,
@@ -34,7 +35,13 @@ import { dicebearAvatarUrl } from "./lib/avatars";
 import { GameIcon } from "./components/game/GameIcons";
 import { BuildingSprite } from "./components/game/Buildings";
 import { useGameStore } from "./lib/game-store";
-import { CLAIM_RADIUS_M, distanceMeters, formatDistance } from "@/lib/geo";
+import { encodeFunctionData, type Address } from "viem";
+import { CELO_SEPOLIA } from "@/lib/chain";
+import { writeContractWithFee } from "@/lib/gas";
+import { useFeeQuote } from "./hooks/useFeeQuote";
+import { FeePreview } from "./components/wallet/FeePreview";
+import { CLAIM_RADIUS_M, distanceMeters } from "@/lib/geo";
+import { claimDistanceSentence, claimFailureMessage, claimNeedsPin, resolveClaimView, type ClaimLocationStatus } from "@/lib/claim-eligibility";
 import { TrendingSheet } from "./components/TrendingSheet";
 import { LeaderboardSheet } from "./components/LeaderboardSheet";
 import { NotificationSheet } from "./components/NotificationSheet";
@@ -62,7 +69,7 @@ type CityMarker = {
   raw?: EventApiItem;
 };
 type FilterKind = "all" | MarkerKind;
-type NavTab = "map" | "feed" | "chat" | "wallet" | "people";
+type NavTab = "map" | "feed" | "chat" | "wallet";
 
 type EventApiItem = {
   id: string;
@@ -198,6 +205,21 @@ function MarkerIcon({ kind, size = 16 }: { kind: MarkerKind; size?: number }) {
   return <MapPin size={size} strokeWidth={2.2} />;
 }
 
+const CLAIM_FEE_ABI = [{
+  type: "function",
+  name: "claim",
+  stateMutability: "nonpayable",
+  inputs: [
+    { name: "dropId", type: "bytes32" },
+    { name: "claimant", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+    { name: "signature", type: "bytes" },
+  ],
+  outputs: [],
+}] as const;
+
 export default function CityHome() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -238,6 +260,10 @@ export default function CityHome() {
   const [claimPin, setClaimPin] = useState("");
   const [claimError, setClaimError] = useState("");
   const [claimUnlocked, setClaimUnlocked] = useState(false);
+  const [claimAskPin, setClaimAskPin] = useState(false);
+  const [claimLocating, setClaimLocating] = useState(false);
+  const [claimSigning, setClaimSigning] = useState(false);
+  const [claimOutcome, setClaimOutcome] = useState<"success" | "failed" | null>(null);
   const [chainClaims, setChainClaims] = useState<Record<string, boolean>>({});
   const [chainCounts, setChainCounts] = useState<Record<string, number>>({});
   const [eventMarkers, setEventMarkers] = useState<CityMarker[]>([]);
@@ -302,10 +328,17 @@ export default function CityHome() {
       return;
     }
     let active = true;
-    void import("@/lib/unlocked-wallet").then(({ getUnlockedPrivateKey }) => {
-      if (active) setClaimUnlocked(Boolean(getUnlockedPrivateKey(feedUserAddress)));
-    });
-    return () => { active = false; };
+    const syncUnlock = () => {
+      void import("@/lib/unlocked-wallet").then(({ getUnlockedPrivateKey }) => {
+        if (active) setClaimUnlocked(Boolean(getUnlockedPrivateKey(feedUserAddress)));
+      });
+    };
+    syncUnlock();
+    window.addEventListener("focus", syncUnlock);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", syncUnlock);
+    };
   }, [dropSheetOpen, feedUserAddress]);
 
   const refreshClaimStatus = useCallback(async () => {
@@ -376,11 +409,77 @@ export default function CityHome() {
   const selectedDropId = selected?.kind === "drop" ? selected.id.replace(/^drop-/, "") : "";
   const isClaimed = Boolean(chainClaims[selectedDropId]);
   const selectedClaimedCount = selected?.kind === "drop" ? (chainCounts[selectedDropId] ?? selected.claimedCount) : selected?.claimedCount;
-  const claimDistanceM = selected?.kind === "drop" && myPosition
-    ? distanceMeters(myPosition[1], myPosition[0], selected.latitude, selected.longitude)
-    : null;
-  const withinClaimRange = claimDistanceM != null && claimDistanceM <= CLAIM_RADIUS_M;
+  const claimLocationStatus: ClaimLocationStatus = locationState === "denied"
+    ? "denied"
+    : locationState === "unavailable"
+      ? "unavailable"
+      : locationState === "inside" || locationState === "outside"
+        ? "ready"
+        : "checking";
+  const claimView = resolveClaimView({
+    claimed: isClaimed || claimOutcome === "success",
+    locating: claimLocating,
+    signing: claimSigning,
+    locationStatus: claimLocationStatus,
+    userLat: myPosition ? myPosition[1] : null,
+    userLng: myPosition ? myPosition[0] : null,
+    dropLat: selected?.kind === "drop" ? selected.latitude : Number.NaN,
+    dropLng: selected?.kind === "drop" ? selected.longitude : Number.NaN,
+    failedMessage: claimOutcome === "failed" ? (claimError || "Claim failed. Nothing was claimed.") : null,
+  });
   const connected = hydrated && (isConnected || (feedProfileStatus === "ready" && Boolean(feedUserAddress)));
+  const claimFeeRequest = selected?.kind === "drop"
+    ? {
+      to: CELO_SEPOLIA.dropClaim as Address,
+      data: encodeFunctionData({
+        abi: CLAIM_FEE_ABI,
+        functionName: "claim",
+        args: [`0x${"0".repeat(64)}`, "0x0000000000000000000000000000000000000000", BigInt(0), BigInt(0), BigInt(0), "0x"],
+      }),
+    }
+    : null;
+  const claimFee = useFeeQuote(claimView.state === "ready" ? feedUserAddress : null, claimFeeRequest);
+
+  useEffect(() => {
+    setClaimAskPin(false);
+    setClaimPin("");
+    setClaimError("");
+    setClaimOutcome(null);
+    setClaimLocating(false);
+    setClaimSigning(false);
+  }, [selectedDropId]);
+
+  useEffect(() => {
+    function applyCityPath(path: string, fromHistory: boolean) {
+      const drop = path.match(/^\/drop\/([^/]+)/);
+      const event = path.match(/^\/event\/([^/]+)/);
+      const user = path.match(/^\/u\/([^/]+)/);
+      if (!drop && !event && !user) {
+        if (fromHistory) {
+          setDropSheetOpen(false);
+          setYouOpen(false);
+          setSelectedId(null);
+        }
+        return;
+      }
+      setWalletOpen(false);
+      setScanOpen(false);
+      setSocialView(null);
+      setDropSheetOpen(Boolean(drop));
+      setYouOpen(Boolean(user));
+      if (drop) {
+        setSelectedId(`drop-${decodeURIComponent(drop[1])}`);
+        setCardClosed(false);
+      } else if (event) {
+        setSelectedId(`event-${decodeURIComponent(event[1])}`);
+        setCardClosed(false);
+      }
+    }
+    applyCityPath(window.location.pathname, false);
+    const onPop = () => applyCityPath(window.location.pathname, true);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
@@ -394,7 +493,23 @@ export default function CityHome() {
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-    map.on("click", (event) => onMapTapRef.current(event.lngLat.lng, event.lngLat.lat));
+    let pressTimer: number | null = null;
+    const cancelPress = () => {
+      if (pressTimer != null) window.clearTimeout(pressTimer);
+      pressTimer = null;
+    };
+    const startPress = (lng: number, lat: number) => {
+      cancelPress();
+      pressTimer = window.setTimeout(() => {
+        pressTimer = null;
+        onMapTapRef.current(lng, lat);
+      }, 550);
+    };
+    map.on("mousedown", (event) => startPress(event.lngLat.lng, event.lngLat.lat));
+    map.on("touchstart", (event) => startPress(event.lngLat.lng, event.lngLat.lat));
+    map.on("mouseup", cancelPress);
+    map.on("touchend", cancelPress);
+    map.on("movestart", cancelPress);
     map.on("load", () => {
       setMapReady(true);
       setMapError(false);
@@ -580,15 +695,12 @@ export default function CityHome() {
       ({ coords }) => {
         const position: [number, number] = [coords.longitude, coords.latitude];
         setMyPosition(position);
+        const inside = isInsideMumbai(position[0], position[1]);
+        setLocationState(inside ? "inside" : "outside");
         if (settled) return;
         settled = true;
-        if (isInsideMumbai(position[0], position[1])) {
-          setLocationState("inside");
-          mapRef.current?.flyTo({ center: position, zoom: 16, duration: 1100 });
-        } else {
-          setLocationState("outside");
-          setOutsidePromptOpen(true);
-        }
+        if (inside) mapRef.current?.flyTo({ center: position, zoom: 16, duration: 1100 });
+        else setOutsidePromptOpen(true);
       },
       (error) => {
         if (settled) return;
@@ -639,47 +751,104 @@ export default function CityHome() {
     return marker.tokenSymbol ?? "TOKENS";
   }
 
+  function readFreshClaimPosition(): Promise<{ lat: number; lng: number }> {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(Object.assign(new Error("Location is unavailable."), { claimLocation: "unavailable" as const }));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
+            reject(Object.assign(new Error("Location is unavailable."), { claimLocation: "unavailable" as const }));
+            return;
+          }
+          resolve({ lat: coords.latitude, lng: coords.longitude });
+        },
+        (error) => {
+          const denied = error.code === error.PERMISSION_DENIED;
+          reject(Object.assign(
+            new Error(denied ? "Location permission is required." : "Location is unavailable."),
+            { claimLocation: denied ? "denied" as const : "unavailable" as const },
+          ));
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      );
+    });
+  }
+
   async function handleClaim() {
-    if (!selected || selected.kind !== "drop") return;
+    if (!selected || selected.kind !== "drop" || claimSigning || claimLocating) return;
     const myAddress = feedUserAddress;
     if (!myAddress) {
       openWallet();
-      setClaimError("Sign in and set up this account’s wallet before claiming.");
       return;
     }
-    if (!myPosition) {
-      setClaimError("Turn on location. You need to be within 100 m of this drop to claim.");
-      requestLocation();
-      return;
-    }
-    const metersAway = distanceMeters(myPosition[1], myPosition[0], selected.latitude, selected.longitude);
-    if (metersAway > CLAIM_RADIUS_M) {
-      setClaimError(`You are ${formatDistance(metersAway)} away. Get within 100 m of this drop to claim.`);
-      return;
-    }
-    setClaiming(true);
+    const dropId = selected.id.replace(/^drop-/, "");
+    const dropLat = selected.latitude;
+    const dropLng = selected.longitude;
     setClaimError("");
+    setClaimOutcome(null);
+    setClaimLocating(true);
+    let fresh: { lat: number; lng: number };
+    try {
+      fresh = await readFreshClaimPosition();
+    } catch (error) {
+      const where = (error as { claimLocation?: "denied" | "unavailable" }).claimLocation ?? "unavailable";
+      setMyPosition(null);
+      setLocationState(where === "denied" ? "denied" : "unavailable");
+      setLocationPromptOpen(true);
+      setClaimLocating(false);
+      return;
+    }
+    setMyPosition([fresh.lng, fresh.lat]);
+    setLocationState(isInsideMumbai(fresh.lng, fresh.lat) ? "inside" : "outside");
+    const metersAway = distanceMeters(fresh.lat, fresh.lng, dropLat, dropLng);
+    if (metersAway > CLAIM_RADIUS_M) {
+      setClaimLocating(false);
+      return;
+    }
     try {
       const { getUnlockedPrivateKey, rememberUnlockedWallet } = await import("@/lib/unlocked-wallet");
       let key = getUnlockedPrivateKey(myAddress);
-      if (!key) {
-        if (!/^\d{6}$/.test(claimPin)) throw new Error("Enter your 6-digit wallet PIN. Your wallet has to sign this claim.");
+      const pinStep = claimNeedsPin(Boolean(key), claimPin);
+      if (pinStep === "ask") {
+        setClaimAskPin(true);
+        setClaimLocating(false);
+        if (claimPin.length > 0) {
+          setClaimOutcome("failed");
+          setClaimError("Enter your 6-digit wallet PIN. Nothing was claimed.");
+        }
+        return;
+      }
+      if (pinStep === "unlock") {
         const { loadLocalWallet, decryptWithPassphrase } = await import("@/lib/keystore");
         const local = await loadLocalWallet(myAddress as `0x${string}`);
         if (!local) throw new Error("This account’s wallet is not on this device.");
-        key = (await decryptWithPassphrase(claimPin, local.encryptedPrivateKey)) as `0x${string}`;
+        try {
+          key = (await decryptWithPassphrase(claimPin, local.encryptedPrivateKey)) as `0x${string}`;
+        } catch {
+          throw new Error("That PIN didn't unlock this wallet.");
+        }
         rememberUnlockedWallet(local.address, key);
         setClaimPin("");
+        setClaimAskPin(false);
         setClaimUnlocked(true);
+      } else {
+        setClaimAskPin(false);
       }
+      if (!key) throw new Error("This account’s wallet is not unlocked.");
+      setClaimLocating(false);
+      setClaimSigning(true);
+      setClaiming(true);
       const response = await fetch("/api/claims/authorize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dropId: selected.id.replace(/^drop-/, ""),
+          dropId,
           userAddress: myAddress,
-          lat: myPosition[1],
-          lng: myPosition[0],
+          lat: fresh.lat,
+          lng: fresh.lng,
         }),
       });
       const data = await response.json().catch(() => ({})) as {
@@ -706,33 +875,27 @@ export default function CityHome() {
       const transport = http(CELO_SEPOLIA.rpcUrl);
       const walletClient = createWalletClient({ account, chain: celoSepolia, transport });
       const publicClient = createPublicClient({ chain: celoSepolia, transport });
-      const hash = await walletClient.writeContract({
+      const hash = await writeContractWithFee(walletClient, {
+        account,
         address: CELO_SEPOLIA.dropClaim,
-        abi: [{
-          type: "function",
-          name: "claim",
-          stateMutability: "nonpayable",
-          inputs: [
-            { name: "dropId", type: "bytes32" },
-            { name: "claimant", type: "address" },
-            { name: "amount", type: "uint256" },
-            { name: "nonce", type: "uint256" },
-            { name: "deadline", type: "uint256" },
-            { name: "signature", type: "bytes" },
-          ],
-          outputs: [],
-        }] as const,
+        abi: CLAIM_FEE_ABI,
         functionName: "claim",
         args: [data.dropIdBytes32, data.claimer, BigInt(data.amount), BigInt(data.nonce), BigInt(data.expiresAt), data.signature],
       });
-      await publicClient.waitForTransactionReceipt({ hash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") throw new Error("The claim transaction failed. Nothing was claimed.");
       claim(selected.id, selected.name, tokenFor(selected), selected.amount ?? "1", hash);
-      setChainClaims((current) => ({ ...current, [selected.id.replace(/^drop-/, "")]: true }));
+      setChainClaims((current) => ({ ...current, [dropId]: true }));
+      setClaimOutcome("success");
+      setClaimAskPin(false);
       void refreshClaimStatus();
-      setNotice(`Wallet signed the claim. ${selected.amount} ${tokenFor(selected)} is in your wallet.`);
+      setNotice(`Claim successful. ${selected.amount} ${tokenFor(selected)} is in your wallet.`);
     } catch (error) {
-      setClaimError(error instanceof Error ? error.message : "Claim failed. Try again.");
+      setClaimOutcome("failed");
+      setClaimError(claimFailureMessage(error));
     } finally {
+      setClaimLocating(false);
+      setClaimSigning(false);
       setClaiming(false);
     }
   }
@@ -772,16 +935,12 @@ export default function CityHome() {
   }
 
   function chooseTab(tab: NavTab) {
+    closeSheets(tab === "wallet" ? "wallet" : tab === "feed" || tab === "chat" ? "social" : undefined);
     setActiveTab(tab);
     setNotice("");
-    setSocialView(null);
-    setScanOpen(false);
     if (tab === "map") setFilter("all");
-    if (tab === "feed" || tab === "chat" || tab === "people") setSocialView(tab);
-    if (tab === "wallet") {
-      setYouOpen(false);
-      setWalletOpen(true);
-    }
+    if (tab === "feed" || tab === "chat") setSocialView(tab);
+    if (tab === "wallet") setWalletOpen(true);
   }
 
   function chooseFilter(nextFilter: FilterKind) {
@@ -842,6 +1001,14 @@ export default function CityHome() {
   const openCreateDrop = useCallback((location?: { lat: number; lng: number } | null) => {
     setCreateMenuOpen(false);
     setCityMenuOpen(false);
+    setYouOpen(false);
+    setWalletOpen(false);
+    setScanOpen(false);
+    setSocialView(null);
+    setDropSheetOpen(false);
+    setSearchSheetOpen(false);
+    setTipTarget(null);
+    setNotificationsOpen(false);
     setCreateDropLocation(location ?? (myPosition ? { lat: myPosition[1], lng: myPosition[0] } : null));
     setCreateDropOpen(true);
   }, [myPosition]);
@@ -853,6 +1020,14 @@ export default function CityHome() {
         openWallet();
         return;
       }
+      setYouOpen(false);
+      setWalletOpen(false);
+      setScanOpen(false);
+      setSocialView(null);
+      setDropSheetOpen(false);
+      setSearchSheetOpen(false);
+      setTipTarget(null);
+      setNotificationsOpen(false);
       setCreateDropLocation({ lat, lng });
       setCreateDropOpen(true);
     };
@@ -862,18 +1037,37 @@ export default function CityHome() {
     void refreshDrops();
   }
 
+  function rememberPath(path: string) {
+    if (window.location.pathname === path) return;
+    window.history.pushState({ devcity: path }, "", path);
+  }
+
+  function closeSheets(except?: "you" | "wallet" | "scan" | "social" | "drop" | "search" | "tip" | "create" | "notes") {
+    if (except !== "you") setYouOpen(false);
+    if (except !== "wallet") setWalletOpen(false);
+    if (except !== "scan") setScanOpen(false);
+    if (except !== "social") setSocialView(null);
+    if (except !== "drop") setDropSheetOpen(false);
+    if (except !== "search") setSearchSheetOpen(false);
+    if (except !== "tip") setTipTarget(null);
+    if (except !== "create") setCreateDropOpen(false);
+    if (except !== "notes") setNotificationsOpen(false);
+    setTrendingOpen(false);
+    setLeaderboardOpen(false);
+    setSuggestedOpen(false);
+    setActiveStory(null);
+  }
+
   function openProfile() {
+    closeSheets("you");
     setReturnToFeedAfterProfile(false);
-    setSocialView(null);
     setActiveTab("map");
-    setWalletOpen(false);
     setYouOpen(true);
+    rememberPath("/u/you");
   }
 
   function openWallet() {
-    setSocialView(null);
-    setScanOpen(false);
-    setYouOpen(false);
+    closeSheets("wallet");
     setActiveTab("wallet");
     setWalletOpen(true);
   }
@@ -962,24 +1156,27 @@ export default function CityHome() {
           <div className="map-drops-status is-error" role="status">Couldn&apos;t load drops. <button onClick={() => void refreshDrops()}>Retry</button></div>
         )}
         {!dropLoading && !dropError && dropMarkers.length === 0 && (
-          <div className="map-drops-status" role="status">No live drops yet — tap the map to create one.</div>
+          <div className="map-drops-status" role="status">No live drops yet — press and hold the map to create one.</div>
         )}
 
         <header className="topbar">
           <div className="location-heading">
             <span className="eyebrow"><span className="live-dot" /> MUMBAI IS LIVE</span>
-            <h1>Fort, Mumbai <span>⌄</span></h1>
+            <h1>Fort, Mumbai</h1>
             <p>South Mumbai{cityCount > 0 && <> <b>·</b> {cityCount} in the city</>}</p>
           </div>
           <div className="top-actions">
-            <button className="round-action" onClick={() => setSearchSheetOpen(true)} aria-label="Search the city"><Search size={18} /></button>
+            <button className="round-action" onClick={() => { closeSheets("search"); setSearchSheetOpen(true); }} aria-label="Search the city"><Search size={18} /></button>
             <button className="round-action" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">
               <GameIcon name="spark" size={20} />
             </button>
-            <button className="notification-bell round-action" onClick={() => setNotificationsOpen(true)} aria-label="Notifications" title="Notifications">
-              <GameIcon name="inbox" size={20} />
+            <button className="notification-bell round-action" onClick={() => { closeSheets("notes"); setNotificationsOpen(true); }} aria-label="Notifications" title="Notifications">
+              <Bell size={18} />
             </button>
-            <button className="invite-button" onClick={() => setNotice("Your invite link is ready to share.")}><Plus size={15} /> Invite</button>
+            <button className="invite-button" onClick={() => {
+              const link = `${window.location.origin}/`;
+              void navigator.clipboard?.writeText(link).then(() => setNotice("Invite link copied.")).catch(() => setNotice(link));
+            }}><Plus size={15} /> Invite</button>
             <button className={`top-profile-button${youOpen ? " is-active" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
               <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" />
             </button>
@@ -1007,9 +1204,9 @@ export default function CityHome() {
             {cityMenuOpen && (
               <>
                 <span className="city-hub-label">City hub</span>
-                <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setTrendingOpen(true); }}><Sparkles size={16} /> Trending</button>
-                <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setLeaderboardOpen(true); }}><Sparkles size={16} /> Leaderboard</button>
-                <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setTrendingOpen(true); }}><Sparkles size={16} /> Trending</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setLeaderboardOpen(true); }}><Sparkles size={16} /> Leaderboard</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
               </>
             )}
           </div>
@@ -1044,16 +1241,26 @@ export default function CityHome() {
           <div className="card-topline">
             <span className={`card-icon tone-${selected.color}`}><MarkerIcon kind={selected.kind} size={17} /></span>
             <span className="card-kind">{selected.kind === "drop" ? "TOKEN DROP" : selected.kind.toUpperCase()}</span>
-            <button className="card-more" onClick={() => setNotice(`${selected.name} · ${selected.distance} away`)} aria-label="More details"><ArrowUpRight size={17} /></button>
+            <button className="card-more" onClick={() => {
+              if (selected.kind === "drop") {
+                closeSheets("drop");
+                setDropSheetOpen(true);
+                rememberPath(`/drop/${selected.id.replace(/^drop-/, "")}`);
+              } else if (selected.kind === "event") {
+                rememberPath(`/event/${selected.id.replace(/^event-/, "")}`);
+              } else {
+                window.open(directionsUrl(selected), "_blank", "noopener,noreferrer");
+              }
+            }} aria-label="More details"><ArrowUpRight size={17} /></button>
             <button className="card-close" onClick={() => setCardClosed(true)} aria-label="Close details"><X size={17} /></button>
           </div>
           <h2>{selected.name}</h2>
           <p className="card-description">{selected.detail}</p>
-          <div className="card-meta"><span><MapPin size={13} /> {selected.kind === "drop" && claimDistanceM != null ? formatDistance(claimDistanceM) : selected.distance}</span>{selected.kind === "drop" && typeof selectedClaimedCount === "number" && <span className="claim-count">{selectedClaimedCount} claimed</span>}</div>
+          <div className="card-meta"><span><MapPin size={13} /> {selected.kind === "drop" ? (claimView.distanceM != null ? claimDistanceSentence(claimView.distanceM) : claimView.title) : selected.distance}</span>{selected.kind === "drop" && typeof selectedClaimedCount === "number" && <span className="claim-count">{selectedClaimedCount} claimed</span>}</div>
           {selected.kind === "drop" ? (
             <button
               className={`claim-button ${isClaimed ? "is-claimed" : ""}`}
-              onClick={() => { setClaimError(""); setClaimPin(""); setDropSheetOpen(true); }}
+              onClick={() => { closeSheets("drop"); setClaimError(""); setClaimPin(""); setDropSheetOpen(true); rememberPath(`/drop/${selected.id.replace(/^drop-/, "")}`); }}
               disabled={isClaimed || claiming}
             >
               {isClaimed ? "Added to your tokens" : <>Explore drop <ArrowUpRight size={16} /></>}
@@ -1069,7 +1276,7 @@ export default function CityHome() {
               >
                 <Sparkles size={15} /> Tip
               </button>
-              <button className="secondary-action" onClick={() => { setActiveTab('chat'); setSocialView('chat'); }}>
+              <button className="secondary-action" onClick={() => { closeSheets("social"); setActiveTab('chat'); setSocialView('chat'); }}>
                 <MessageCircle size={15} /> Say hello
               </button>
             </div>
@@ -1078,11 +1285,11 @@ export default function CityHome() {
               View event <ArrowUpRight size={15} />
             </a>
           ) : (
-            <button className="secondary-action" onClick={() => setNotice(`Opening ${selected.name}`)}>
+            <a className="secondary-action" href={directionsUrl(selected)} target="_blank" rel="noreferrer">
               See what&apos;s happening <ArrowUpRight size={15} />
-            </button>
+            </a>
           )}
-          <p className="prototype-note">{connected ? "Ready when you are" : "Join the city to claim and tip"}</p>
+          <p className="prototype-note">{selected.kind === "drop" ? claimView.title : connected ? "Ready when you are" : "Join the city to claim and tip"}</p>
         </article>))}
 
         {notice && <div className="notice-toast" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
@@ -1090,7 +1297,7 @@ export default function CityHome() {
         <nav className="mobile-nav" aria-label="Main navigation">
           <button className={activeTab === "map" ? "is-active" : ""} onClick={() => chooseTab("map")} aria-label="Map"><GameIcon name="map" /><span>Map</span></button>
           <button className={activeTab === "feed" ? "is-active" : ""} onClick={() => chooseTab("feed")} aria-label="Feed"><GameIcon name="feed" /><span>Feed</span></button>
-          <button className="mobile-scan-button" onClick={() => { setSocialView(null); setScanOpen(true); }} aria-label="Scan a QR code"><GameIcon name="scan" /><span>Scan</span></button>
+          <button className="mobile-scan-button" onClick={() => { closeSheets("scan"); setScanOpen(true); }} aria-label="Scan a QR code"><GameIcon name="scan" /><span>Scan</span></button>
           <button className={activeTab === "chat" ? "is-active" : ""} onClick={() => chooseTab("chat")} aria-label="Inbox"><GameIcon name="inbox" /><span>Inbox</span></button>
           <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Wallet"><GameIcon name="vault" /><span>Wallet</span></button>
         </nav>
@@ -1110,7 +1317,15 @@ export default function CityHome() {
       <ScanSheet
         open={scanOpen}
         onClose={() => setScanOpen(false)}
-        onTip={(target) => { setScanOpen(false); setTipTarget(target); }}
+        onTip={(target) => { closeSheets("tip"); setTipTarget(target); }}
+        onOpenDrop={(dropId) => {
+          closeSheets("drop");
+          setSelectedId(`drop-${dropId}`);
+          setCardClosed(false);
+          setDropSheetOpen(true);
+          setActiveTab("map");
+          rememberPath(`/drop/${dropId}`);
+        }}
       />
       <SearchSheet
         open={searchSheetOpen}
@@ -1129,7 +1344,7 @@ export default function CityHome() {
         onEnableNotifications={() => void enableChatNotifications()}
         notificationsEnabled={typeof Notification !== 'undefined' && Notification.permission === 'granted'}
         onClose={() => { setSocialView(null); setActiveTab("map"); }}
-        onTip={(name, initials, color, address) => { setSocialView(null); setTipTarget({ name, initials, color, address }); }}
+        onTip={(name, initials, color, address) => { closeSheets("tip"); setTipTarget({ name, initials, color, address }); }}
         startChatAddress={startChatAddress}
         onOpenStory={setActiveStory}
       />
@@ -1207,39 +1422,45 @@ export default function CityHome() {
         </div>
       )}
       {dropSheetOpen && selected?.kind === "drop" && (
-        <Sheet open={dropSheetOpen} onClose={() => setDropSheetOpen(false)} eyebrow="Mumbai · live drop" title={isClaimed ? "Claimed" : selected.name}>
+        <Sheet open={dropSheetOpen} onClose={() => { setDropSheetOpen(false); if (window.location.pathname.startsWith("/drop/")) window.history.back(); }} eyebrow="Mumbai · live drop" title={claimView.state === "success" ? "Claimed" : selected.name}>
           <div className="drop-sheet-content">
             <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
             <p className="drop-sheet-amount">{selected.amount} <span>{tokenFor(selected)}</span></p>
-            <p className="drop-sheet-copy">{isClaimed ? "Your wallet signed this claim. The tokens are in that wallet." : "Your wallet has to sign this claim. Nothing moves until that signature is on chain."}</p>
-            <div className="drop-sheet-meta"><span><MapPin size={14} /> {claimDistanceM != null ? formatDistance(claimDistanceM) : selected.distance}</span><span><UsersRound size={14} /> {selectedClaimedCount ?? 0} claimed</span></div>
-            {!isClaimed ? (
+            <p className={`claim-flow-status is-${claimView.state}`} role={claimView.state === "failed" ? "alert" : "status"}>{claimView.title}</p>
+            <p className="drop-sheet-copy">{claimView.detail}</p>
+            <div className="drop-sheet-meta"><span><MapPin size={14} /> {claimView.distanceM != null ? claimDistanceSentence(claimView.distanceM) : claimView.title}</span><span><UsersRound size={14} /> {selectedClaimedCount ?? 0} claimed</span></div>
+            {claimView.state !== "success" ? (
               <>
-                <p className="you-note">
-                  {!myPosition
-                    ? "Turn on location. You can claim only within 100 m of this drop."
-                    : withinClaimRange
-                      ? `You are ${formatDistance(claimDistanceM ?? 0)} away. Close enough to claim.`
-                      : `You are ${formatDistance(claimDistanceM ?? 0)} away. Walk within 100 m to claim.`}
-                </p>
-                {feedUserAddress ? (
-                  claimUnlocked ? (
-                    <p className="you-note">Your wallet is unlocked. Signing sends the claim from that wallet.</p>
-                  ) : (
-                    <>
-                      <label className="wallet-field-label" htmlFor="claim-wallet-pin">Wallet PIN</label>
-                      <input id="claim-wallet-pin" type="password" className="you-passphrase" value={claimPin} onChange={(event) => setClaimPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit PIN" inputMode="numeric" autoComplete="current-password" maxLength={6} />
-                    </>
-                  )
-                ) : (
-                  <p className="you-note">This account has no wallet on this device yet.</p>
+                {(claimView.state === "permission-required" || claimView.state === "location-unavailable") && (
+                  <button className="secondary-action claim-location-retry" onClick={requestLocation} disabled={requestingLocation}>
+                    <LocateFixed size={15} /> {requestingLocation ? "Checking location" : "Try location again"}
+                  </button>
                 )}
-                <button className="claim-button" disabled={claiming || !withinClaimRange} onClick={() => feedUserAddress ? void handleClaim() : openWallet()}>
-                  {claiming ? <><span className="spinner" /> Signing with your wallet…</> : feedUserAddress ? <>Sign claim with wallet<ArrowUpRight size={16} /></> : <>Open wallet</>}
+                {claimAskPin && !claimUnlocked && (claimView.state === "ready" || claimView.state === "failed") && (
+                  <>
+                    <label className="wallet-field-label" htmlFor="claim-wallet-pin">Wallet PIN</label>
+                    <input id="claim-wallet-pin" type="password" className="you-passphrase" value={claimPin} onChange={(event) => setClaimPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit PIN" inputMode="numeric" autoComplete="current-password" maxLength={6} />
+                  </>
+                )}
+                {!feedUserAddress && claimView.state === "ready" && <p className="you-note">This account has no wallet on this device yet.</p>}
+                {(claimView.state === "ready" || claimView.state === "failed") && (
+                  <FeePreview quote={claimFee.quote} error={claimFee.error} loading={claimFee.loading} />
+                )}
+                <button
+                  className={`claim-button${claimView.state === "awaiting-signature" ? " is-signing" : ""}`}
+                  disabled={feedUserAddress ? (!claimView.canPressClaim || claimSigning || claimLocating || claimFee.loading || Boolean(claimFee.error)) : claimView.state !== "ready"}
+                  onClick={() => { if (!feedUserAddress) { openWallet(); return; } void handleClaim(); }}
+                >
+                  {claimView.state === "checking-location" && "Checking location"}
+                  {claimView.state === "permission-required" && "Location permission required"}
+                  {claimView.state === "location-unavailable" && "Location unavailable"}
+                  {claimView.state === "too-far" && "You're too far away"}
+                  {claimView.state === "awaiting-signature" && <><span className="spinner" /> Waiting for wallet signature</>}
+                  {claimView.state === "failed" && <>Claim <ArrowUpRight size={16} /></>}
+                  {claimView.state === "ready" && (feedUserAddress ? <>Claim <ArrowUpRight size={16} /></> : <>Open wallet</>)}
                 </button>
-                {claimError && <p className="you-error" role="alert">{claimError}</p>}
               </>
-            ) : <button className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}><Sparkles size={15} /> Claimed · Back to city</button>}
+            ) : <button className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}><Sparkles size={15} /> Claim successful · Back to city</button>}
             <p className="prototype-note">Community token · no market value implied</p>
           </div>
         </Sheet>
