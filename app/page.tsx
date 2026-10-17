@@ -721,7 +721,7 @@ export default function CityHome() {
     if (selected && mapReady) {
       mapRef.current?.flyTo({ center: [selected.longitude, selected.latitude], zoom: 15, duration: 650 });
     }
-  }, [filter, kindById, mapReady, selected]);
+  }, [dropMarkers, eventMarkers, filter, kindById, mapReady, selected]);
 
   useEffect(() => {
     if (!mapReady || !myPosition) return;

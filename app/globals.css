@@ -2268,8 +2268,11 @@ h1, h2, h3, p { margin: 0; }
 .maplibregl-marker.map-marker:hover { scale: 1.06; translate: 0 -3px; }
 .maplibregl-marker.map-marker.marker-selected { scale: 1.1; translate: 0 -3px; z-index: 2; }
 .map-marker.marker-filtered-out,
+.maplibregl-marker.map-marker.marker-filtered-out,
 .maplibregl-marker:has(.marker-filtered-out) {
-  opacity: 0;
+  animation: none !important;
+  opacity: 0 !important;
+  visibility: hidden;
   pointer-events: none;
 }
 .maplibregl-marker.map-marker.marker-person {
@@ -2407,8 +2410,10 @@ h1, h2, h3, p { margin: 0; }
   background: rgba(16, 26, 22, .38);
   backdrop-filter: blur(3px);
   animation: sheet-fade .18s ease both;
+  pointer-events: none;
 }
 .outside-panel {
+  pointer-events: auto;
   width: min(410px, 100%);
   padding: 30px 28px 24px;
   border: 1px solid var(--line);
