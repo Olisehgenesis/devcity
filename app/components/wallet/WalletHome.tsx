@@ -1,12 +1,14 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { formatUsd } from '../../hooks/useUsdPrices';
 import type { ProfileTokenSummary } from '../../hooks/useProfileToken';
 import type { HeldTokenView } from './types';
 
 interface WalletHomeProps {
   celoBalance: string;
   stableBalances: Record<string, number>;
+  usdPrices: Record<string, number>;
   profileToken?: ProfileTokenSummary | null;
   profileLoading?: boolean;
   onOpenToken: (token: HeldTokenView) => void;
@@ -20,7 +22,15 @@ const STABLES = [
   { symbol: 'cUSD', name: 'Celo Dollar', digits: 4 },
 ] as const;
 
-export function WalletHome({ celoBalance, stableBalances, profileToken, profileLoading, onOpenToken, onOpenProfile, children }: WalletHomeProps) {
+function usdFor(prices: Record<string, number>, symbol: string, amount: number) {
+  const price = prices[symbol];
+  if (price == null || !Number.isFinite(amount)) return null;
+  return amount * price;
+}
+
+export function WalletHome({ celoBalance, stableBalances, usdPrices, profileToken, profileLoading, onOpenToken, onOpenProfile, children }: WalletHomeProps) {
+  const celoAmount = Number(celoBalance);
+  const celoUsd = usdFor(usdPrices, 'CELO', celoAmount);
   const heldStables = STABLES.filter((token) => (stableBalances[token.symbol] ?? 0) > 0);
   const profileBalance = profileToken ? Number(profileToken.balance) / 10 ** profileToken.decimals : 0;
 
@@ -40,27 +50,38 @@ export function WalletHome({ celoBalance, stableBalances, profileToken, profileL
           })}
         >
           <span className="wallet-token-mark">C</span>
-          <span className="wallet-token-name"><strong>CELO</strong><small>Celo</small></span>
-          <strong className="wallet-token-balance">{celoBalance}</strong>
+          <span className="wallet-token-name">
+            <strong>CELO</strong>
+            <small>{celoUsd != null ? celoBalance : 'Celo'}</small>
+          </span>
+          <strong className="wallet-token-balance">{celoUsd != null ? formatUsd(celoUsd) : celoBalance}</strong>
         </button>
-        {heldStables.map((token) => (
-          <button
-            type="button"
-            key={token.symbol}
-            className="wallet-token-row"
-            onClick={() => onOpenToken({
-              kind: 'stable',
-              symbol: token.symbol,
-              name: token.name,
-              balance: stableBalances[token.symbol].toFixed(token.digits),
-              sendToken: token.symbol,
-            })}
-          >
-            <span className={`wallet-token-mark wallet-token-${token.symbol.toLowerCase()}`}>{token.symbol.slice(0, 1)}</span>
-            <span className="wallet-token-name"><strong>{token.symbol}</strong><small>{token.name}</small></span>
-            <strong className="wallet-token-balance">{stableBalances[token.symbol].toFixed(token.digits)}</strong>
-          </button>
-        ))}
+        {heldStables.map((token) => {
+          const amount = stableBalances[token.symbol];
+          const usd = usdFor(usdPrices, token.symbol, amount);
+          const amountLabel = amount.toFixed(token.digits);
+          return (
+            <button
+              type="button"
+              key={token.symbol}
+              className="wallet-token-row"
+              onClick={() => onOpenToken({
+                kind: 'stable',
+                symbol: token.symbol,
+                name: token.name,
+                balance: amountLabel,
+                sendToken: token.symbol,
+              })}
+            >
+              <span className={`wallet-token-mark wallet-token-${token.symbol.toLowerCase()}`}>{token.symbol.slice(0, 1)}</span>
+              <span className="wallet-token-name">
+                <strong>{token.symbol}</strong>
+                <small>{usd != null ? amountLabel : token.name}</small>
+              </span>
+              <strong className="wallet-token-balance">{usd != null ? formatUsd(usd) : amountLabel}</strong>
+            </button>
+          );
+        })}
         {profileToken && (
           <button type="button" className="wallet-token-row" onClick={onOpenProfile}>
             <span className="wallet-token-mark wallet-token-profile">{profileToken.symbol.slice(0, 1)}</span>

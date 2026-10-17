@@ -4228,7 +4228,8 @@ h1, h2, h3, p { margin: 0; }
 /* ── Wallet home ─────────────────────────────────────────────────────── */
 .sheet-vault { max-height: min(80dvh, 760px); }
 .sheet-vault:has(.wallet-screen) {
-  height: min(80dvh, 760px);
+  height: auto;
+  max-height: min(80dvh, 760px);
 }
 .sheet-vault:has(.wallet-screen) .sheet-body { flex: 1; min-height: 0; }
 .vault-hero {
@@ -4242,7 +4243,7 @@ h1, h2, h3, p { margin: 0; }
 .vault-hero::after { display: none; }
 .vault-identity-text strong { color: var(--ink); font-size: 15px; font-weight: 750; }
 .vault-identity-text span { color: var(--muted); font-size: 12px; font-weight: 600; }
-.vault-balance { margin: 22px 0 4px; text-align: center; }
+.vault-balance { position: static; margin: 28px 0 0; text-align: left; }
 .vault-balance > span {
   color: var(--muted);
   font-size: 13px;
@@ -4251,11 +4252,11 @@ h1, h2, h3, p { margin: 0; }
   text-transform: none;
 }
 .vault-balance > strong {
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--ink);
-  font-size: clamp(46px, 13vw, 58px);
-  font-weight: 720;
-  letter-spacing: -.055em;
+  font-size: clamp(40px, 11vw, 52px);
+  font-weight: 650;
+  letter-spacing: -.05em;
 }
 .vault-balance > em {
   display: block;
@@ -4266,35 +4267,29 @@ h1, h2, h3, p { margin: 0; }
   font-weight: 700;
 }
 .vault-actions {
+  position: static;
   display: flex;
-  justify-content: center;
-  gap: 18px;
-  margin-top: 22px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 18px;
 }
 .vault-action {
-  min-height: 0;
-  padding: 0;
+  display: inline-flex;
+  min-height: 36px;
+  padding: 0 14px;
   border: 0;
-  border-radius: 0;
-  background: transparent;
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  gap: 8px;
 }
-.vault-action:hover { scale: 1; background: transparent; }
-.vault-action:active { scale: .97; }
-.vault-action-orb {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--paper);
-}
-.vault-action:first-child .vault-action-orb { background: var(--lime); color: var(--ink); }
-.vault-action svg { color: inherit; }
+.vault-action:first-child { background: var(--ink); color: var(--paper); }
+.vault-action:hover { scale: 1; background: color-mix(in srgb, var(--ink) 8%, var(--surface)); }
+.vault-action:first-child:hover { background: var(--ink); }
+.vault-action:active { scale: .98; }
+.wallet-token-row .wallet-token-balance { margin-left: auto; font-size: 15px; font-weight: 700; text-align: right; }
 .vault-hero-tools { position: relative; z-index: 1; display: flex; gap: 6px; }
 .wallet-holdings-label {
   margin: 26px 0 0;

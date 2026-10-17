@@ -33,6 +33,7 @@ import { WalletTokenDetail } from './wallet/WalletTokenDetail';
 import { WalletTokenTools } from './WalletTokenTools';
 import type { HeldTokenView } from './wallet/types';
 import { useProfileToken } from '../hooks/useProfileToken';
+import { formatUsd, useUsdPrices } from '../hooks/useUsdPrices';
 
 type Phase = 'signed-out' | 'registering' | 'ready' | 'restore' | 'backup-required';
 
@@ -160,6 +161,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   }, [usdtBal.data, usdcBal.data, cusdBal.data]);
 
   const { token: profileToken, loading: profileLoading } = useProfileToken(wallet?.address);
+  const usdPrices = useUsdPrices();
   async function refreshSession() {
     try {
       const res = await authClient.getSession();
@@ -550,7 +552,15 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
     );
   }
 
-  const celoLabel = (Number(celoBalance?.value ?? BigInt(0)) / 10 ** (celoBalance?.decimals ?? 18)).toFixed(4);
+  const celoAmount = Number(celoBalance?.value ?? BigInt(0)) / 10 ** (celoBalance?.decimals ?? 18);
+  const celoLabel = celoAmount.toFixed(4);
+  const pricedHoldings = [
+    usdPrices.CELO != null ? celoAmount * usdPrices.CELO : null,
+    usdPrices.USDT != null ? (stableBalances.USDT ?? 0) * usdPrices.USDT : null,
+    usdPrices.USDC != null ? (stableBalances.USDC ?? 0) * usdPrices.USDC : null,
+    usdPrices.cUSD != null ? (stableBalances.cUSD ?? 0) * usdPrices.cUSD : null,
+  ].filter((value): value is number => value != null && value > 0);
+  const usdBalance = pricedHoldings.length > 0 ? formatUsd(pricedHoldings.reduce((sum, value) => sum + value, 0)) : null;
   const explorerBase = ACTIVE_CHAIN.blockExplorers?.default.url;
   const backBar = (title: string) => (
     <div className="wallet-backbar">
@@ -591,6 +601,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             name={wallet.name}
             address={wallet.address}
             celoBalance={celoLabel}
+            usdBalance={usdBalance}
             onSend={() => setScreen({ id: 'send' })}
             onReceive={() => setScreen({ id: 'receive' })}
             onSwap={() => setScreen({ id: 'swap' })}
@@ -601,6 +612,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           <WalletHome
             celoBalance={celoLabel}
             stableBalances={stableBalances}
+            usdPrices={usdPrices}
             profileToken={profileToken}
             profileLoading={profileLoading}
             onOpenToken={(token) => setScreen({ id: 'token', token })}

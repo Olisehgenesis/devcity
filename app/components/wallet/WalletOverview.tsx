@@ -1,12 +1,13 @@
 'use client';
 
-import { ArrowDownLeft, ArrowLeftRight, Gift, History, Send, Settings } from 'lucide-react';
+import { History, Settings } from 'lucide-react';
 
 interface WalletOverviewProps {
   chainLabel: string;
   name?: string;
   address?: string;
   celoBalance: string;
+  usdBalance?: string | null;
   onSend: () => void;
   onReceive: () => void;
   onSwap: () => void;
@@ -16,13 +17,13 @@ interface WalletOverviewProps {
 }
 
 const ACTIONS = [
-  { id: 'send', label: 'Send', icon: Send },
-  { id: 'receive', label: 'Receive', icon: ArrowDownLeft },
-  { id: 'swap', label: 'Swap', icon: ArrowLeftRight },
-  { id: 'drop', label: 'Drop', icon: Gift },
+  { id: 'send', label: 'Send' },
+  { id: 'receive', label: 'Receive' },
+  { id: 'swap', label: 'Swap' },
+  { id: 'drop', label: 'Drop' },
 ] as const;
 
-export function WalletOverview({ chainLabel, name, address, celoBalance, onSend, onReceive, onSwap, onDrop, onActivity, onSettings }: WalletOverviewProps) {
+export function WalletOverview({ chainLabel, name, address, celoBalance, usdBalance, onSend, onReceive, onSwap, onDrop, onActivity, onSettings }: WalletOverviewProps) {
   const actions: Record<(typeof ACTIONS)[number]['id'], () => void> = {
     send: onSend,
     receive: onReceive,
@@ -50,20 +51,16 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, onSend,
 
       <div className="vault-balance">
         <span>Your balance</span>
-        <strong>{celoBalance}</strong>
-        <em>CELO</em>
+        <strong>{usdBalance ?? celoBalance}</strong>
+        <em>{usdBalance ? `${celoBalance} CELO` : 'CELO'}</em>
       </div>
 
       <div className="vault-actions" aria-label="Wallet actions">
-        {ACTIONS.map((action) => {
-          const Icon = action.icon;
-          return (
-            <button key={action.id} type="button" className="vault-action" onClick={actions[action.id]}>
-              <span className="vault-action-orb"><Icon size={18} /></span>
-              <span>{action.label}</span>
-            </button>
-          );
-        })}
+        {ACTIONS.map((action) => (
+          <button key={action.id} type="button" className="vault-action" onClick={actions[action.id]}>
+            {action.label}
+          </button>
+        ))}
       </div>
     </section>
   );
