@@ -17,21 +17,22 @@ import {
   loadBackupForUser,
   type LocalWallet,
 } from '@/lib/keystore';
-import { CELO_MAINNET_ID, CELO_SEPOLIA_ID, IS_MAINNET, feeCurrenciesFor } from '@/lib/celo';
+import { ACTIVE_CHAIN, CELO_MAINNET_ID, CELO_SEPOLIA_ID, IS_MAINNET, feeCurrenciesFor } from '@/lib/celo';
 import { ERC20_ABI } from '@/lib/chain';
 import type { Hex, Address } from 'viem';
+import { removeImportedWalletToken, type ImportedWalletToken } from '@/lib/wallet-assets';
 import { WalletTradeTab } from './wallet/WalletTradeTab';
-import { WalletOverview, type WalletTabId } from './wallet/WalletOverview';
-import { WalletAssetsTab } from './wallet/WalletAssetsTab';
+import { WalletOverview } from './wallet/WalletOverview';
+import { WalletHome } from './wallet/WalletHome';
 import { WalletSendTab } from './wallet/WalletSendTab';
 import { WalletTipTab } from './wallet/WalletTipTab';
-import { WalletDropTab } from './wallet/WalletDropTab';
-import { WalletTokenTab } from './wallet/WalletTokenTab';
 import { WalletSecurityTab } from './wallet/WalletSecurityTab';
-import type { ImportedWalletToken } from '@/lib/wallet-assets';
+import { WalletReceive } from './wallet/WalletReceive';
+import { WalletActivity } from './wallet/WalletActivity';
+import { WalletTokenDetail } from './wallet/WalletTokenDetail';
+import { WalletTokenTools } from './WalletTokenTools';
+import type { HeldTokenView } from './wallet/types';
 import { useProfileToken } from '../hooks/useProfileToken';
-import { useGameStore, STICKER_DEFS } from '../lib/game-store';
-import { TokenCoin } from './game/TokenCard';
 
 type Phase = 'signed-out' | 'registering' | 'ready' | 'restore' | 'backup-required';
 
@@ -41,13 +42,26 @@ interface SessionUser {
   email?: string | null;
 }
 
+type WalletScreen =
+  | { id: 'home' }
+  | { id: 'send'; token?: string }
+  | { id: 'tip' }
+  | { id: 'receive'; symbol?: string }
+  | { id: 'swap' }
+  | { id: 'profile' }
+  | { id: 'token'; token: HeldTokenView }
+  | { id: 'settings' }
+  | { id: 'activity' };
+
 interface PasskeyWalletProps {
   onSessionChange?: (user: SessionUser | null) => void;
   onSessionReady?: () => void;
   onNotify?: (message: string) => void;
+  onCreateDrop?: () => void;
+  browserWallet?: { address: string; onDisconnect: () => void } | null;
 }
 
-export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: PasskeyWalletProps) {
+export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCreateDrop, browserWallet }: PasskeyWalletProps) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>('signed-out');
@@ -61,8 +75,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'error'>('idle');
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupDone, setBackupDone] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState<WalletTabId>('assets');
+  const [screen, setScreen] = useState<WalletScreen>({ id: 'home' });
+  const [exporting, setExporting] = useState(false);
   const [restoreAddress, setRestoreAddress] = useState<string | null>(null);
 
   // Fee currency selection (default USDT, then USDC, cUSD, ...)
@@ -75,19 +89,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
   const addr = wallet?.address;
   const fees = feeCurrenciesFor(chainId);
   const handle = normalizeUsername(username) ?? normalizeUsername(user?.name ?? '') ?? 'city-explorer';
-  const handleTicker = handle.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 10) || 'CITY';
-
-  async function copyWalletAddress() {
-    if (!wallet) return;
-    try {
-      await navigator.clipboard.writeText(wallet.address);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-      onNotify?.('Wallet address copied.');
-    } catch (copyError: unknown) {
-      setError(copyError instanceof Error ? `Could not copy address: ${copyError.message}` : 'Could not copy wallet address.');
-    }
-  }
 
   useEffect(() => {
     if (!showSignup) return;
@@ -158,7 +159,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
     };
   }, [usdtBal.data, usdcBal.data, cusdBal.data]);
 
-  const { token: profileToken, reload: reloadProfileToken } = useProfileToken(wallet?.address);
+  const { token: profileToken } = useProfileToken(wallet?.address);
   async function refreshSession() {
     try {
       const res = await authClient.getSession();
@@ -448,6 +449,15 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
         )}
         {error && <p className="you-error">{error}</p>}
         <p className="you-note">Passkey account · local signing wallet created next</p>
+        {browserWallet && (
+          <section className="external-wallet-section">
+            <div>
+              <strong>Connected browser wallet</strong>
+              <span>{browserWallet.address.slice(0, 8)}…{browserWallet.address.slice(-6)}</span>
+            </div>
+            <button type="button" onClick={browserWallet.onDisconnect}>Disconnect</button>
+          </section>
+        )}
       </div>
     );
   }
@@ -540,124 +550,234 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
     );
   }
 
+  const celoLabel = (Number(celoBalance?.value ?? BigInt(0)) / 10 ** (celoBalance?.decimals ?? 18)).toFixed(4);
+  const explorerBase = ACTIVE_CHAIN.blockExplorers?.default.url;
+  const backBar = (title: string) => (
+    <div className="wallet-backbar">
+      <button type="button" onClick={() => { setScreen({ id: 'home' }); setError(''); }}>Back</button>
+      <h2>{title}</h2>
+    </div>
+  );
+
+  async function downloadExport() {
+    if (!wallet) return;
+    setExporting(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/export?userAddress=${encodeURIComponent(wallet.address)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not export your data.');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `devcity-${wallet.address.slice(0, 8)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      onNotify?.('Export downloaded.');
+    } catch (exportError: unknown) {
+      setError(exportError instanceof Error ? exportError.message : 'Could not export your data.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="wallet-screen">
-      <WalletOverview
-        chainLabel={chainLabel}
-        chainId={chainId}
-        name={wallet?.name}
-        address={wallet?.address}
-        pinProtected={wallet?.pinProtected}
-        celoBalance={(Number(celoBalance?.value ?? BigInt(0)) / 10 ** (celoBalance?.decimals ?? 18)).toFixed(4)}
-        profileToken={profileToken}
-        copied={copied}
-        onCopy={() => void copyWalletAddress()}
-        tab={tab}
-        onTab={(t) => { setTab(t); setError(''); }}
-      />
+      {screen.id === 'home' && wallet && (
+        <>
+          <WalletOverview
+            chainLabel={chainLabel}
+            name={wallet.name}
+            address={wallet.address}
+            celoBalance={celoLabel}
+            onSend={() => setScreen({ id: 'send' })}
+            onReceive={() => setScreen({ id: 'receive' })}
+            onSwap={() => setScreen({ id: 'swap' })}
+            onDrop={() => onCreateDrop?.()}
+            onActivity={() => setScreen({ id: 'activity' })}
+            onSettings={() => setScreen({ id: 'settings' })}
+          />
+          <WalletHome
+            chainLabel={chainLabel}
+            celoBalance={celoLabel}
+            stableBalances={stableBalances}
+            profileToken={profileToken}
+            onOpenToken={(token) => setScreen({ id: 'token', token })}
+            onOpenProfile={() => setScreen({ id: 'profile' })}
+          >
+            <WalletTokenTools
+              wallet={wallet}
+              username={user.name ?? ''}
+              assetChainId={chainId}
+              assetChainLabel={chainLabel}
+              unlockedKey={unlockedKey}
+              onUnlockKey={(key) => setUnlockedKey(key)}
+              onTokensChange={onImportedTokensChange}
+              notify={onNotify}
+              focus="assets"
+              onSelectImported={(token, balanceLabel, valueLabel) => setScreen({
+                id: 'token',
+                token: {
+                  kind: 'imported',
+                  symbol: token.symbol,
+                  name: token.name,
+                  balance: `${balanceLabel} · ${valueLabel}`,
+                  contract: token.address,
+                  sendToken: `CUSTOM:${token.address}`,
+                },
+              })}
+            />
+          </WalletHome>
+        </>
+      )}
 
-      <section className="vault-room" aria-labelledby="vault-stickers-title">
-        <div className="vault-room-head">
-          <h3 id="vault-stickers-title">Token sticker album</h3>
-          <span>Collect city stickers</span>
-        </div>
-        <div className="sticker-album">
-          {STICKER_DEFS.map((s) => {
-            const collected = useGameStore.getState().stickers[s.id] ?? 0;
-            return (
-              <div className="sticker-slot" key={s.id}>
-                <TokenCoin tone={(s.tone as any) || 'lime'} empty={collected === 0} size={48} />
-                <small>{collected > 0 ? `${collected}` : 'locked'}</small>
+      {(screen.id === 'send' || screen.id === 'tip') && wallet && (
+        <>
+          {backBar(screen.id === 'tip' ? 'Tip' : 'Send')}
+          <div className="wallet-segment" role="tablist" aria-label="Send or tip">
+            <button type="button" role="tab" aria-selected={screen.id === 'send'} className={screen.id === 'send' ? 'is-active' : ''} onClick={() => setScreen({ id: 'send', token: screen.id === 'send' ? screen.token : undefined })}>Send</button>
+            <button type="button" role="tab" aria-selected={screen.id === 'tip'} className={screen.id === 'tip' ? 'is-active' : ''} onClick={() => setScreen({ id: 'tip' })}>Tip</button>
+          </div>
+          {screen.id === 'send' ? (
+            <WalletSendTab
+              address={wallet.address}
+              pinProtected={wallet.pinProtected}
+              unlockedKey={unlockedKey}
+              fees={fees}
+              importedTokens={importedTokens}
+              feeSymbol={feeSymbol}
+              setFeeSymbol={setFeeSymbol}
+              initialToken={screen.token}
+              notify={onNotify}
+            />
+          ) : (
+            <WalletTipTab
+              address={wallet.address}
+              pinProtected={wallet.pinProtected}
+              unlockedKey={unlockedKey}
+              fees={fees}
+              importedTokens={importedTokens}
+              notify={onNotify}
+            />
+          )}
+        </>
+      )}
+
+      {screen.id === 'receive' && wallet && (
+        <>
+          {backBar('Receive')}
+          <WalletReceive address={wallet.address} chainLabel={chainLabel} symbol={screen.symbol} notify={onNotify} />
+        </>
+      )}
+
+      {screen.id === 'swap' && wallet && (
+        <>
+          {backBar('Swap')}
+          <section className="wallet-swap-block">
+            <h3>Profile token</h3>
+            <p className="you-note">Signs with this passkey wallet.</p>
+            <WalletTokenTools
+              wallet={wallet}
+              username={user.name ?? ''}
+              assetChainId={chainId}
+              assetChainLabel={chainLabel}
+              unlockedKey={unlockedKey}
+              onUnlockKey={(key) => setUnlockedKey(key)}
+              onTokensChange={onImportedTokensChange}
+              notify={onNotify}
+              focus="trade"
+            />
+          </section>
+          <section className="wallet-swap-block">
+            <h3>DEV26</h3>
+            <p className="you-note">Signs with a connected browser wallet. That account is separate from this passkey vault.</p>
+            <WalletTradeTab />
+          </section>
+        </>
+      )}
+
+      {screen.id === 'profile' && wallet && (
+        <>
+          {backBar('Profile token')}
+          <WalletTokenTools
+            wallet={wallet}
+            username={user.name ?? ''}
+            assetChainId={chainId}
+            assetChainLabel={chainLabel}
+            unlockedKey={unlockedKey}
+            onUnlockKey={(key) => setUnlockedKey(key)}
+            onTokensChange={onImportedTokensChange}
+            notify={onNotify}
+            focus="profile"
+          />
+        </>
+      )}
+
+      {screen.id === 'token' && wallet && (
+        <>
+          {backBar(screen.token.symbol)}
+          <WalletTokenDetail
+            token={screen.token}
+            explorerBase={explorerBase}
+            onSend={() => setScreen({ id: 'send', token: screen.token.sendToken })}
+            onReceive={() => setScreen({ id: 'receive', symbol: screen.token.symbol })}
+            onRemove={screen.token.kind === 'imported' && screen.token.contract ? () => {
+              removeImportedWalletToken(wallet.address, chainId, screen.token.contract as Address);
+              onImportedTokensChange(importedTokens.filter((item) => item.address !== screen.token.contract));
+              setScreen({ id: 'home' });
+              onNotify?.(`${screen.token.symbol} removed from this list.`);
+            } : undefined}
+          />
+        </>
+      )}
+
+      {screen.id === 'activity' && wallet && (
+        <>
+          {backBar('Activity')}
+          <WalletActivity address={wallet.address} />
+        </>
+      )}
+
+      {screen.id === 'settings' && wallet && (
+        <>
+          {backBar('Settings')}
+          <WalletSecurityTab
+            wallet={wallet}
+            unlockedKey={unlockedKey}
+            fees={fees}
+            feeSymbol={feeSymbol}
+            setFeeSymbol={setFeeSymbol}
+            onWalletChange={(next) => setWallet(next)}
+            onUnlockKey={(key) => setUnlockedKey(key)}
+            onSignOut={() => {
+              setUser(null);
+              setWallet(null);
+              setUnlockedKey(null);
+              setPhase('signed-out');
+              setScreen({ id: 'home' });
+              onSessionChange?.(null);
+              onNotify?.('Signed out of DEVCITY.');
+            }}
+            notify={onNotify}
+          />
+          <section className="wallet-settings-block">
+            <h3>Your data</h3>
+            <p className="you-note">Download the profile, posts, tips, and claims stored for this wallet.</p>
+            <button type="button" className="you-connect-secondary" disabled={exporting} onClick={() => void downloadExport()}>
+              {exporting ? 'Preparing…' : 'Download my data'}
+            </button>
+          </section>
+          {browserWallet && (
+            <section className="external-wallet-section">
+              <div>
+                <strong>Connected browser wallet</strong>
+                <span>{browserWallet.address.slice(0, 8)}…{browserWallet.address.slice(-6)}</span>
               </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {tab === 'assets' && wallet && (
-        <WalletAssetsTab
-          wallet={wallet}
-          username={user.name ?? ''}
-          chainId={chainId}
-          chainLabel={chainLabel}
-          stableBalances={stableBalances}
-          profileToken={profileToken}
-          unlockedKey={unlockedKey}
-          onUnlockKey={(key) => setUnlockedKey(key)}
-          onTokensChange={onImportedTokensChange}
-          notify={onNotify}
-        />
-      )}
-
-      {tab === 'send' && wallet && (
-        <WalletSendTab
-          address={wallet.address}
-          pinProtected={wallet.pinProtected}
-          unlockedKey={unlockedKey}
-          fees={fees}
-          importedTokens={importedTokens}
-          feeSymbol={feeSymbol}
-          setFeeSymbol={setFeeSymbol}
-          notify={onNotify}
-        />
-      )}
-
-      {tab === 'tip' && wallet && (
-        <WalletTipTab
-          address={wallet.address}
-          pinProtected={wallet.pinProtected}
-          unlockedKey={unlockedKey}
-          fees={fees}
-          importedTokens={importedTokens}
-          notify={onNotify}
-        />
-      )}
-
-      {tab === 'drop' && wallet && (
-        <WalletDropTab
-          address={wallet.address}
-          pinProtected={wallet.pinProtected}
-          unlockedKey={unlockedKey}
-          fees={fees}
-          importedTokens={importedTokens}
-          notify={onNotify}
-        />
-      )}
-
-      {tab === 'token' && wallet && (
-        <WalletTokenTab
-          address={wallet.address}
-          pinProtected={wallet.pinProtected}
-          unlockedKey={unlockedKey}
-          handle={handle}
-          handleTicker={handleTicker}
-          notify={onNotify}
-        />
-      )}
-
-      {tab === 'trade' && wallet && (
-        <WalletTradeTab />
-      )}
-
-      {tab === 'security' && wallet && (
-        <WalletSecurityTab
-          wallet={wallet}
-          unlockedKey={unlockedKey}
-          fees={fees}
-          feeSymbol={feeSymbol}
-          setFeeSymbol={setFeeSymbol}
-          onWalletChange={(next) => setWallet(next)}
-          onUnlockKey={(key) => setUnlockedKey(key)}
-          onSignOut={() => {
-            setUser(null);
-            setWallet(null);
-            setUnlockedKey(null);
-            setPhase('signed-out');
-            onSessionChange?.(null);
-            onNotify?.('Signed out of DEVCITY.');
-          }}
-          notify={onNotify}
-        />
+              <button type="button" onClick={browserWallet.onDisconnect}>Disconnect</button>
+            </section>
+          )}
+        </>
       )}
 
       {error && <p className="you-error" role="alert">{error}</p>}

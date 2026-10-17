@@ -139,9 +139,12 @@ interface WalletTokenToolsProps {
   onUnlockKey: (privateKey: Hex) => void;
   onTokensChange: (tokens: ImportedWalletToken[]) => void;
   notify?: (message: string) => void;
+  /** Limit this panel to one job. Omit it to keep the in-panel Assets / Profile token switch. */
+  focus?: 'assets' | 'profile' | 'trade';
+  onSelectImported?: (token: ImportedWalletToken, balanceLabel: string, valueLabel: string) => void;
 }
 
-export function WalletTokenTools({ wallet, username, assetChainId, assetChainLabel, unlockedKey, onUnlockKey, onTokensChange, notify }: WalletTokenToolsProps) {
+export function WalletTokenTools({ wallet, username, assetChainId, assetChainLabel, unlockedKey, onUnlockKey, onTokensChange, notify, focus, onSelectImported }: WalletTokenToolsProps) {
   const [tab, setTab] = useState<'assets' | 'profile-token'>('assets');
   const [tokens, setTokens] = useState<ImportedWalletToken[]>([]);
   const [balances, setBalances] = useState<Record<string, bigint>>({});
@@ -675,17 +678,22 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     }
   };
 
+  const showAssets = focus === 'assets' || (focus == null && tab === 'assets');
+  const showProfile = focus === 'profile' || focus === 'trade' || (focus == null && tab === 'profile-token');
+
   return (
     <section className="wallet-token-tools" aria-label="Token wallet tools">
-      <nav className="wallet-token-tabs" aria-label="Wallet token sections">
-        <button className={tab === 'assets' ? 'is-active' : ''} onClick={() => setTab('assets')}>Assets</button>
-        <button className={tab === 'profile-token' ? 'is-active' : ''} onClick={() => setTab('profile-token')}>Profile token</button>
-      </nav>
+      {focus == null && (
+        <nav className="wallet-token-tabs" aria-label="Wallet token sections">
+          <button className={tab === 'assets' ? 'is-active' : ''} onClick={() => setTab('assets')}>Assets</button>
+          <button className={tab === 'profile-token' ? 'is-active' : ''} onClick={() => setTab('profile-token')}>Profile token</button>
+        </nav>
+      )}
 
-      {tab === 'assets' ? (
+      {showAssets ? (
         <section className="wallet-token-portfolio">
           <div className="wallet-section-heading wallet-assets-heading">
-            <div><h3>Other tokens</h3><span>On {assetChainLabel} · stored on this device</span></div>
+            <div><h3>{focus === 'assets' ? 'Imported' : 'Other tokens'}</h3><span>On {assetChainLabel} · stored on this device</span></div>
             <button className="wallet-token-add" onClick={() => { setImportOpen(true); setError(''); }}><CirclePlus size={16} /> Import</button>
           </div>
           {tokens.length === 0 ? (
@@ -701,15 +709,25 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 const value = price?.priceUsd == null ? null : Number(formatUnits(balance, token.decimals)) * price.priceUsd;
                 return (
                   <article className="wallet-token-row wallet-imported-token" key={token.address}>
-                    <span className="wallet-token-mark">{token.symbol.slice(0, 1)}</span>
-                    <span className="wallet-token-name">
-                      <strong>{token.symbol}</strong>
-                      <small>{token.name} · {token.address.slice(0, 6)}…{token.address.slice(-4)}</small>
-                    </span>
-                    <span className="wallet-token-balance">
-                      <strong>{Number(formatUnits(balance, token.decimals)).toLocaleString(undefined, { maximumFractionDigits: 5 })}</strong>
-                      <small>{value == null ? 'Price unavailable' : `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}</small>
-                    </span>
+                    <button
+                      type="button"
+                      className="wallet-token-open"
+                      onClick={() => onSelectImported?.(
+                        token,
+                        Number(formatUnits(balance, token.decimals)).toLocaleString(undefined, { maximumFractionDigits: 5 }),
+                        value == null ? 'Price unavailable' : `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+                      )}
+                    >
+                      <span className="wallet-token-mark">{token.symbol.slice(0, 1)}</span>
+                      <span className="wallet-token-name">
+                        <strong>{token.symbol}</strong>
+                        <small>{token.name} · {token.address.slice(0, 6)}…{token.address.slice(-4)}</small>
+                      </span>
+                      <span className="wallet-token-balance">
+                        <strong>{Number(formatUnits(balance, token.decimals)).toLocaleString(undefined, { maximumFractionDigits: 5 })}</strong>
+                        <small>{value == null ? 'Price unavailable' : `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}</small>
+                      </span>
+                    </button>
                     <button
                       className="wallet-token-remove"
                       aria-label={`Remove ${token.symbol} from wallet list`}
@@ -752,9 +770,12 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
           )}
           <button className="wallet-token-refresh" onClick={() => void loadTokens()}><RefreshCw size={14} /> Refresh balances and prices</button>
         </section>
-      ) : (
+      ) : showProfile ? (
         <section className="wallet-profile-token">
           {!profileToken ? (
+            focus === 'trade' ? (
+              <p className="you-note">No profile token yet. Open Profile token on the wallet home to launch one.</p>
+            ) : (
             <>
               <div className="wallet-token-empty wallet-profile-token-empty">
                 <span className="wallet-token-orbit">✳</span>
@@ -777,8 +798,10 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
               </button>
               <p className="wallet-token-footnote">Launching requires a Celo Sepolia transaction and network fees. Your token is named from your handle and saved to your profile.</p>
             </>
+            )
           ) : (
             <>
+              {focus !== 'trade' && (
               <div className="wallet-profile-token-card">
                 <div className="wallet-profile-token-head">
                 {profileStats?.icon
@@ -802,6 +825,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 <a className="wallet-token-explorer" href={`${window.location.origin}/api/token-icon?owner=${wallet.address}&chainId=${assetChainId}`} target="_blank" rel="noreferrer">Token profile image <ExternalLink size={13} /></a>
                 <a className="wallet-token-explorer" href={`${CELO_SEPOLIA.blockExplorer}/address/${profileToken.address}`} target="_blank" rel="noreferrer">View token on Blockscout <ExternalLink size={13} /></a>
               </div>
+              )}
 
               {profileToken.poolCreated && (
                 <div className="wallet-profile-token-actions wallet-profile-token-trade">
@@ -831,7 +855,12 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <p className="wallet-token-footnote">No protocol trade tax. Trades use a 5% minimum-receive tolerance against the displayed spot price; large price moves or price impact can make a trade revert.</p>
                 </div>
               )}
+              {focus === 'trade' && !profileToken.poolCreated && (
+                <p className="you-note">This profile token has no pool yet. Seed one from the token screen. DEV26 swap, below, signs with a browser wallet.</p>
+              )}
 
+              {focus !== 'trade' && (
+              <>
               <div className="wallet-profile-token-actions">
                 <h3>Send or tip your token</h3>
                 <label className="wallet-field-label" htmlFor="profile-token-recipient">Recipient address</label>
@@ -896,10 +925,12 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <p>Initial liquidity seeding is paused for safety. The deployed factory initializes new pools at a hard-coded raw 1:1 price instead of the price you choose. The contract must be upgraded before adding USDT liquidity.</p>
                 </div>
               )}
+              </>
+              )}
             </>
           )}
         </section>
-      )}
+      ) : null}
 
       {!unlockedKey && (tab === 'assets' && tokens.length > 0) && (
         <p className="wallet-token-hint">Unlock is requested only when you approve a transaction.</p>

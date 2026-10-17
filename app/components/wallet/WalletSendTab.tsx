@@ -26,13 +26,14 @@ interface WalletSendTabProps {
   importedTokens: ImportedWalletToken[];
   feeSymbol: string;
   setFeeSymbol: (symbol: string) => void;
+  initialToken?: string;
   notify?: (message: string) => void;
 }
 
-export function WalletSendTab({ address, pinProtected, unlockedKey, fees, importedTokens, feeSymbol, notify }: WalletSendTabProps) {
+export function WalletSendTab({ address, pinProtected, unlockedKey, fees, importedTokens, feeSymbol, setFeeSymbol, initialToken, notify }: WalletSendTabProps) {
   const [sendTo, setSendTo] = useState('');
   const [sendAmount, setSendAmount] = useState('');
-  const [sendToken, setSendToken] = useState('USDT');
+  const [sendToken, setSendToken] = useState(initialToken || 'USDT');
   const [sending, setSending] = useState(false);
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
@@ -182,7 +183,15 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
               ))}
             </select>
           </div>
-          <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed.</p>
+          <p className="wallet-field-label">Network fee paid in</p>
+          <div className="fee-currency-row" role="group" aria-label="Fee currency">
+            {fees.map((fee) => (
+              <button key={fee.symbol} type="button" className={`fee-currency-chip${feeSymbol === fee.symbol ? ' is-selected' : ''}`} onClick={() => setFeeSymbol(fee.symbol)}>
+                {fee.symbol}
+              </button>
+            ))}
+          </div>
+          <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed. The fee currency can also be changed in Settings.</p>
           <button className="you-connect-primary" disabled={sending || !sendTo || !sendAmount} onClick={() => void handleSend()}>
             {sending ? 'Sending…' : `Send ${sendTokenLabel}`}
           </button>

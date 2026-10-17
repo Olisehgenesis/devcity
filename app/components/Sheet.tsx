@@ -7,10 +7,12 @@ interface SheetProps {
   onClose: () => void;
   title: string;
   eyebrow?: string;
+  /** Vault keeps a stable 80% stage. Other sheets size to their content. */
+  size?: 'default' | 'vault';
   children: ReactNode;
 }
 
-export function Sheet({ open, onClose, title, eyebrow, children }: SheetProps) {
+export function Sheet({ open, onClose, title, eyebrow, size = 'default', children }: SheetProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -63,7 +65,7 @@ export function Sheet({ open, onClose, title, eyebrow, children }: SheetProps) {
     <div className="sheet-backdrop" onClick={onClose}>
       <div
         ref={dialogRef}
-        className="sheet"
+        className={size === 'vault' ? 'sheet sheet-vault' : 'sheet'}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

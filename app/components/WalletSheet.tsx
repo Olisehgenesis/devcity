@@ -8,24 +8,23 @@ interface WalletSheetProps {
   open: boolean;
   onClose: () => void;
   notify: (message: string) => void;
+  onCreateDrop?: () => void;
 }
 
-export function WalletSheet({ open, onClose, notify }: WalletSheetProps) {
+export function WalletSheet({ open, onClose, notify, onCreateDrop }: WalletSheetProps) {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
 
   return (
-    <Sheet open={open} onClose={onClose} eyebrow="Your city vault" title="Vault">
-      <PasskeyWallet onNotify={notify} />
-      {isConnected && address && (
-        <section className="external-wallet-section">
-          <div>
-            <strong>Connected browser wallet</strong>
-            <span>{address.slice(0, 8)}…{address.slice(-6)}</span>
-          </div>
-          <button onClick={() => { disconnect(); notify('Browser wallet disconnected.'); }}>Disconnect</button>
-        </section>
-      )}
+    <Sheet open={open} onClose={onClose} title="Wallet" size="vault">
+      <PasskeyWallet
+        onNotify={notify}
+        onCreateDrop={onCreateDrop}
+        browserWallet={isConnected && address ? {
+          address,
+          onDisconnect: () => { disconnect(); notify('Browser wallet disconnected.'); },
+        } : null}
+      />
     </Sheet>
   );
 }

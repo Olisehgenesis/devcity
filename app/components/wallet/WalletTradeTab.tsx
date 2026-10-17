@@ -127,7 +127,7 @@ export function WalletTradeTab() {
   if (!isConnected) {
     return (
       <div className="wallet-tab-empty">
-        <p>Connect your wallet to trade tokens</p>
+        <p>DEV26 swaps sign with a browser wallet. This vault signs with your passkey, and this app does not connect a browser wallet from here. Profile-token swaps above use this vault.</p>
       </div>
     );
   }

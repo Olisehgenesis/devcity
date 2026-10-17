@@ -24,3 +24,13 @@ export interface TokenOption {
   address?: string;
   decimals?: number;
 }
+
+export interface HeldTokenView {
+  kind: 'celo' | 'stable' | 'imported';
+  symbol: string;
+  name: string;
+  balance: string;
+  contract?: string;
+  /** Value for the send-token select: CELO, a fee symbol, or CUSTOM:0x… */
+  sendToken: string;
+}

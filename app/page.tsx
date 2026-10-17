@@ -885,17 +885,22 @@ export default function CityHome() {
 
         {(createMenuOpen || cityMenuOpen) && (
           <div className="create-menu city-hub" role="menu">
-            <span className="city-hub-label">{createMenuOpen ? 'Create in the city' : 'City hub'}</span>
             {createMenuOpen && (
               <>
+                <span className="city-hub-label">Create in the city</span>
                 <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateMenuOpen(false); }}><BuildingSprite id="cafe" size={30} /> Create stall</button>
                 <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateMenuOpen(false); }}><BuildingSprite id="booth" size={30} /> Create booth</button>
                 <button className="create-menu-item" role="menuitem" onClick={() => openCreateDrop()}><Gift size={16} /> Create a drop</button>
               </>
             )}
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setTrendingOpen(true); }}><Sparkles size={16} /> Trending</button>
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setLeaderboardOpen(true); }}><Sparkles size={16} /> Leaderboard</button>
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
+            {cityMenuOpen && (
+              <>
+                <span className="city-hub-label">City hub</span>
+                <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setTrendingOpen(true); }}><Sparkles size={16} /> Trending</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setLeaderboardOpen(true); }}><Sparkles size={16} /> Leaderboard</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
+              </>
+            )}
           </div>
         )}
 
@@ -981,7 +986,16 @@ export default function CityHome() {
       </section>
 
       <YouSheet open={youOpen} onClose={closeProfile} onOpenWallet={openWallet} />
-      <WalletSheet open={walletOpen} onClose={closeWallet} notify={setNotice} />
+      <WalletSheet
+        open={walletOpen}
+        onClose={closeWallet}
+        notify={setNotice}
+        onCreateDrop={() => {
+          setWalletOpen(false);
+          setActiveTab("map");
+          openCreateDrop();
+        }}
+      />
       <ScanSheet
         open={scanOpen}
         onClose={() => setScanOpen(false)}
