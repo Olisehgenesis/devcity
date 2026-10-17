@@ -34,6 +34,7 @@ import { dicebearAvatarUrl } from "./lib/avatars";
 import { GameIcon } from "./components/game/GameIcons";
 import { BuildingSprite } from "./components/game/Buildings";
 import { useGameStore } from "./lib/game-store";
+import { CLAIM_RADIUS_M, distanceMeters, formatDistance } from "@/lib/geo";
 import { TrendingSheet } from "./components/TrendingSheet";
 import { LeaderboardSheet } from "./components/LeaderboardSheet";
 import { NotificationSheet } from "./components/NotificationSheet";
@@ -375,6 +376,10 @@ export default function CityHome() {
   const selectedDropId = selected?.kind === "drop" ? selected.id.replace(/^drop-/, "") : "";
   const isClaimed = Boolean(chainClaims[selectedDropId]);
   const selectedClaimedCount = selected?.kind === "drop" ? (chainCounts[selectedDropId] ?? selected.claimedCount) : selected?.claimedCount;
+  const claimDistanceM = selected?.kind === "drop" && myPosition
+    ? distanceMeters(myPosition[1], myPosition[0], selected.latitude, selected.longitude)
+    : null;
+  const withinClaimRange = claimDistanceM != null && claimDistanceM <= CLAIM_RADIUS_M;
   const connected = hydrated && (isConnected || (feedProfileStatus === "ready" && Boolean(feedUserAddress)));
 
   useEffect(() => {
@@ -570,24 +575,29 @@ export default function CityHome() {
       setLocationPromptOpen(true);
       return;
     }
-    navigator.geolocation.getCurrentPosition(
+    let settled = false;
+    const watchId = navigator.geolocation.watchPosition(
       ({ coords }) => {
         const position: [number, number] = [coords.longitude, coords.latitude];
         setMyPosition(position);
+        if (settled) return;
+        settled = true;
         if (isInsideMumbai(position[0], position[1])) {
           setLocationState("inside");
-          mapRef.current?.flyTo({ center: position, zoom: 15, duration: 1100 });
+          mapRef.current?.flyTo({ center: position, zoom: 16, duration: 1100 });
         } else {
           setLocationState("outside");
           setOutsidePromptOpen(true);
         }
       },
       (error) => {
+        if (settled) return;
         setLocationState(error.code === error.PERMISSION_DENIED ? "denied" : "unavailable");
         setLocationPromptOpen(true);
       },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 },
     );
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   useEffect(() => {
@@ -605,25 +615,21 @@ export default function CityHome() {
     if (!mapReady || !myPosition) return;
     const element = document.createElement("div");
     element.className = `my-location-marker${presenceStatus === 'offline' ? ' my-location-offline' : ''}`;
-    if (avatarMode === 'upload' && avatarImageData) {
-      const avatar = document.createElement('img');
-      avatar.src = avatarImageData;
-      avatar.alt = '';
-      element.append(avatar);
-    } else if (avatarMode === 'dicebear' && avatarSeed) {
-      const avatar = document.createElement('img');
-      avatar.src = dicebearAvatarUrl(avatarSeed);
-      avatar.alt = '';
-      element.append(avatar);
-    } else {
-      element.textContent = 'YOU';
-    }
+    const avatarSrc = avatarMode === "upload" && avatarImageData
+      ? avatarImageData
+      : dicebearAvatarUrl(avatarSeed || "devcity26");
+    const avatar = document.createElement("img");
+    avatar.src = avatarSrc;
+    avatar.alt = "";
+    element.append(avatar);
     if (presenceStatus !== 'offline') {
       const status = document.createElement('i');
       status.className = `my-location-status status-${presenceStatus}`;
       element.append(status);
     }
     const marker = new maplibregl.Marker({ element, anchor: "center" }).setLngLat(myPosition).addTo(mapRef.current!);
+    const wrapper = marker.getElement().parentElement;
+    if (wrapper) wrapper.style.zIndex = "8";
     return () => {
       marker.remove();
     };
@@ -639,6 +645,16 @@ export default function CityHome() {
     if (!myAddress) {
       openWallet();
       setClaimError("Sign in and set up this account’s wallet before claiming.");
+      return;
+    }
+    if (!myPosition) {
+      setClaimError("Turn on location. You need to be within 100 m of this drop to claim.");
+      requestLocation();
+      return;
+    }
+    const metersAway = distanceMeters(myPosition[1], myPosition[0], selected.latitude, selected.longitude);
+    if (metersAway > CLAIM_RADIUS_M) {
+      setClaimError(`You are ${formatDistance(metersAway)} away. Get within 100 m of this drop to claim.`);
       return;
     }
     setClaiming(true);
@@ -659,7 +675,12 @@ export default function CityHome() {
       const response = await fetch("/api/claims/authorize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dropId: selected.id.replace(/^drop-/, ""), userAddress: myAddress }),
+        body: JSON.stringify({
+          dropId: selected.id.replace(/^drop-/, ""),
+          userAddress: myAddress,
+          lat: myPosition[1],
+          lng: myPosition[0],
+        }),
       });
       const data = await response.json().catch(() => ({})) as {
         error?: string;
@@ -764,14 +785,12 @@ export default function CityHome() {
   }
 
   function chooseFilter(nextFilter: FilterKind) {
-    if (nextFilter === "person") {
-      setSocialView("people");
-      setActiveTab("map");
-      return;
-    }
     setFilter(nextFilter);
+    setSocialView(null);
+    setActiveTab("map");
     setCardClosed(false);
     setSelectedId(null);
+    setDropSheetOpen(false);
   }
 
   function exploreMumbai() {
@@ -969,7 +988,7 @@ export default function CityHome() {
 
         <div className="map-tools">
           <div className="filter-list" role="group" aria-label="Filter map">
-            {filters.map((item) => <button key={item.id} className={`filter-chip ${filter === item.id || (item.id === "person" && socialView === "people") ? "is-selected" : ""}`} onClick={() => chooseFilter(item.id)}>{item.label}</button>)}
+            {filters.map((item) => <button key={item.id} className={`filter-chip ${filter === item.id ? "is-selected" : ""}`} onClick={() => chooseFilter(item.id)}>{item.label}</button>)}
           </div>
           <button className="locate-button" onClick={centerOnMe} aria-label="Center map on me" title="Center map"><LocateFixed size={18} /></button>
           <button className="locate-button" onClick={() => setCreateMenuOpen((v) => !v)} aria-label="Create a stall or booth" title="Create"><Plus size={18} /></button>
@@ -1030,7 +1049,7 @@ export default function CityHome() {
           </div>
           <h2>{selected.name}</h2>
           <p className="card-description">{selected.detail}</p>
-          <div className="card-meta"><span><MapPin size={13} /> {selected.distance}</span>{selected.kind === "drop" && typeof selectedClaimedCount === "number" && <span className="claim-count">{selectedClaimedCount} claimed</span>}</div>
+          <div className="card-meta"><span><MapPin size={13} /> {selected.kind === "drop" && claimDistanceM != null ? formatDistance(claimDistanceM) : selected.distance}</span>{selected.kind === "drop" && typeof selectedClaimedCount === "number" && <span className="claim-count">{selectedClaimedCount} claimed</span>}</div>
           {selected.kind === "drop" ? (
             <button
               className={`claim-button ${isClaimed ? "is-claimed" : ""}`}
@@ -1193,9 +1212,16 @@ export default function CityHome() {
             <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
             <p className="drop-sheet-amount">{selected.amount} <span>{tokenFor(selected)}</span></p>
             <p className="drop-sheet-copy">{isClaimed ? "Your wallet signed this claim. The tokens are in that wallet." : "Your wallet has to sign this claim. Nothing moves until that signature is on chain."}</p>
-            <div className="drop-sheet-meta"><span><MapPin size={14} /> {selected.distance}</span><span><UsersRound size={14} /> {selectedClaimedCount ?? 0} claimed</span></div>
+            <div className="drop-sheet-meta"><span><MapPin size={14} /> {claimDistanceM != null ? formatDistance(claimDistanceM) : selected.distance}</span><span><UsersRound size={14} /> {selectedClaimedCount ?? 0} claimed</span></div>
             {!isClaimed ? (
               <>
+                <p className="you-note">
+                  {!myPosition
+                    ? "Turn on location. You can claim only within 100 m of this drop."
+                    : withinClaimRange
+                      ? `You are ${formatDistance(claimDistanceM ?? 0)} away. Close enough to claim.`
+                      : `You are ${formatDistance(claimDistanceM ?? 0)} away. Walk within 100 m to claim.`}
+                </p>
                 {feedUserAddress ? (
                   claimUnlocked ? (
                     <p className="you-note">Your wallet is unlocked. Signing sends the claim from that wallet.</p>
@@ -1208,7 +1234,7 @@ export default function CityHome() {
                 ) : (
                   <p className="you-note">This account has no wallet on this device yet.</p>
                 )}
-                <button className="claim-button" disabled={claiming} onClick={() => feedUserAddress ? void handleClaim() : openWallet()}>
+                <button className="claim-button" disabled={claiming || !withinClaimRange} onClick={() => feedUserAddress ? void handleClaim() : openWallet()}>
                   {claiming ? <><span className="spinner" /> Signing with your wallet…</> : feedUserAddress ? <>Sign claim with wallet<ArrowUpRight size={16} /></> : <>Open wallet</>}
                 </button>
                 {claimError && <p className="you-error" role="alert">{claimError}</p>}

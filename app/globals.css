@@ -2267,7 +2267,11 @@ h1, h2, h3, p { margin: 0; }
 }
 .maplibregl-marker.map-marker:hover { scale: 1.06; translate: 0 -3px; }
 .maplibregl-marker.map-marker.marker-selected { scale: 1.1; translate: 0 -3px; z-index: 2; }
-.maplibregl-marker.map-marker.marker-filtered-out { opacity: 0; pointer-events: none; scale: .85; }
+.map-marker.marker-filtered-out,
+.maplibregl-marker:has(.marker-filtered-out) {
+  opacity: 0;
+  pointer-events: none;
+}
 .maplibregl-marker.map-marker.marker-person {
   width: 48px;
   height: 48px;
@@ -2342,6 +2346,7 @@ h1, h2, h3, p { margin: 0; }
 .marker-token small { font-size: 7px; letter-spacing: .04em; }
 @keyframes drop-hover { 0%, 100% { translate: 0 0; } 50% { translate: 0 -4px; } }
 @keyframes event-glow { 0%, 100% { box-shadow: 0 3px 12px rgba(28, 41, 37, .18); } 50% { box-shadow: 0 4px 18px rgba(255, 121, 95, .46); } }
+.maplibregl-marker:has(> .my-location-marker) { z-index: 8; }
 .my-location-marker {
   position: relative;
   display: grid;

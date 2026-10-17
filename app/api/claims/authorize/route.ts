@@ -7,7 +7,8 @@ export async function POST(request: NextRequest) {
     const { signature, dropId, dropIdBytes32, claimer, nonce, amount, expiresAt } = await authorizeClaim(
       body.dropId,
       body.userAddress,
-      request
+      request,
+      { lat: body.lat, lng: body.lng },
     );
     return NextResponse.json({ signature, dropId, dropIdBytes32, claimer, nonce, amount, expiresAt });
   } catch (err) {

@@ -5,6 +5,7 @@ import { getNonce } from '../../contracts/interact';
 import { parseUnits, type Hex } from 'viem';
 import { rateLimit, RATE_LIMITS, getClientIdentifier } from './rate-limit';
 import { NextRequest } from 'next/server';
+import { CLAIM_RADIUS_M, distanceMeters, formatDistance } from './geo';
 
 export class ApiError extends Error {
   status: number;
@@ -177,7 +178,12 @@ export async function createDrop(input: {
 // Claims
 // ---------------------------------------------------------------------------
 
-export async function authorizeClaim(dropId: string, userAddress: string, request?: NextRequest) {
+export async function authorizeClaim(
+  dropId: string,
+  userAddress: string,
+  request?: NextRequest,
+  coords?: { lat?: unknown; lng?: unknown },
+) {
   if (request) {
     const clientId = getClientIdentifier(request);
     const rlResult = rateLimit(`claim:${clientId}:${dropId}`, RATE_LIMITS.claimAuthorize);
@@ -199,6 +205,20 @@ export async function authorizeClaim(dropId: string, userAddress: string, reques
   }
   if (now < drop.startsAt) throw new ApiError(400, 'Drop has not started yet');
   if (now > drop.expiresAt) throw new ApiError(400, 'Drop has expired');
+
+  const dropLat = toNumber(drop.latitude);
+  const dropLng = toNumber(drop.longitude);
+  if (dropLat != null && dropLng != null) {
+    const lat = Number(coords?.lat);
+    const lng = Number(coords?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new ApiError(400, 'Turn on location. You need to be within 100 m of this drop to claim.');
+    }
+    const meters = distanceMeters(lat, lng, dropLat, dropLng);
+    if (meters > CLAIM_RADIUS_M) {
+      throw new ApiError(400, `You are ${formatDistance(meters)} away. Get within 100 m of this drop to claim.`);
+    }
+  }
 
   const existing = await prisma.dropClaim.findUnique({
     where: { dropId_userId: { dropId, userId: user.id } },
