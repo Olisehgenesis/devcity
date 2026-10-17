@@ -79,6 +79,7 @@ export function serializeDrop(drop: any) {
     tokenAddress: drop.token?.contractAddress ?? null,
     tokenSymbol: drop.token?.symbol ?? null,
     tokenIconUrl: drop.token?.iconUrl ?? null,
+    tokenDecimals: drop.token?.decimals ?? 18,
     amount: drop.amount.toString(),
     maxClaimants: drop.maxClaimants,
     currentClaimants: drop.currentClaimants,
@@ -108,9 +109,14 @@ export async function listActiveDrops() {
 }
 
 export async function createDrop(input: {
+  id?: string;
   name: string;
   description?: string;
   tokenAddress: string;
+  /** Real ERC-20 metadata for an existing token; falls back to the drop name otherwise. */
+  tokenSymbol?: string;
+  tokenName?: string;
+  tokenDecimals?: number;
   amount: string | number;
   maxClaimants: number;
   startsAt: string;
@@ -122,27 +128,38 @@ export async function createDrop(input: {
   const creator = await getOrCreateUser(input.creatorAddress);
   const chainId = CLAIM_CHAIN.id;
   const contractAddress = input.tokenAddress.trim().toLowerCase();
+  const amountDecimal = toDecimal(input.amount);
+  if (amountDecimal.lte(0)) throw new ApiError(400, 'Drop amount must be greater than zero.');
+  if (!Number.isInteger(input.maxClaimants) || input.maxClaimants < 1) {
+    throw new ApiError(400, 'Max claimants must be a positive whole number.');
+  }
 
   const token = await prisma.token.upsert({
     where: { chainId_contractAddress: { chainId, contractAddress } },
     create: {
       creatorId: creator.id,
-      name: input.name,
-      symbol: input.name.slice(0, 4).toUpperCase(),
+      name: input.tokenName?.trim() || input.name,
+      symbol: input.tokenSymbol?.trim().toUpperCase() || input.name.slice(0, 4).toUpperCase(),
       chainId,
       contractAddress,
-      maxSupply: toDecimal(input.amount).mul(input.maxClaimants),
+      decimals: input.tokenDecimals ?? 18,
+      maxSupply: amountDecimal.mul(input.maxClaimants),
     },
-    update: {},
+    update: {
+      ...(input.tokenSymbol?.trim() ? { symbol: input.tokenSymbol.trim().toUpperCase() } : {}),
+      ...(input.tokenName?.trim() ? { name: input.tokenName.trim() } : {}),
+      ...(input.tokenDecimals != null ? { decimals: input.tokenDecimals } : {}),
+    },
   });
 
   const drop = await prisma.drop.create({
     data: {
+      id: input.id,
       creatorId: creator.id,
       tokenId: token.id,
       name: input.name,
       description: input.description ?? null,
-      amount: toDecimal(input.amount),
+      amount: amountDecimal,
       maxClaimants: input.maxClaimants,
       startsAt: new Date(input.startsAt),
       expiresAt: new Date(input.endsAt),
@@ -189,6 +206,7 @@ export async function authorizeClaim(dropId: string, userAddress: string, reques
   if (existing) throw new ApiError(409, 'Already claimed this drop');
 
   const claimAmount = toDecimal(drop.amount);
+  const tokenDecimals = drop.token.decimals ?? 18;
   const maxSupply = toDecimal(drop.token.maxSupply || 0);
   if (claimAmount.gt(maxSupply)) {
     throw new ApiError(400, 'Claim amount exceeds token supply');
@@ -205,7 +223,7 @@ export async function authorizeClaim(dropId: string, userAddress: string, reques
     }
   }
 
-  const amountWei = claimAmount.mul(10 ** 18);
+  const amountWei = claimAmount.mul(10 ** tokenDecimals);
   
   const signature = await signClaimAuthorization({
     dropId: dropIdToBytes32(dropId),

@@ -869,6 +869,11 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <input id="profile-token-liquidity-token" className="you-passphrase" value={liquidityTokenAmount} onChange={(event) => setLiquidityTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
                   <label className="wallet-field-label" htmlFor="profile-token-liquidity-usdt">USDT amount</label>
                   <input id="profile-token-liquidity-usdt" className="you-passphrase" value={liquidityUsdtAmount} onChange={(event) => setLiquidityUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
+                  {!profileToken.poolCreated && (
+                    <button type="button" className="wallet-token-quickseed" onClick={() => { setLiquidityTokenAmount('1000'); setLiquidityUsdtAmount('10'); setError(''); }}>
+                      ⚡ Use defaults (1,000 {profileToken.symbol} + 10 USDT · 0.01 USDT start)
+                    </button>
+                  )}
                   {!unlockedKey && (
                     <div className="wallet-token-unlock">
                       <label className="wallet-field-label" htmlFor="profile-token-liquidity-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>

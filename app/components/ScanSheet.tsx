@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ExternalLink, QrCode, Sparkles } from 'lucide-react';
 import { Sheet } from './Sheet';
+import { resolveRecipient } from '../lib/resolve-user';
 import type { TipTarget } from './TipSheet';
 
 interface ScanSheetProps {
@@ -21,6 +22,7 @@ export function ScanSheet({ open, onClose, onTip }: ScanSheetProps) {
   const [scannedValue, setScannedValue] = useState('');
   const [manualValue, setManualValue] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [manualError, setManualError] = useState('');
 
   useEffect(() => {
     if (!open) {
@@ -70,7 +72,6 @@ export function ScanSheet({ open, onClose, onTip }: ScanSheetProps) {
   }, [open]);
 
   const scannedAddress = addressFromQr(scannedValue);
-  const manualAddress = addressFromQr(manualValue.trim());
   const link = (() => {
     try {
       const parsed = new URL(scannedValue);
@@ -79,6 +80,29 @@ export function ScanSheet({ open, onClose, onTip }: ScanSheetProps) {
       return null;
     }
   })();
+
+  async function handleManualSubmit() {
+    setManualError('');
+    const value = manualValue.trim();
+    if (!value) return;
+    const address = addressFromQr(value);
+    if (address) {
+      setScannedValue(value);
+      return;
+    }
+    // Not an address — treat as a DEVCITY username/handle and resolve it.
+    const resolved = await resolveRecipient(value);
+    if (!resolved) {
+      setManualError('Could not find that DEVCITY username.');
+      return;
+    }
+    onTip({
+      name: resolved.name,
+      initials: resolved.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'UD',
+      color: 'orange',
+      address: resolved.address,
+    });
+  }
 
   return (
     <Sheet open={open} onClose={onClose} eyebrow="DEVCITY · scan" title="Scan a QR code">
@@ -115,21 +139,22 @@ export function ScanSheet({ open, onClose, onTip }: ScanSheetProps) {
               {!cameraError && <span className="scan-camera-status"><span className="live-dot" /> {scanning ? 'Starting camera…' : 'Point at a QR code'}</span>}
             </div>
             {cameraError && <p className="scan-camera-error" role="status">{cameraError}</p>}
-            <p className="scan-help">Wallet QR codes open a tip. Links are shown for review before opening.</p>
-            <form className="scan-manual-form" onSubmit={(event) => { event.preventDefault(); if (manualValue.trim()) setScannedValue(manualValue.trim()); }}>
-              <label htmlFor="scan-manual-input">Or paste a wallet address or QR link</label>
+            <p className="scan-help">Wallet QR codes open a tip. Links are shown for review before opening. You can also type a username (e.g. <em>oliseh</em>).</p>
+            <form className="scan-manual-form" onSubmit={(event) => { event.preventDefault(); void handleManualSubmit(); }}>
+              <label htmlFor="scan-manual-input">Or paste a wallet address, QR link, or DEVCITY username</label>
               <div>
                 <input
                   id="scan-manual-input"
                   value={manualValue}
-                  onChange={(event) => setManualValue(event.target.value)}
-                  placeholder="0x… or https://…"
+                  onChange={(event) => { setManualValue(event.target.value); setManualError(''); }}
+                  placeholder="0x…, https://…, or username"
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <button type="submit" disabled={!manualAddress && !manualValue.trim()}>Continue</button>
+                <button type="submit" disabled={!manualValue.trim()}>Continue</button>
               </div>
             </form>
+            {manualError && <p className="scan-camera-error" role="status">{manualError}</p>}
           </>
         )}
       </div>

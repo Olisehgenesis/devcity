@@ -339,6 +339,7 @@ model Token {
   iconUrl         String?
   chainId         Int
   contractAddress String?
+  decimals       Int         @default(18)
   maxSupply       Decimal     @db.Decimal(78, 0)
   createdAt       DateTime    @default(now())
   creator         User        @relation(fields: [creatorId], references: [id], onDelete: Restrict)

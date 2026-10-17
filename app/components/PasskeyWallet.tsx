@@ -5,7 +5,7 @@ import { useBalance, useReadContract } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
 import { authClient } from '@/lib/auth-client';
 import { normalizeUsername } from '@/lib/usernames';
-import { clearUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { clearUnlockedWallet, getUnlockedPrivateKey, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
 import {
   createEOA,
   encryptWithPassphrase,
@@ -190,6 +190,15 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify }: Pas
   useEffect(() => {
     void refreshSession();
   }, []);
+
+  // Reuse the already-unlocked key from this session so reopening the wallet
+  // (or remounting) never re-prompts for the PIN just to view balances/tokens.
+  // The PIN itself is never persisted — only the decrypted key in memory.
+  useEffect(() => {
+    if (!wallet?.address) return;
+    const existing = getUnlockedPrivateKey(wallet.address);
+    if (existing) setUnlockedKey(existing);
+  }, [wallet?.address]);
 
   async function resolveWalletForUser(uid: string) {
     const local = await listLocalWallets();

@@ -4168,3 +4168,59 @@ h1, h2, h3, p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   .marker-drop .marker-drop-crate { animation: none; }
 }
+
+/* ── Create drop flow ─────────────────────────────────────────────────── */
+.create-drop-flow { display: flex; flex-direction: column; gap: 14px; }
+.create-drop-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.create-drop-step { font-size: 11px; font-weight: 800; letter-spacing: .03em; padding: 5px 10px; border-radius: 999px; background: var(--surface); color: var(--ink-2); opacity: .55; }
+.create-drop-step.is-active { background: var(--lime); color: var(--ink); opacity: 1; }
+.create-drop-step.is-done { opacity: .85; }
+.create-drop-step-panel { display: flex; flex-direction: column; gap: 12px; }
+.create-drop-search-row { display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink-2); }
+.create-drop-search { flex: 1; min-width: 0; padding: 11px 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 14px; }
+.create-drop-clear { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--surface); color: var(--ink-2); }
+.create-drop-results { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.create-drop-results li button { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 10px; text-align: left; color: var(--ink); font-size: 13px; line-height: 1.3; }
+.create-drop-results li button:hover { background: color-mix(in srgb, var(--lime) 30%, var(--paper)); }
+.create-drop-results li + li { border-top: 1px solid var(--line); }
+.create-drop-map-wrap { position: relative; height: 220px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+.create-drop-map { width: 100%; height: 100%; }
+.create-drop-locate { position: absolute; right: 10px; bottom: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 10px; background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 800; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+.create-drop-map-hint { font-size: 12px; color: var(--ink-2); opacity: .75; }
+.create-drop-place { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--ink); line-height: 1.35; }
+.create-drop-actions { display: flex; gap: 10px; }
+.create-drop-actions .you-connect-primary, .create-drop-actions .you-connect-secondary { flex: 1; }
+.create-drop-token-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.create-drop-token { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper); text-align: left; }
+.create-drop-token.is-selected { border-color: var(--ink); box-shadow: 0 0 0 2px var(--lime); }
+.create-drop-token-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--lime); color: var(--ink); font-size: 15px; font-weight: 900; flex-shrink: 0; }
+.create-drop-token-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.create-drop-token-info strong { font-size: 14px; color: var(--ink); }
+.create-drop-token-info small { font-size: 11px; color: var(--ink-2); opacity: .8; }
+.create-drop-token-balance { display: flex; flex-direction: column; align-items: flex-end; }
+.create-drop-token-balance strong { font-size: 14px; color: var(--ink); }
+.create-drop-token-balance small { font-size: 11px; color: var(--ink-2); opacity: .8; }
+.create-drop-empty { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px dashed var(--line); border-radius: 14px; text-align: center; }
+.create-drop-empty strong { font-size: 14px; color: var(--ink); }
+.create-drop-empty p { font-size: 13px; color: var(--ink-2); }
+.create-drop-max { padding: 0 12px; border-radius: 9px; background: var(--surface); color: var(--ink); font-size: 11px; font-weight: 800; }
+.create-drop-total { font-size: 13px; color: var(--ink-2); }
+.create-drop-total strong { color: var(--ink); }
+.create-drop-review { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--paper); }
+.create-drop-review-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; font-size: 13px; }
+.create-drop-review-row + .create-drop-review-row { border-top: 1px solid var(--line); }
+.create-drop-review-row span { color: var(--ink-2); }
+.create-drop-review-row strong { display: flex; align-items: center; gap: 5px; color: var(--ink); text-align: right; overflow-wrap: anywhere; }
+.create-drop-success { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: color-mix(in srgb, var(--lime) 25%, var(--paper)); text-align: center; }
+.create-drop-success p { font-size: 14px; font-weight: 800; color: var(--ink); }
+.create-drop-gate { gap: 8px; }
+
+/* ── Map drop status ─────────────────────────────────────────────────── */
+.map-drops-status { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); display: flex; align-items: center; gap: 7px; max-width: 90%; padding: 8px 13px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); color: var(--ink); font-size: 12px; font-weight: 700; box-shadow: 0 2px 10px rgba(0,0,0,.18); z-index: 5; }
+.map-drops-status.is-error { color: #a33; }
+.map-drops-status button { color: var(--ink); font-weight: 900; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── Quick seed pool ─────────────────────────────────────────────────── */
+.wallet-token-quickseed { padding: 9px 12px; border: 1px dashed var(--line); border-radius: 10px; background: color-mix(in srgb, var(--lime) 18%, var(--paper)); color: var(--ink); font-size: 12px; font-weight: 800; text-align: center; }
+.wallet-token-quickseed:hover { background: color-mix(in srgb, var(--lime) 32%, var(--paper)); }
+.scan-manual-form em { font-style: normal; font-weight: 800; }

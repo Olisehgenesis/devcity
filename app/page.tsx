@@ -27,6 +27,7 @@ import { Sheet } from "./components/Sheet";
 import { CitySocialSheet, type FeedProfileStatus, type SocialView } from "./components/CitySocialSheet";
 import { ScanSheet } from "./components/ScanSheet";
 import { SearchSheet } from "./components/SearchSheet";
+import { CreateDropSheet } from "./components/CreateDropSheet";
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
@@ -258,6 +259,11 @@ export default function CityHome() {
   const [cityMenuOpen, setCityMenuOpen] = useState(false);
   const [suggestedOpen, setSuggestedOpen] = useState(false);
   const [activeStory, setActiveStory] = useState<Story | null>(null);
+  const [createDropOpen, setCreateDropOpen] = useState(false);
+  const [createDropLocation, setCreateDropLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const onMapTapRef = useRef<(lng: number, lat: number) => void>(() => {});
+  const [dropLoading, setDropLoading] = useState(true);
+  const [dropError, setDropError] = useState(false);
 
   const loadGame = useGameStore((s) => s.load);
   const gameStreak = useGameStore((s) => s.streak);
@@ -342,6 +348,7 @@ export default function CityHome() {
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    map.on("click", (event) => onMapTapRef.current(event.lngLat.lng, event.lngLat.lat));
     map.on("load", () => {
       setMapReady(true);
       setMapError(false);
@@ -377,19 +384,35 @@ export default function CityHome() {
     };
   }, []);
 
+  const refreshDrops = useCallback(async () => {
+    setDropLoading(true);
+    setDropError(false);
+    try {
+      const response = await fetch("/api/drops");
+      if (!response.ok) throw new Error("Could not load drops.");
+      const data: { drops?: DropApiItem[] } = await response.json();
+      const mapped = (data?.drops ?? [])
+        .map(dropToMarker)
+        .filter((item): item is CityMarker => item !== null);
+      setDropMarkers((current) => {
+        const existing = new globalThis.Map(current.map((m) => [m.id, m]));
+        for (const marker of mapped) existing.set(marker.id, marker);
+        return Array.from(existing.values());
+      });
+    } catch {
+      setDropError(true);
+    } finally {
+      setDropLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/drops")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { drops?: DropApiItem[] } | null) => {
-        if (cancelled || !data?.drops) return;
-        setDropMarkers(data.drops.map(dropToMarker).filter((item): item is CityMarker => item !== null));
-      })
-      .catch(() => {});
+    void refreshDrops();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshDrops]);
 
   useEffect(() => {
     let cancelled = false;
@@ -704,6 +727,29 @@ export default function CityHome() {
     }
   }
 
+  const openCreateDrop = useCallback((location?: { lat: number; lng: number } | null) => {
+    setCreateMenuOpen(false);
+    setCityMenuOpen(false);
+    setCreateDropLocation(location ?? (myPosition ? { lat: myPosition[1], lng: myPosition[0] } : null));
+    setCreateDropOpen(true);
+  }, [myPosition]);
+
+  useEffect(() => {
+    onMapTapRef.current = (lng, lat) => {
+      if (!feedUserAddress) {
+        setNotice("Create a passkey wallet to publish drops.");
+        openWallet();
+        return;
+      }
+      setCreateDropLocation({ lat, lng });
+      setCreateDropOpen(true);
+    };
+  }, [feedUserAddress]);
+
+  function handleDropCreated() {
+    void refreshDrops();
+  }
+
   function openProfile() {
     setReturnToFeedAfterProfile(false);
     setSocialView(null);
@@ -799,6 +845,14 @@ export default function CityHome() {
           <button onClick={() => window.location.reload()}>Retry</button>
         </div>}
 
+        {dropLoading && <div className="map-drops-status" role="status"><span className="spinner" /> Loading drops…</div>}
+        {!dropLoading && dropError && (
+          <div className="map-drops-status is-error" role="status">Couldn&apos;t load drops. <button onClick={() => void refreshDrops()}>Retry</button></div>
+        )}
+        {!dropLoading && !dropError && dropMarkers.length === 0 && (
+          <div className="map-drops-status" role="status">No live drops yet — tap the map to create one.</div>
+        )}
+
         <header className="topbar">
           <div className="location-heading">
             <span className="eyebrow"><span className="live-dot" /> MUMBAI IS LIVE</span>
@@ -836,6 +890,7 @@ export default function CityHome() {
               <>
                 <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateMenuOpen(false); }}><BuildingSprite id="cafe" size={30} /> Create stall</button>
                 <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateMenuOpen(false); }}><BuildingSprite id="booth" size={30} /> Create booth</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => openCreateDrop()}><Gift size={16} /> Create a drop</button>
               </>
             )}
             <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setTrendingOpen(true); }}><Sparkles size={16} /> Trending</button>
@@ -1038,6 +1093,15 @@ export default function CityHome() {
           </div>
         </Sheet>
       )}
+      <CreateDropSheet
+        open={createDropOpen}
+        onClose={() => setCreateDropOpen(false)}
+        walletAddress={feedUserAddress}
+        initialLocation={createDropLocation}
+        notify={setNotice}
+        onCreated={handleDropCreated}
+        onNeedWallet={openWallet}
+      />
     </main>
   );
 }

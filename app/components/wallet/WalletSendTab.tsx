@@ -8,6 +8,7 @@ import { ERC20_ABI } from '@/lib/chain';
 import { ACTIVE_CHAIN, toGasCurrency } from '@/lib/celo';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { clearUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { resolveRecipient } from '../../lib/resolve-user';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
 
 interface Fee {
@@ -67,10 +68,6 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
       setError('Unlock your wallet first.');
       return;
     }
-    if (!isAddress(sendTo)) {
-      setError('Enter a valid recipient address.');
-      return;
-    }
     if (!sendTo || !sendAmount || Number(sendAmount) <= 0) {
       setError('Enter a recipient and amount.');
       return;
@@ -82,6 +79,13 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
     setSending(true);
     setError('');
     try {
+      // Accept a 0x address OR a DEVCITY username/handle.
+      let toAddress = sendTo.trim();
+      if (!isAddress(toAddress)) {
+        const resolved = await resolveRecipient(toAddress);
+        if (!resolved) throw new Error('Could not find that DEVCITY username.');
+        toAddress = resolved.address;
+      }
       const account = privateKeyToAccount(effectiveKey);
       const client = createWalletClient({
         account,
@@ -96,13 +100,13 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
           address: token.address,
           abi: ERC20_ABI,
           functionName: 'transfer',
-          args: [getAddress(sendTo), amount],
+          args: [getAddress(toAddress), amount],
           ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
         } as any);
       } else {
         const amount = parseUnits(sendAmount, 18);
         txHash = await client.sendTransaction({
-          to: getAddress(sendTo),
+          to: getAddress(toAddress),
           value: amount,
           ...(gasCurrency ? { gasCurrency: gasCurrency as Address } : {}),
         } as any);
@@ -150,7 +154,7 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
             className="you-passphrase"
             value={sendTo}
             onChange={(e) => setSendTo(e.target.value)}
-            placeholder="0x…"
+            placeholder="0x… or username"
             autoComplete="off"
           />
           <label className="wallet-field-label" htmlFor="wallet-send-amount">Amount</label>

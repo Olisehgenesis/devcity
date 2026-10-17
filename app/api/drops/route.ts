@@ -18,9 +18,13 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const drop = await createDrop({
+      id: body.id,
       name: body.name,
       description: body.description,
       tokenAddress: body.tokenAddress,
+      tokenSymbol: body.tokenSymbol,
+      tokenName: body.tokenName,
+      tokenDecimals: body.tokenDecimals,
       amount: body.amount,
       maxClaimants: body.maxClaimants,
       startsAt: body.startsAt,
