@@ -27,6 +27,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOSTNAME=0.0.0.0
+      - BETTER_AUTH_URL=https://devcity.fun
       - DOTENV_PRIVATE_KEY=6fcbd35b9fe2858d30843e3cfc66e45b27196b24130bd1b26f294435318eb63b
       - DATABASE_URL=postgresql://devcity:devcity_dev_password@postgres:5432/devcity?schema=public
     ports:
