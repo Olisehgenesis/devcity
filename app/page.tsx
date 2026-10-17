@@ -253,7 +253,9 @@ export default function CityHome() {
   const [outsidePromptOpen, setOutsidePromptOpen] = useState(false);
   const [dropSheetOpen, setDropSheetOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const [createKind, setCreateKind] = useState<"stall" | "booth" | null>(null);
+  const [createKind, setCreateKind] = useState<"stall" | "booth" | "event" | null>(null);
+  const [placeMenu, setPlaceMenu] = useState<{ lat: number; lng: number } | null>(null);
+  const [skipDropLocation, setSkipDropLocation] = useState(false);
   const [createName, setCreateName] = useState("");
   const [creatingPlace, setCreatingPlace] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -493,7 +495,15 @@ export default function CityHome() {
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    map.doubleClickZoom.disable();
     let pressTimer: number | null = null;
+    let lastTapAt = 0;
+    let lastTapLng = 0;
+    let lastTapLat = 0;
+    const isMarkerPress = (event: { originalEvent?: Event }) => {
+      const target = event.originalEvent?.target;
+      return target instanceof Element && Boolean(target.closest(".maplibregl-marker, .map-marker"));
+    };
     const cancelPress = () => {
       if (pressTimer != null) window.clearTimeout(pressTimer);
       pressTimer = null;
@@ -505,10 +515,33 @@ export default function CityHome() {
         onMapTapRef.current(lng, lat);
       }, 550);
     };
-    map.on("mousedown", (event) => startPress(event.lngLat.lng, event.lngLat.lat));
-    map.on("touchstart", (event) => startPress(event.lngLat.lng, event.lngLat.lat));
-    map.on("mouseup", cancelPress);
-    map.on("touchend", cancelPress);
+    const noteTap = (lng: number, lat: number) => {
+      const now = Date.now();
+      const sameSpot = Math.abs(lng - lastTapLng) < 0.0008 && Math.abs(lat - lastTapLat) < 0.0008;
+      if (now - lastTapAt < 350 && sameSpot) {
+        lastTapAt = 0;
+        cancelPress();
+        onMapTapRef.current(lng, lat);
+        return;
+      }
+      lastTapAt = now;
+      lastTapLng = lng;
+      lastTapLat = lat;
+    };
+    map.on("mousedown", (event) => { if (!isMarkerPress(event)) startPress(event.lngLat.lng, event.lngLat.lat); });
+    map.on("touchstart", (event) => { if (!isMarkerPress(event)) startPress(event.lngLat.lng, event.lngLat.lat); });
+    map.on("mouseup", (event) => { cancelPress(); if (!isMarkerPress(event)) noteTap(event.lngLat.lng, event.lngLat.lat); });
+    map.on("touchend", (event) => {
+      cancelPress();
+      const point = event.lngLat ?? event.lngLats?.[0];
+      if (point && !isMarkerPress(event)) noteTap(point.lng, point.lat);
+    });
+    map.on("dblclick", (event) => {
+      if (isMarkerPress(event)) return;
+      cancelPress();
+      lastTapAt = 0;
+      onMapTapRef.current(event.lngLat.lng, event.lngLat.lat);
+    });
     map.on("movestart", cancelPress);
     map.on("load", () => {
       setMapReady(true);
@@ -911,20 +944,30 @@ export default function CityHome() {
         setCreateError("Create a passkey wallet first to set up a spot.");
         return;
       }
-      const endpoint = createKind === "stall" ? "/api/stalls" : "/api/booths";
+      const lat = createDropLocation?.lat ?? (myPosition ? myPosition[1] : 19.0662);
+      const lng = createDropLocation?.lng ?? (myPosition ? myPosition[0] : 72.8697);
+      const endpoint = createKind === "stall" ? "/api/stalls" : createKind === "event" ? "/api/events" : "/api/booths";
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ownerId,
           name: createName.trim(),
-          lat: myPosition?.[0] ?? 19.0662,
-          lng: myPosition?.[1] ?? 72.8697,
+          lat,
+          lng,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not create.");
-      setNotice(`${createKind === "stall" ? "Stall" : "Booth"} "${createName.trim()}" created.`);
+      const label = createKind === "stall" ? "Stall" : createKind === "event" ? "Event" : "Spot";
+      setNotice(`${label} "${createName.trim()}" created.`);
+      if (createKind === "event") {
+        const response = await fetch("/api/events");
+        if (response.ok) {
+          const events = (await response.json()) as { events?: EventApiItem[] };
+          setEventMarkers((events.events ?? []).map(eventToMarker).filter((item): item is CityMarker => item !== null));
+        }
+      }
       setCreateKind(null);
       setCreateName("");
     } catch (error) {
@@ -1006,6 +1049,7 @@ export default function CityHome() {
     setSearchSheetOpen(false);
     setTipTarget(null);
     setNotificationsOpen(false);
+    setSkipDropLocation(false);
     setCreateDropLocation(location ?? (myPosition ? { lat: myPosition[1], lng: myPosition[0] } : null));
     setCreateDropOpen(true);
   }, [myPosition]);
@@ -1026,7 +1070,7 @@ export default function CityHome() {
       setTipTarget(null);
       setNotificationsOpen(false);
       setCreateDropLocation({ lat, lng });
-      setCreateDropOpen(true);
+      setPlaceMenu({ lat, lng });
     };
   }, [feedUserAddress]);
 
@@ -1153,7 +1197,7 @@ export default function CityHome() {
           <div className="map-drops-status is-error" role="status">Couldn&apos;t load drops. <button onClick={() => void refreshDrops()}>Retry</button></div>
         )}
         {!dropLoading && !dropError && dropMarkers.length === 0 && (
-          <div className="map-drops-status" role="status">No live drops yet — press and hold the map to create one.</div>
+          <div className="map-drops-status" role="status">No live drops yet — press and hold, or double-press, the map to create one.</div>
         )}
 
         <header className="topbar">
@@ -1362,12 +1406,23 @@ export default function CityHome() {
         onFollow={() => setNotice("Following that person.")}
       />
       <StoryViewer story={activeStory} onClose={() => setActiveStory(null)} />
+      {placeMenu && (
+        <Sheet open onClose={() => setPlaceMenu(null)} eyebrow="Mumbai · create" title="Add here">
+          <div className="place-choices" role="menu">
+            <span className="city-hub-label">This spot</span>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setSkipDropLocation(true); setCreateDropOpen(true); setPlaceMenu(null); }}><Gift size={16} /> Drop</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("event"); setCreateName(""); setPlaceMenu(null); }}><Sparkles size={16} /> Event</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateName(""); setPlaceMenu(null); }}><BuildingSprite id="cafe" size={30} /> Stall</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateName(""); setPlaceMenu(null); }}><BuildingSprite id="booth" size={30} /> Other</button>
+          </div>
+        </Sheet>
+      )}
       {createKind && (
         <Sheet
           open
           onClose={() => { setCreateKind(null); setCreateName(""); }}
           eyebrow="Mumbai · create"
-          title={createKind === "stall" ? "Create a stall" : "Create a booth"}
+          title={createKind === "stall" ? "Create a stall" : createKind === "event" ? "Create an event" : "Create something else"}
         >
           <div className="drop-sheet-content">
             <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
@@ -1375,13 +1430,15 @@ export default function CityHome() {
               className="create-name-input"
               value={createName}
               onChange={(e) => setCreateName(e.target.value)}
-              placeholder={createKind === "stall" ? "Stall name (e.g. Spice corner)" : "Booth name (e.g. Devcon welcome desk)"}
+              placeholder={createKind === "stall" ? "Stall name" : createKind === "event" ? "Event name" : "Name"}
               aria-label="Name"
             />
             <p className="drop-sheet-copy">
               {createKind === "stall"
-                ? "A stall is your map-anchored spot in the city. Set it at your current location and share it with people nearby."
-                : "A booth is a sponsored/venue space that can host drops and link to an event."}
+                ? "This stall uses the spot you pressed on the map."
+                : createKind === "event"
+                  ? "This event uses the spot you pressed on the map."
+                  : "This uses the spot you pressed on the map."}
             </p>
             <button className="claim-button" disabled={creatingPlace || !createName.trim()} onClick={() => void handleCreatePlace()}>
               {creatingPlace ? <><span className="spinner" /> Creating…</> : `Create ${createKind}`}
@@ -1464,9 +1521,10 @@ export default function CityHome() {
       )}
       <CreateDropSheet
         open={createDropOpen}
-        onClose={() => setCreateDropOpen(false)}
+          onClose={() => { setCreateDropOpen(false); setSkipDropLocation(false); }}
         walletAddress={feedUserAddress}
         initialLocation={createDropLocation}
+        skipLocation={skipDropLocation}
         notify={setNotice}
         onCreated={handleDropCreated}
         onNeedWallet={openWallet}

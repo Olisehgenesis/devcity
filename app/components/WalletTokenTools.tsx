@@ -277,12 +277,9 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         functionName: 'getUserToken',
         args: [wallet.address as Address],
       });
-      if (address.toLowerCase() === zeroAddress) {
-        setProfileToken(null);
-        return;
-      }
+      if (address.toLowerCase() === zeroAddress) return false;
 
-      const [name, symbol, decimals, totalSupply, balance, treasuryBalance, uri, poolCreated] = await Promise.all([
+      const [name, symbol, decimals, totalSupply, balance, treasuryBalance, uri] = await Promise.all([
         publicClient.readContract({ address, abi: PROFILE_TOKEN_ABI, functionName: 'name' }),
         publicClient.readContract({ address, abi: PROFILE_TOKEN_ABI, functionName: 'symbol' }),
         publicClient.readContract({ address, abi: PROFILE_TOKEN_ABI, functionName: 'decimals' }),
@@ -290,8 +287,13 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         publicClient.readContract({ address, abi: PROFILE_TOKEN_ABI, functionName: 'balanceOf', args: [wallet.address as Address] }),
         publicClient.readContract({ address, abi: PROFILE_TOKEN_ABI, functionName: 'balanceOf', args: [CELO_SEPOLIA.profileTokenFactory as Address] }),
         publicClient.readContract({ address, abi: PROFILE_TOKEN_ABI, functionName: 'tokenURI' }),
-        publicClient.readContract({ address, abi: PROFILE_TOKEN_ABI, functionName: 'poolCreated' }),
       ]);
+      let poolCreated = false;
+      try {
+        poolCreated = await publicClient.readContract({ address, abi: PROFILE_TOKEN_ABI, functionName: 'poolCreated' });
+      } catch {
+        poolCreated = false;
+      }
       let price: number | null = null;
       let priceSource: string | null = null;
       if (poolCreated) {
@@ -327,8 +329,10 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         priceSource,
       });
       setEditTokenURI(uri);
+      return true;
     } catch (readError) {
       setError(readError instanceof Error ? `Could not load your profile token: ${readError.message}` : 'Could not load your profile token.');
+      return false;
     }
   }, [wallet.address]);
 
@@ -454,7 +458,26 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         args: [name, symbol, uri],
       });
       await waitForSuccess(hash);
-      await loadProfileToken();
+      setTransactionHash('');
+      setProfileToken({
+        address: zeroAddress,
+        name,
+        symbol,
+        decimals: 18,
+        balance: parseUnits('900000', 18),
+        treasuryBalance: parseUnits('100000', 18),
+        totalSupply: parseUnits('1000000', 18),
+        tokenURI: uri,
+        poolCreated: false,
+        price: null,
+        priceSource: null,
+      });
+      let found = false;
+      for (let attempt = 0; attempt < 4 && !found; attempt += 1) {
+        found = await loadProfileToken();
+        if (!found) await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      }
+      setError('');
       const contractAddress = await publicClient.readContract({
         address: CELO_SEPOLIA.profileTokenFactory as Address,
         abi: PROFILE_FACTORY_ABI,
@@ -1007,7 +1030,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
       {!unlockedKey && (tab === 'assets' && tokens.length > 0) && (
         <p className="wallet-token-hint">Unlock is requested only when you approve a transaction.</p>
       )}
-      {transactionHash && (
+      {transactionHash && !profileToken && (
         <p className="wallet-transaction-status" role="status">
           Confirmed on Celo Sepolia: <a href={`${CELO_SEPOLIA.blockExplorer}/tx/${transactionHash}`} target="_blank" rel="noreferrer">{transactionHash.slice(0, 10)}…</a>
         </p>

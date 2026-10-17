@@ -1411,6 +1411,12 @@ h1, h2, h3, p { margin: 0; }
   margin-bottom: 12px;
 }
 
+.place-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .create-menu {
   position: absolute;
   right: 14px;

@@ -3,6 +3,34 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const name = String(body.name ?? '').trim();
+    if (name.length < 2) return NextResponse.json({ error: 'Name the event.' }, { status: 400 });
+    const lat = Number(body.lat);
+    const lng = Number(body.lng);
+    const slugBase = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'event';
+    const event = await prisma.event.create({
+      data: {
+        slug: `${slugBase}-${Date.now().toString(36)}`,
+        name,
+        organizer: 'DEVCITY',
+        location: 'Mumbai',
+        region: 'Mumbai',
+        kind: 'community',
+        source: 'devcity',
+        latitude: Number.isFinite(lat) ? lat : null,
+        longitude: Number.isFinite(lng) ? lng : null,
+      },
+    });
+    return NextResponse.json({ event }, { status: 201 });
+  } catch (error) {
+    console.error('POST /api/events failed:', error);
+    return NextResponse.json({ error: 'Could not create the event.' }, { status: 500 });
+  }
+}
+
 export async function GET() {
   try {
     const events = await prisma.event.findMany({

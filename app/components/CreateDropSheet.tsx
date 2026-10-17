@@ -67,6 +67,7 @@ interface CreateDropSheetProps {
   onClose: () => void;
   walletAddress: string | null;
   initialLocation?: { lat: number; lng: number } | null;
+  skipLocation?: boolean;
   notify?: (message: string) => void;
   onCreated?: (drop: { id: string; lat: number | null; lng: number | null }) => void;
   onNeedWallet?: () => void;
@@ -97,7 +98,7 @@ function nominatimReverse(lat: number, lng: number, signal?: AbortSignal): Promi
     );
 }
 
-export function CreateDropSheet({ open, onClose, walletAddress, initialLocation, notify, onCreated, onNeedWallet }: CreateDropSheetProps) {
+export function CreateDropSheet({ open, onClose, walletAddress, initialLocation, skipLocation, notify, onCreated, onNeedWallet }: CreateDropSheetProps) {
   const [step, setStep] = useState<Step>('location');
   const [location, setLocation] = useState<DropLocation | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -119,6 +120,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
   const [pin, setPin] = useState('');
   const [unlockError, setUnlockError] = useState('');
 
+  const openedWithLocation = useRef(false);
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const pinRef = useRef<MapLibreMarker | null>(null);
@@ -191,9 +193,22 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
     };
   }, [open, walletAddress, chainId]);
 
+  useEffect(() => {
+    if (!open) {
+      openedWithLocation.current = false;
+      return;
+    }
+    if (openedWithLocation.current) return;
+    openedWithLocation.current = true;
+    if (skipLocation && initialLocation) {
+      setLocation({ lat: initialLocation.lat, lng: initialLocation.lng, name: 'Selected on the map' });
+      setStep('token');
+    }
+  }, [initialLocation, open, skipLocation]);
+
   // ─── Location mini-map ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!open || step !== 'location' || !mapContainer.current || mapRef.current) return;
+    if (!open || step !== 'location' || skipLocation || !mapContainer.current || mapRef.current) return;
     maplibregl.setWorkerUrl('/maplibre-gl-worker');
     const map = new maplibregl.Map({
       container: mapContainer.current,
