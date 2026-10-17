@@ -11,7 +11,9 @@ import {
   encryptWithPassphrase,
   saveLocalWallet,
   loadLocalWallet,
+  bindWalletToUser,
   listLocalWallets,
+  walletForUser,
   uploadEncryptedBackup,
   decryptWithPassphrase,
   loadBackupForUser,
@@ -169,7 +171,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
       setUser(next);
       onSessionChange?.(next);
       if (next) {
-        await resolveWalletForUser(next.id);
+        await resolveWalletForUser(next.id, next.name);
       } else {
         clearUnlockedWallet();
         setPhase('signed-out');
@@ -206,29 +208,59 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
     if (existing) setUnlockedKey(existing);
   }, [wallet?.address]);
 
-  async function resolveWalletForUser(uid: string) {
-    const local = await listLocalWallets();
-    if (local.length > 0) {
-      setWallet(local[0]);
+  async function resolveWalletForUser(uid: string, username?: string | null) {
+    const matched = await walletForUser(uid, username);
+    if (matched) {
+      const bound = await bindWalletToUser(matched, uid);
+      setWallet(bound);
+      if (unlockedKey && getUnlockedPrivateKey(bound.address) == null) setUnlockedKey(null);
       setPhase('ready');
       return;
     }
 
-    // No wallet on this device — check for a server backup tied to this account.
+    clearUnlockedWallet();
+    setWallet(null);
+    setUnlockedKey(null);
+
     try {
       const backup = await loadBackupForUser(uid);
       if (backup) {
+        const wallets = await listLocalWallets();
+        const onDevice = wallets.find((item) => item.address.toLowerCase() === backup.address.toLowerCase());
+        if (onDevice) {
+          const bound = await bindWalletToUser(onDevice, uid);
+          setWallet(bound);
+          setPhase('ready');
+          return;
+        }
         setRestoreAddress(backup.address);
         setPhase('restore');
         return;
       }
     } catch (restoreError) {
-      // Non-fatal: fall through to wallet creation if the lookup itself fails.
       setError(restoreError instanceof Error ? restoreError.message : 'Could not check for a wallet backup.');
     }
 
     setPhase('registering');
     setError('');
+  }
+
+  async function leaveAccount() {
+    try {
+      await authClient.signOut();
+    } catch (signOutError) {
+      setError(signOutError instanceof Error ? signOutError.message : 'Could not sign out. Try again.');
+      return;
+    }
+    clearUnlockedWallet();
+    setUser(null);
+    setWallet(null);
+    setUnlockedKey(null);
+    setPhase('signed-out');
+    setScreen({ id: 'home' });
+    onSessionChange?.(null);
+    window.dispatchEvent(new Event('devcity-session-changed'));
+    onNotify?.('Signed out. This account’s wallet is closed.');
   }
 
   async function handleRegister() {
@@ -256,7 +288,11 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         createSession: true,
       });
       if (result.error) throw new Error(result.error.message || 'Could not create account');
+      clearUnlockedWallet();
+      setWallet(null);
+      setUnlockedKey(null);
       await refreshSession();
+      window.dispatchEvent(new Event('devcity-session-changed'));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Could not create account');
     } finally {
@@ -279,6 +315,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         encryptedPrivateKey,
         backupConsent: false,
         createdAt: Date.now(),
+        userId: user?.id,
       };
       await saveLocalWallet(local);
       setWallet(local);
@@ -327,6 +364,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         backupConsent: true,
         backupRef: backup.address,
         createdAt: Date.now(),
+        userId: user.id,
       };
       await saveLocalWallet(local);
       setWallet(local);
@@ -430,7 +468,11 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
                 try {
                   const result = await authClient.signIn.passkey();
                   if (result.error) throw new Error(result.error.message || 'Passkey sign-in failed');
+                  clearUnlockedWallet();
+                  setWallet(null);
+                  setUnlockedKey(null);
                   await refreshSession();
+                  window.dispatchEvent(new Event('devcity-session-changed'));
                 } catch (e: unknown) {
                   setError(e instanceof Error ? e.message : 'Passkey sign-in failed');
                 } finally {
@@ -487,6 +529,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         <button className="you-connect-primary" disabled={pin.length !== 6} onClick={handleCreateWallet}>
           Create wallet
         </button>
+        <button type="button" className="you-disconnect" onClick={() => { void leaveAccount(); }}>Sign out</button>
         {error && <p className="you-error">{error}</p>}
         <p className="you-note">The 6-digit PIN protects this device copy and is weaker if someone obtains its data. There’s no recovery phrase; if forgotten, this wallet can’t be unlocked.</p>
       </div>
@@ -516,6 +559,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         <button className="you-connect-primary" disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
           {backupSaving ? 'Restoring…' : 'Restore wallet'}
         </button>
+        <button type="button" className="you-disconnect" disabled={backupSaving} onClick={() => { void leaveAccount(); }}>Sign out</button>
         <button
           className="you-connect-secondary"
           disabled={backupSaving}
@@ -611,18 +655,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             onDrop={() => onCreateDrop?.()}
             onActivity={() => setScreen({ id: 'activity' })}
             onSettings={() => setScreen({ id: 'settings' })}
-            onSignOut={() => {
-              void authClient.signOut();
-              clearUnlockedWallet();
-              window.dispatchEvent(new Event('devcity-session-changed'));
-              setUser(null);
-              setWallet(null);
-              setUnlockedKey(null);
-              setPhase('signed-out');
-              setScreen({ id: 'home' });
-              onSessionChange?.(null);
-              onNotify?.('Signed out of DEVCITY.');
-            }}
+            onSignOut={() => { void leaveAccount(); }}
           />
           <WalletHome
             celoBalance={celoLabel}
@@ -777,16 +810,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             setFeeSymbol={setFeeSymbol}
             onWalletChange={(next) => setWallet(next)}
             onUnlockKey={(key) => setUnlockedKey(key)}
-            onSignOut={() => {
-              window.dispatchEvent(new Event('devcity-session-changed'));
-              setUser(null);
-              setWallet(null);
-              setUnlockedKey(null);
-              setPhase('signed-out');
-              setScreen({ id: 'home' });
-              onSessionChange?.(null);
-              onNotify?.('Signed out of DEVCITY.');
-            }}
+            onSignOut={() => { void leaveAccount(); }}
             notify={onNotify}
           />
           <section className="wallet-settings-block">

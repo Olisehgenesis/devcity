@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
-import { authClient } from '@/lib/auth-client';
 import { clearUnlockedWallet } from '@/lib/unlocked-wallet';
 import {
   exportEncryptedKeystore,
@@ -124,7 +123,6 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
   }
 
   function handleSignOut() {
-    void authClient.signOut();
     clearUnlockedWallet();
     onSignOut?.();
   }

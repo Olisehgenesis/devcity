@@ -79,6 +79,8 @@ export interface LocalWallet {
   backupConsent: boolean;
   backupRef?: string;
   createdAt: number;
+  /** Better Auth user id this key belongs to. Other accounts on this device must not open it. */
+  userId?: string;
 }
 
 export function createEOA(): { address: Address; privateKey: Hex } {
@@ -123,6 +125,25 @@ export async function loadLocalWallet(address: Address): Promise<LocalWallet | n
     req.onsuccess = () => resolve((req.result as LocalWallet) ?? null);
     req.onerror = () => reject(req.error);
   });
+}
+
+export async function walletForUser(userId: string, username?: string | null): Promise<LocalWallet | null> {
+  const wallets = await listLocalWallets();
+  const owned = wallets.find((wallet) => wallet.userId === userId);
+  if (owned) return owned;
+  const handle = username?.trim().toLowerCase().replace(/\.devcity\.fun$/, '');
+  if (!handle) return null;
+  return wallets.find((wallet) => {
+    const name = wallet.name?.trim().toLowerCase().replace(/\.devcity\.fun$/, '');
+    return name === handle;
+  }) ?? null;
+}
+
+export async function bindWalletToUser(wallet: LocalWallet, userId: string): Promise<LocalWallet> {
+  if (wallet.userId === userId) return wallet;
+  const next = { ...wallet, userId };
+  await saveLocalWallet(next);
+  return next;
 }
 
 export async function listLocalWallets(): Promise<LocalWallet[]> {

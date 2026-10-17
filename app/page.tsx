@@ -273,20 +273,19 @@ export default function CityHome() {
     setFeedProfileStatus("checking");
     setFeedUserAddress(null);
     try {
-      const [{ authClient }, { listLocalWallets }] = await Promise.all([
+      const [{ authClient }, { walletForUser }] = await Promise.all([
         import("@/lib/auth-client"),
         import("@/lib/keystore"),
       ]);
       const session = await authClient.getSession();
-      const user = (session?.data as { user?: { id: string } } | null)?.user;
+      const user = (session?.data as { user?: { id: string; name?: string | null } } | null)?.user;
       if (!user) {
         setFeedProfileStatus("signed-out");
         return;
       }
-      const wallets = await listLocalWallets();
-      const address = wallets[0]?.address ?? null;
-      setFeedUserAddress(address);
-      setFeedProfileStatus(address ? "ready" : "wallet-needed");
+      const wallet = await walletForUser(user.id, user.name);
+      setFeedUserAddress(wallet?.address ?? null);
+      setFeedProfileStatus(wallet ? "ready" : "wallet-needed");
     } catch {
       setFeedProfileStatus("error");
     }
@@ -294,6 +293,9 @@ export default function CityHome() {
 
   useEffect(() => {
     void refreshFeedProfile();
+    const onSession = () => { void refreshFeedProfile(); };
+    window.addEventListener("devcity-session-changed", onSession);
+    return () => window.removeEventListener("devcity-session-changed", onSession);
   }, [refreshFeedProfile]);
 
   useEffect(() => setHydrated(true), []);
@@ -332,7 +334,7 @@ export default function CityHome() {
       ? visibleMarkers.find((marker) => marker.id === selectedId)
       : undefined;
   const isClaimed = hydrated && selected ? Boolean(claimedMap[selected.id]) : false;
-  const connected = hydrated && isConnected;
+  const connected = hydrated && (isConnected || (feedProfileStatus === "ready" && Boolean(feedUserAddress)));
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
@@ -593,12 +595,10 @@ export default function CityHome() {
 
   async function handleClaim() {
     if (!selected || selected.kind !== "drop") return;
-    const self = await import("@/lib/keystore");
-    const local = await self.listLocalWallets();
-    const myAddress = local[0]?.address;
+    const myAddress = feedUserAddress;
     if (!myAddress) {
       openWallet();
-      setNotice("Create a passkey wallet to claim.");
+      setNotice("Sign in and open this account’s wallet to claim.");
       return;
     }
     setClaiming(true);
@@ -671,9 +671,7 @@ export default function CityHome() {
     setCreatingPlace(true);
     setCreateError("");
     try {
-      const self = await import("@/lib/keystore");
-      const local = await self.listLocalWallets();
-      const ownerId = local[0]?.address;
+      const ownerId = feedUserAddress;
       if (!ownerId) {
         openWallet();
         setCreateError("Create a passkey wallet first to set up a spot.");
