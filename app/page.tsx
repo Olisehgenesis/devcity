@@ -234,10 +234,11 @@ export default function CityHome() {
   const [createName, setCreateName] = useState("");
   const [creatingPlace, setCreatingPlace] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [dropClaimed, setDropClaimed] = useState(false);
   const [claimPin, setClaimPin] = useState("");
   const [claimError, setClaimError] = useState("");
   const [claimUnlocked, setClaimUnlocked] = useState(false);
+  const [chainClaims, setChainClaims] = useState<Record<string, boolean>>({});
+  const [chainCounts, setChainCounts] = useState<Record<string, number>>({});
   const [eventMarkers, setEventMarkers] = useState<CityMarker[]>([]);
   const [dropMarkers, setDropMarkers] = useState<CityMarker[]>([]);
   const [cityCount, setCityCount] = useState(0);
@@ -306,6 +307,30 @@ export default function CityHome() {
     return () => { active = false; };
   }, [dropSheetOpen, feedUserAddress]);
 
+  const refreshClaimStatus = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (feedUserAddress) params.set("userAddress", feedUserAddress);
+    try {
+      const response = await fetch(`/api/claims/status?${params}`);
+      if (!response.ok) return;
+      const data = await response.json() as { drops?: { dropId: string; claimedByUser: boolean; currentClaimants: number }[] };
+      const claimed: Record<string, boolean> = {};
+      const counts: Record<string, number> = {};
+      for (const drop of data.drops ?? []) {
+        claimed[drop.dropId] = drop.claimedByUser;
+        counts[drop.dropId] = drop.currentClaimants;
+      }
+      setChainClaims(claimed);
+      setChainCounts(counts);
+    } catch {
+      // Keep the last chain or database snapshot. A failed refresh must not mark a drop claimed.
+    }
+  }, [feedUserAddress]);
+
+  useEffect(() => {
+    void refreshClaimStatus();
+  }, [refreshClaimStatus]);
+
   useEffect(() => {
     void refreshFeedProfile();
     const onSession = () => { void refreshFeedProfile(); };
@@ -316,7 +341,6 @@ export default function CityHome() {
   useEffect(() => setHydrated(true), []);
 
   const { isConnected } = useAccount();
-  const claimedMap = useCityStore((s) => s.claimed);
   const claim = useCityStore((s) => s.claim);
   const savedEvents = useCityStore((s) => s.savedEvents);
   const saveEvent = useCityStore((s) => s.saveEvent);
@@ -348,8 +372,9 @@ export default function CityHome() {
     : selectedId
       ? visibleMarkers.find((marker) => marker.id === selectedId)
       : undefined;
-  const claimRecord = hydrated && selected ? claimedMap[selected.id] : undefined;
-  const isClaimed = Boolean(claimRecord?.txHash);
+  const selectedDropId = selected?.kind === "drop" ? selected.id.replace(/^drop-/, "") : "";
+  const isClaimed = Boolean(chainClaims[selectedDropId]);
+  const selectedClaimedCount = selected?.kind === "drop" ? (chainCounts[selectedDropId] ?? selected.claimedCount) : selected?.claimedCount;
   const connected = hydrated && (isConnected || (feedProfileStatus === "ready" && Boolean(feedUserAddress)));
 
   useEffect(() => {
@@ -485,7 +510,7 @@ export default function CityHome() {
     for (const marker of dropMarkers) {
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `map-marker marker-drop tone-${marker.color}${claimedMap[marker.id] ? " is-claimed" : ""}`;
+      element.className = `map-marker marker-drop tone-${marker.color}${chainClaims[marker.id.replace(/^drop-/, "")] ? " is-claimed" : ""}`;
       element.setAttribute("aria-label", `${marker.name}, ${marker.detail}`);
       const icon = document.createElement("span");
       icon.className = "marker-icon-content";
@@ -495,7 +520,6 @@ export default function CityHome() {
         event.stopPropagation();
         setSelectedId(marker.id);
         setCardClosed(false);
-        setDropClaimed(Boolean(claimedMap[marker.id]));
         setDropSheetOpen(true);
       });
       const mapMarker = new maplibregl.Marker({ element, anchor: "center" })
@@ -503,7 +527,7 @@ export default function CityHome() {
         .addTo(map);
       registry.set(marker.id, mapMarker);
     }
-  }, [dropMarkers, mapReady, claimedMap]);
+  }, [chainClaims, dropMarkers, mapReady]);
 
   useEffect(() => {
     if (mapReady || mapError) {
@@ -682,9 +706,8 @@ export default function CityHome() {
       });
       await publicClient.waitForTransactionReceipt({ hash });
       claim(selected.id, selected.name, tokenFor(selected), selected.amount ?? "1", hash);
-      setDropClaimed(true);
-      setDropMarkers((current) => current.map((marker) => marker.id === selected.id ? { ...marker, claimedCount: (marker.claimedCount ?? 0) + 1 } : marker));
-      void refreshDrops();
+      setChainClaims((current) => ({ ...current, [selected.id.replace(/^drop-/, "")]: true }));
+      void refreshClaimStatus();
       setNotice(`Wallet signed the claim. ${selected.amount} ${tokenFor(selected)} is in your wallet.`);
     } catch (error) {
       setClaimError(error instanceof Error ? error.message : "Claim failed. Try again.");
@@ -1007,11 +1030,11 @@ export default function CityHome() {
           </div>
           <h2>{selected.name}</h2>
           <p className="card-description">{selected.detail}</p>
-          <div className="card-meta"><span><MapPin size={13} /> {selected.distance}</span>{selected.kind === "drop" && typeof selected.claimedCount === "number" && <span className="claim-count">{selected.claimedCount} claimed</span>}</div>
+          <div className="card-meta"><span><MapPin size={13} /> {selected.distance}</span>{selected.kind === "drop" && typeof selectedClaimedCount === "number" && <span className="claim-count">{selectedClaimedCount} claimed</span>}</div>
           {selected.kind === "drop" ? (
             <button
               className={`claim-button ${isClaimed ? "is-claimed" : ""}`}
-              onClick={() => { setDropClaimed(isClaimed); setClaimError(""); setClaimPin(""); setDropSheetOpen(true); }}
+              onClick={() => { setClaimError(""); setClaimPin(""); setDropSheetOpen(true); }}
               disabled={isClaimed || claiming}
             >
               {isClaimed ? "Added to your tokens" : <>Explore drop <ArrowUpRight size={16} /></>}
@@ -1165,13 +1188,13 @@ export default function CityHome() {
         </div>
       )}
       {dropSheetOpen && selected?.kind === "drop" && (
-        <Sheet open={dropSheetOpen} onClose={() => setDropSheetOpen(false)} eyebrow="Mumbai · live drop" title={dropClaimed ? "Claimed" : selected.name}>
+        <Sheet open={dropSheetOpen} onClose={() => setDropSheetOpen(false)} eyebrow="Mumbai · live drop" title={isClaimed ? "Claimed" : selected.name}>
           <div className="drop-sheet-content">
             <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
             <p className="drop-sheet-amount">{selected.amount} <span>{tokenFor(selected)}</span></p>
-            <p className="drop-sheet-copy">{dropClaimed ? "Your wallet signed this claim. The tokens are in that wallet." : "Your wallet has to sign this claim. Nothing moves until that signature is on chain."}</p>
-            <div className="drop-sheet-meta"><span><MapPin size={14} /> {selected.distance}</span><span><UsersRound size={14} /> {selected.claimedCount ?? 0} claimed</span></div>
-            {!dropClaimed ? (
+            <p className="drop-sheet-copy">{isClaimed ? "Your wallet signed this claim. The tokens are in that wallet." : "Your wallet has to sign this claim. Nothing moves until that signature is on chain."}</p>
+            <div className="drop-sheet-meta"><span><MapPin size={14} /> {selected.distance}</span><span><UsersRound size={14} /> {selectedClaimedCount ?? 0} claimed</span></div>
+            {!isClaimed ? (
               <>
                 {feedUserAddress ? (
                   claimUnlocked ? (
