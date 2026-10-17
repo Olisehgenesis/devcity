@@ -35,10 +35,11 @@ export function dropIdToBytes32(dropId: string): Hex {
 }
 
 function getSignerAccount(): PrivateKeyAccount {
-  const key = process.env.DEV_WALLET_PRIVATE_KEY;
-  if (!key) {
+  const raw = process.env.DEV_WALLET_PRIVATE_KEY?.trim();
+  if (!raw || raw.startsWith('encrypted:')) {
     throw new Error('DEV_WALLET_PRIVATE_KEY is not set');
   }
+  const key = raw.startsWith('0x') ? raw : `0x${raw}`;
   return privateKeyToAccount(key as Hex);
 }
 

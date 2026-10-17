@@ -31,6 +31,9 @@ services:
       - DATABASE_URL=postgresql://devcity:devcity_dev_password@postgres:5432/devcity?schema=public
     ports:
       - "127.0.0.1:3001:3000"
+    volumes:
+      - ./.env:/app/.env:ro
+    command: ["node", "-r", "./scripts/dotenvx-preload.cjs", "server.js"]
     depends_on:
       postgres:
         condition: service_healthy
