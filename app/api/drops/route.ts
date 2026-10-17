@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { listActiveDrops, createDrop, ApiError } from '@/lib/db-helpers';
+import { claimStatusForDrops } from '@/lib/claim-status';
 
 export async function GET() {
   try {
+    await claimStatusForDrops().catch(() => undefined);
     const drops = await listActiveDrops();
     return NextResponse.json({ drops });
   } catch (err) {

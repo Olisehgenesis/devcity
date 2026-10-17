@@ -115,6 +115,12 @@ export async function claimStatusForDrops(userAddress?: string | null): Promise<
   return Promise.all(drops.map(async (drop) => {
     try {
       const chain = await readChainDrop(drop.id, validUser ? validUser as Address : undefined);
+      if (chain.currentClaimants !== drop.currentClaimants) {
+        await prisma.drop.update({
+          where: { id: drop.id },
+          data: { currentClaimants: chain.currentClaimants },
+        });
+      }
       return { dropId: drop.id, ...chain, source: 'chain' as const };
     } catch {
       return {

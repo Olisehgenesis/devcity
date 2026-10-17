@@ -230,7 +230,18 @@ export const useCityStore = create<CityStore>()(
     }),
     {
       name: 'devcity-city',
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persisted, version) => {
+        if (!persisted || typeof persisted !== 'object') return persisted as never;
+        const state = persisted as { claimed?: Record<string, { txHash?: string }> };
+        if (version < 2 && state.claimed) {
+          state.claimed = Object.fromEntries(
+            Object.entries(state.claimed).filter(([, record]) => Boolean(record?.txHash)),
+          );
+        }
+        return state as never;
+      },
     }
   )
 );

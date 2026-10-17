@@ -254,31 +254,16 @@ export async function authorizeClaim(
   });
 
   if (!existing) {
-    await prisma.$transaction(async (tx) => {
-      await tx.dropClaim.create({
-        data: {
-          dropId,
-          userId: user.id,
-          tokenId: drop.tokenId,
-          amount: drop.amount,
-          status: 'PENDING',
-        },
-      });
-
-      await tx.drop.update({
-        where: { id: dropId },
-        data: {
-          currentClaimants: { increment: 1 },
-        },
-      });
+    await prisma.dropClaim.create({
+      data: {
+        dropId,
+        userId: user.id,
+        tokenId: drop.tokenId,
+        amount: drop.amount,
+        status: 'PENDING',
+      },
     });
   }
-
-  // Real drop claim → award the first-claim badge + a city sticker.
-  await applyGameActions(userAddress, {
-    awardBadge: 'first-claim',
-    collectSticker: 'city',
-  });
 
   return {
     signature,
