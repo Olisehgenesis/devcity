@@ -235,6 +235,9 @@ export default function CityHome() {
   const [creatingPlace, setCreatingPlace] = useState(false);
   const [createError, setCreateError] = useState("");
   const [dropClaimed, setDropClaimed] = useState(false);
+  const [claimPin, setClaimPin] = useState("");
+  const [claimError, setClaimError] = useState("");
+  const [claimUnlocked, setClaimUnlocked] = useState(false);
   const [eventMarkers, setEventMarkers] = useState<CityMarker[]>([]);
   const [dropMarkers, setDropMarkers] = useState<CityMarker[]>([]);
   const [cityCount, setCityCount] = useState(0);
@@ -292,6 +295,18 @@ export default function CityHome() {
   }, []);
 
   useEffect(() => {
+    if (!dropSheetOpen || !feedUserAddress) {
+      setClaimUnlocked(false);
+      return;
+    }
+    let active = true;
+    void import("@/lib/unlocked-wallet").then(({ getUnlockedPrivateKey }) => {
+      if (active) setClaimUnlocked(Boolean(getUnlockedPrivateKey(feedUserAddress)));
+    });
+    return () => { active = false; };
+  }, [dropSheetOpen, feedUserAddress]);
+
+  useEffect(() => {
     void refreshFeedProfile();
     const onSession = () => { void refreshFeedProfile(); };
     window.addEventListener("devcity-session-changed", onSession);
@@ -333,7 +348,8 @@ export default function CityHome() {
     : selectedId
       ? visibleMarkers.find((marker) => marker.id === selectedId)
       : undefined;
-  const isClaimed = hydrated && selected ? Boolean(claimedMap[selected.id]) : false;
+  const claimRecord = hydrated && selected ? claimedMap[selected.id] : undefined;
+  const isClaimed = Boolean(claimRecord?.txHash);
   const connected = hydrated && (isConnected || (feedProfileStatus === "ready" && Boolean(feedUserAddress)));
 
   useEffect(() => {
@@ -598,17 +614,23 @@ export default function CityHome() {
     const myAddress = feedUserAddress;
     if (!myAddress) {
       openWallet();
-      setNotice("Sign in and open this account’s wallet to claim.");
+      setClaimError("Sign in and set up this account’s wallet before claiming.");
       return;
     }
     setClaiming(true);
+    setClaimError("");
     try {
-      const { getUnlockedPrivateKey } = await import("@/lib/unlocked-wallet");
-      const key = getUnlockedPrivateKey(myAddress);
+      const { getUnlockedPrivateKey, rememberUnlockedWallet } = await import("@/lib/unlocked-wallet");
+      let key = getUnlockedPrivateKey(myAddress);
       if (!key) {
-        openWallet();
-        setNotice("Unlock your wallet, then claim again.");
-        return;
+        if (!/^\d{6}$/.test(claimPin)) throw new Error("Enter your 6-digit wallet PIN. Your wallet has to sign this claim.");
+        const { loadLocalWallet, decryptWithPassphrase } = await import("@/lib/keystore");
+        const local = await loadLocalWallet(myAddress as `0x${string}`);
+        if (!local) throw new Error("This account’s wallet is not on this device.");
+        key = (await decryptWithPassphrase(claimPin, local.encryptedPrivateKey)) as `0x${string}`;
+        rememberUnlockedWallet(local.address, key);
+        setClaimPin("");
+        setClaimUnlocked(true);
       }
       const response = await fetch("/api/claims/authorize", {
         method: "POST",
@@ -633,6 +655,9 @@ export default function CityHome() {
       const { celoSepolia } = await import("viem/chains");
       const { CELO_SEPOLIA } = await import("@/lib/chain");
       const account = privateKeyToAccount(key);
+      if (account.address.toLowerCase() !== myAddress.toLowerCase()) {
+        throw new Error("The unlocked key does not match this account’s wallet.");
+      }
       const transport = http(CELO_SEPOLIA.rpcUrl);
       const walletClient = createWalletClient({ account, chain: celoSepolia, transport });
       const publicClient = createPublicClient({ chain: celoSepolia, transport });
@@ -656,11 +681,13 @@ export default function CityHome() {
         args: [data.dropIdBytes32, data.claimer, BigInt(data.amount), BigInt(data.nonce), BigInt(data.expiresAt), data.signature],
       });
       await publicClient.waitForTransactionReceipt({ hash });
-      claim(selected.id, selected.name, tokenFor(selected), selected.amount ?? "1");
+      claim(selected.id, selected.name, tokenFor(selected), selected.amount ?? "1", hash);
       setDropClaimed(true);
-      setNotice(`Claimed ${selected.amount} ${tokenFor(selected)} — added to your tokens.`);
+      setDropMarkers((current) => current.map((marker) => marker.id === selected.id ? { ...marker, claimedCount: (marker.claimedCount ?? 0) + 1 } : marker));
+      void refreshDrops();
+      setNotice(`Wallet signed the claim. ${selected.amount} ${tokenFor(selected)} is in your wallet.`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Claim failed. Try again.");
+      setClaimError(error instanceof Error ? error.message : "Claim failed. Try again.");
     } finally {
       setClaiming(false);
     }
@@ -984,7 +1011,7 @@ export default function CityHome() {
           {selected.kind === "drop" ? (
             <button
               className={`claim-button ${isClaimed ? "is-claimed" : ""}`}
-              onClick={() => { setDropClaimed(isClaimed); setDropSheetOpen(true); }}
+              onClick={() => { setDropClaimed(isClaimed); setClaimError(""); setClaimPin(""); setDropSheetOpen(true); }}
               disabled={isClaimed || claiming}
             >
               {isClaimed ? "Added to your tokens" : <>Explore drop <ArrowUpRight size={16} /></>}
@@ -1142,9 +1169,28 @@ export default function CityHome() {
           <div className="drop-sheet-content">
             <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
             <p className="drop-sheet-amount">{selected.amount} <span>{tokenFor(selected)}</span></p>
-            <p className="drop-sheet-copy">{dropClaimed ? "Your tokens are in your city stash. Keep exploring Mumbai." : selected.detail}</p>
+            <p className="drop-sheet-copy">{dropClaimed ? "Your wallet signed this claim. The tokens are in that wallet." : "Your wallet has to sign this claim. Nothing moves until that signature is on chain."}</p>
             <div className="drop-sheet-meta"><span><MapPin size={14} /> {selected.distance}</span><span><UsersRound size={14} /> {selected.claimedCount ?? 0} claimed</span></div>
-            {!dropClaimed ? <button className="claim-button" disabled={claiming} onClick={() => void handleClaim()}>{claiming ? <><span className="spinner" /> Claiming…</> : <>Claim {selected.amount} {tokenFor(selected)}<ArrowUpRight size={16} /></>}</button> : <button className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}><Sparkles size={15} /> Claimed · Back to city</button>}
+            {!dropClaimed ? (
+              <>
+                {feedUserAddress ? (
+                  claimUnlocked ? (
+                    <p className="you-note">Your wallet is unlocked. Signing sends the claim from that wallet.</p>
+                  ) : (
+                    <>
+                      <label className="wallet-field-label" htmlFor="claim-wallet-pin">Wallet PIN</label>
+                      <input id="claim-wallet-pin" type="password" className="you-passphrase" value={claimPin} onChange={(event) => setClaimPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit PIN" inputMode="numeric" autoComplete="current-password" maxLength={6} />
+                    </>
+                  )
+                ) : (
+                  <p className="you-note">This account has no wallet on this device yet.</p>
+                )}
+                <button className="claim-button" disabled={claiming} onClick={() => feedUserAddress ? void handleClaim() : openWallet()}>
+                  {claiming ? <><span className="spinner" /> Signing with your wallet…</> : feedUserAddress ? <>Sign claim with wallet<ArrowUpRight size={16} /></> : <>Open wallet</>}
+                </button>
+                {claimError && <p className="you-error" role="alert">{claimError}</p>}
+              </>
+            ) : <button className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}><Sparkles size={15} /> Claimed · Back to city</button>}
             <p className="prototype-note">Community token · no market value implied</p>
           </div>
         </Sheet>

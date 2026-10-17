@@ -14,6 +14,7 @@ export interface ClaimRecord {
   tokenSymbol: string;
   amount: string;
   at: number;
+  txHash?: string;
 }
 
 export interface TipRecord {
@@ -56,7 +57,7 @@ interface CityStore {
   syncStatus: SyncStatus;
   lastSyncedAt: number | null;
   autoSyncEnabled: boolean;
-  claim: (dropId: string, dropName: string, tokenSymbol: string, amount: string) => void;
+  claim: (dropId: string, dropName: string, tokenSymbol: string, amount: string, txHash: string) => void;
   sendTip: (toName: string, tokenSymbol: string, amount: string) => void;
   setVisibility: (v: Visibility) => void;
   setProfilePrivacy: (privacy: ProfilePrivacy) => void;
@@ -91,10 +92,10 @@ export const useCityStore = create<CityStore>()(
       lastSyncedAt: null,
       autoSyncEnabled: true,
 
-      claim: (dropId, dropName, tokenSymbol, amount) =>
+      claim: (dropId, dropName, tokenSymbol, amount, txHash) =>
         set((state) => {
-          if (state.claimed[dropId]) return state;
-          const record: ClaimRecord = { dropId, dropName, tokenSymbol, amount, at: Date.now() };
+          if (state.claimed[dropId]?.txHash) return state;
+          const record: ClaimRecord = { dropId, dropName, tokenSymbol, amount, at: Date.now(), txHash };
           return {
             claimed: { ...state.claimed, [dropId]: record },
             activity: [
