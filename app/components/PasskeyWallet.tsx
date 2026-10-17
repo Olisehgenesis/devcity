@@ -192,6 +192,9 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
 
   useEffect(() => {
     void refreshSession();
+    const onSession = () => { void refreshSession(); };
+    window.addEventListener('devcity-session-changed', onSession);
+    return () => window.removeEventListener('devcity-session-changed', onSession);
   }, []);
 
   // Reuse the already-unlocked key from this session so reopening the wallet
@@ -608,6 +611,18 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             onDrop={() => onCreateDrop?.()}
             onActivity={() => setScreen({ id: 'activity' })}
             onSettings={() => setScreen({ id: 'settings' })}
+            onSignOut={() => {
+              void authClient.signOut();
+              clearUnlockedWallet();
+              window.dispatchEvent(new Event('devcity-session-changed'));
+              setUser(null);
+              setWallet(null);
+              setUnlockedKey(null);
+              setPhase('signed-out');
+              setScreen({ id: 'home' });
+              onSessionChange?.(null);
+              onNotify?.('Signed out of DEVCITY.');
+            }}
           />
           <WalletHome
             celoBalance={celoLabel}
@@ -763,6 +778,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             onWalletChange={(next) => setWallet(next)}
             onUnlockKey={(key) => setUnlockedKey(key)}
             onSignOut={() => {
+              window.dispatchEvent(new Event('devcity-session-changed'));
               setUser(null);
               setWallet(null);
               setUnlockedKey(null);

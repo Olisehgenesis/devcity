@@ -4316,6 +4316,8 @@ h1, h2, h3, p { margin: 0; }
   background: var(--surface);
   color: var(--ink);
 }
+.vault-signout { margin-top: 18px; }
+.profile-signout { margin-top: 10px; }
 .vault-icon-button:hover { background: color-mix(in srgb, var(--ink) 8%, var(--surface)); }
 .vault-icon-button:active { scale: .96; }
 button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align: left; }

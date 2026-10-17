@@ -14,6 +14,7 @@ interface WalletOverviewProps {
   onDrop: () => void;
   onActivity: () => void;
   onSettings: () => void;
+  onSignOut: () => void;
 }
 
 const ACTIONS = [
@@ -23,7 +24,7 @@ const ACTIONS = [
   { id: 'drop', label: 'Drop' },
 ] as const;
 
-export function WalletOverview({ chainLabel, name, address, celoBalance, usdBalance, onSend, onReceive, onSwap, onDrop, onActivity, onSettings }: WalletOverviewProps) {
+export function WalletOverview({ chainLabel, name, address, celoBalance, usdBalance, onSend, onReceive, onSwap, onDrop, onActivity, onSettings, onSignOut }: WalletOverviewProps) {
   const actions: Record<(typeof ACTIONS)[number]['id'], () => void> = {
     send: onSend,
     receive: onReceive,
@@ -62,6 +63,7 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, usdBala
           </button>
         ))}
       </div>
+      <button type="button" className="you-disconnect vault-signout" onClick={onSignOut}>Sign out</button>
     </section>
   );
 }

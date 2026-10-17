@@ -7,6 +7,7 @@ import { useCityStore, timeAgo, type AvatarMode } from '../lib/city-store';
 import { dicebearAvatarUrl } from '../lib/avatars';
 import { normalizeUsername } from '@/lib/usernames';
 import { authClient } from '@/lib/auth-client';
+import { clearUnlockedWallet } from '@/lib/unlocked-wallet';
 
 interface YouSheetProps {
   open: boolean;
@@ -117,6 +118,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
   const [sessionUser, setSessionUser] = useState<ProfileUser | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [sessionError, setSessionError] = useState('');
+  const [signingOut, setSigningOut] = useState(false);
   const [retrySession, setRetrySession] = useState(0);
   const accountHandle = normalizeUsername(sessionUser?.name ?? '');
   const profileName = accountHandle ? `${accountHandle}.devcity.fun` : sessionUser?.name || 'City explorer';
@@ -142,6 +144,27 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
       });
     return () => { active = false; };
   }, [open, retrySession]);
+
+  useEffect(() => {
+    const onSession = () => setRetrySession((attempt) => attempt + 1);
+    window.addEventListener('devcity-session-changed', onSession);
+    return () => window.removeEventListener('devcity-session-changed', onSession);
+  }, []);
+
+  async function signOut() {
+    setSigningOut(true);
+    setSessionError('');
+    try {
+      await authClient.signOut();
+      clearUnlockedWallet();
+      window.dispatchEvent(new Event('devcity-session-changed'));
+      setSessionUser(null);
+    } catch (error) {
+      setSessionError(error instanceof Error ? error.message : 'Could not sign out. Try again.');
+    } finally {
+      setSigningOut(false);
+    }
+  }
 
   return (
     <Sheet open={open} onClose={onClose} eyebrow="Your DEVCITY identity" title="Profile">
@@ -253,6 +276,9 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
             <span className="profile-open-wallet-icon"><Wallet size={18} /></span>
             <span><strong>Open wallet</strong><small>Balances, address and security</small></span>
             <span aria-hidden="true">→</span>
+          </button>
+          <button type="button" className="you-disconnect profile-signout" disabled={signingOut} onClick={() => void signOut()}>
+            {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
         </div>
       )}

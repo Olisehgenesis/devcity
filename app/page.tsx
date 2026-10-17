@@ -603,12 +603,59 @@ export default function CityHome() {
     }
     setClaiming(true);
     try {
+      const { getUnlockedPrivateKey } = await import("@/lib/unlocked-wallet");
+      const key = getUnlockedPrivateKey(myAddress);
+      if (!key) {
+        openWallet();
+        setNotice("Unlock your wallet, then claim again.");
+        return;
+      }
       const response = await fetch("/api/claims/authorize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dropId: selected.id.replace(/^drop-/, ""), userAddress: myAddress }),
       });
-      if (!response.ok) throw new Error("Claim could not be authorized.");
+      const data = await response.json().catch(() => ({})) as {
+        error?: string;
+        dropIdBytes32?: `0x${string}`;
+        claimer?: `0x${string}`;
+        amount?: string;
+        nonce?: string;
+        expiresAt?: string;
+        signature?: `0x${string}`;
+      };
+      if (!response.ok) throw new Error(data.error || "Claim could not be authorized.");
+      if (!data.dropIdBytes32 || !data.claimer || !data.amount || data.nonce == null || data.expiresAt == null || !data.signature) {
+        throw new Error("Claim authorization was incomplete.");
+      }
+      const { createPublicClient, createWalletClient, http } = await import("viem");
+      const { privateKeyToAccount } = await import("viem/accounts");
+      const { celoSepolia } = await import("viem/chains");
+      const { CELO_SEPOLIA } = await import("@/lib/chain");
+      const account = privateKeyToAccount(key);
+      const transport = http(CELO_SEPOLIA.rpcUrl);
+      const walletClient = createWalletClient({ account, chain: celoSepolia, transport });
+      const publicClient = createPublicClient({ chain: celoSepolia, transport });
+      const hash = await walletClient.writeContract({
+        address: CELO_SEPOLIA.dropClaim,
+        abi: [{
+          type: "function",
+          name: "claim",
+          stateMutability: "nonpayable",
+          inputs: [
+            { name: "dropId", type: "bytes32" },
+            { name: "claimant", type: "address" },
+            { name: "amount", type: "uint256" },
+            { name: "nonce", type: "uint256" },
+            { name: "deadline", type: "uint256" },
+            { name: "signature", type: "bytes" },
+          ],
+          outputs: [],
+        }] as const,
+        functionName: "claim",
+        args: [data.dropIdBytes32, data.claimer, BigInt(data.amount), BigInt(data.nonce), BigInt(data.expiresAt), data.signature],
+      });
+      await publicClient.waitForTransactionReceipt({ hash });
       claim(selected.id, selected.name, tokenFor(selected), selected.amount ?? "1");
       setDropClaimed(true);
       setNotice(`Claimed ${selected.amount} ${tokenFor(selected)} — added to your tokens.`);

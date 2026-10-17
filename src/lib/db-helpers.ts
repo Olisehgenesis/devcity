@@ -2,7 +2,7 @@ import { prisma } from './prisma';
 import { Decimal } from '@prisma/client/runtime/library';
 import { signClaimAuthorization, dropIdToBytes32, CLAIM_CHAIN } from './signer';
 import { getNonce } from '../../contracts/interact';
-import type { Hex } from 'viem';
+import { parseUnits, type Hex } from 'viem';
 import { rateLimit, RATE_LIMITS, getClientIdentifier } from './rate-limit';
 import { NextRequest } from 'next/server';
 
@@ -203,17 +203,17 @@ export async function authorizeClaim(dropId: string, userAddress: string, reques
   const existing = await prisma.dropClaim.findUnique({
     where: { dropId_userId: { dropId, userId: user.id } },
   });
-  if (existing) throw new ApiError(409, 'Already claimed this drop');
+  if (existing?.status === 'CONFIRMED') throw new ApiError(409, 'Already claimed this drop');
 
   const claimAmount = toDecimal(drop.amount);
   const tokenDecimals = drop.token.decimals ?? 18;
   const maxSupply = toDecimal(drop.token.maxSupply || 0);
-  if (claimAmount.gt(maxSupply)) {
+  if (maxSupply.gt(0) && claimAmount.gt(maxSupply)) {
     throw new ApiError(400, 'Claim amount exceeds token supply');
   }
 
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 60 * 15);
-  
+
   let nonce = BigInt(0);
   if (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS) {
     try {
@@ -223,34 +223,36 @@ export async function authorizeClaim(dropId: string, userAddress: string, reques
     }
   }
 
-  const amountWei = claimAmount.mul(10 ** tokenDecimals);
-  
+  const amountWei = parseUnits(claimAmount.toFixed(tokenDecimals), tokenDecimals);
+
   const signature = await signClaimAuthorization({
     dropId: dropIdToBytes32(dropId),
     claimant: user.walletAddress as Hex,
-    amount: BigInt(amountWei.toString()),
+    amount: amountWei,
     nonce,
     deadline: expiresAt,
   });
 
-  await prisma.$transaction(async (tx) => {
-    await tx.dropClaim.create({
-      data: {
-        dropId,
-        userId: user.id,
-        tokenId: drop.tokenId,
-        amount: drop.amount,
-        status: 'PENDING',
-      },
-    });
+  if (!existing) {
+    await prisma.$transaction(async (tx) => {
+      await tx.dropClaim.create({
+        data: {
+          dropId,
+          userId: user.id,
+          tokenId: drop.tokenId,
+          amount: drop.amount,
+          status: 'PENDING',
+        },
+      });
 
-    await tx.drop.update({
-      where: { id: dropId },
-      data: {
-        currentClaimants: { increment: 1 },
-      },
+      await tx.drop.update({
+        where: { id: dropId },
+        data: {
+          currentClaimants: { increment: 1 },
+        },
+      });
     });
-  });
+  }
 
   // Real drop claim → award the first-claim badge + a city sticker.
   await applyGameActions(userAddress, {
