@@ -1,0 +1,14 @@
+---
+description: Push product changes to the live site after they are done
+alwaysApply: true
+---
+
+# Update the live site
+
+When a requested product change is finished, commit it, push `master`, and rebuild the live site. Do not leave the change only on this machine, and do not wait to be asked again.
+
+- Commit only the files for that change. Never commit secrets.
+- Push `origin` `master`.
+- On the server, fast-forward `/opt/devcity/repo` and start `/tmp/finish-devcity.sh`. Do not start Docker with `dotenvx run`.
+- Wait until the rebuild reports healthy, then say the live site is updated.
+- Do not print the server address.

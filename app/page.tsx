@@ -988,14 +988,11 @@ export default function CityHome() {
   }
 
   function centerOnMe() {
-    if (myPosition && locationState === "inside") {
-      mapRef.current?.flyTo({ center: myPosition, zoom: 15, duration: 850 });
-    } else if (locationState === "outside") {
-      setOutsidePromptOpen(true);
-    } else {
-      setNotice("Your location is unavailable. Exploring Mumbai instead.");
-      mapRef.current?.flyTo({ center: MUMBAI_CENTER, zoom: 14.1, duration: 850 });
+    if (myPosition) {
+      mapRef.current?.flyTo({ center: myPosition, zoom: 16, duration: 850 });
+      return;
     }
+    requestLocation();
   }
 
   const openCreateDrop = useCallback((location?: { lat: number; lng: number } | null) => {
@@ -1177,6 +1174,7 @@ export default function CityHome() {
               const link = `${window.location.origin}/`;
               void navigator.clipboard?.writeText(link).then(() => setNotice("Invite link copied.")).catch(() => setNotice(link));
             }}><Plus size={15} /> Invite</button>
+            <button className="round-action" onClick={centerOnMe} disabled={requestingLocation} aria-label="Go to my location" title="Go to my location"><LocateFixed size={18} /></button>
             <button className={`top-profile-button${youOpen ? " is-active" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
               <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" />
             </button>
@@ -1187,7 +1185,6 @@ export default function CityHome() {
           <div className="filter-list" role="group" aria-label="Filter map">
             {filters.map((item) => <button key={item.id} className={`filter-chip ${filter === item.id ? "is-selected" : ""}`} onClick={() => chooseFilter(item.id)}>{item.label}</button>)}
           </div>
-          <button className="locate-button" onClick={centerOnMe} aria-label="Center map on me" title="Center map"><LocateFixed size={18} /></button>
           <button className="locate-button" onClick={() => setCreateMenuOpen((v) => !v)} aria-label="Create a stall or booth" title="Create"><Plus size={18} /></button>
         </div>
 
