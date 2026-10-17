@@ -692,15 +692,21 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
 
       {showAssets ? (
         <section className="wallet-token-portfolio">
-          <div className="wallet-section-heading wallet-assets-heading">
-            <div><h3>{focus === 'assets' ? 'Imported' : 'Other tokens'}</h3><span>On {assetChainLabel} · stored on this device</span></div>
-            <button className="wallet-token-add" onClick={() => { setImportOpen(true); setError(''); }}><CirclePlus size={16} /> Import</button>
-          </div>
+          {focus !== 'assets' && (
+            <div className="wallet-section-heading wallet-assets-heading">
+              <div><h3>Other tokens</h3><span>On {assetChainLabel} · stored on this device</span></div>
+              <button className="wallet-token-add" onClick={() => { setImportOpen(true); setError(''); }}><CirclePlus size={16} /> Import</button>
+            </div>
+          )}
           {tokens.length === 0 ? (
+            focus === 'assets' ? (
+              !importOpen && <button type="button" className="wallet-quiet-link" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</button>
+            ) : (
             <div className="wallet-token-empty">
               <strong>Keep your tokens together.</strong>
               <p>Import an ERC-20 contract address to see its on-chain balance and market data where Celo markets are indexed.</p>
             </div>
+            )
           ) : (
             <div className="wallet-token-list">
               {tokens.map((token) => {
@@ -768,7 +774,12 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
               </button>
             </div>
           )}
-          <button className="wallet-token-refresh" onClick={() => void loadTokens()}><RefreshCw size={14} /> Refresh balances and prices</button>
+          {focus === 'assets' && tokens.length > 0 && !importOpen && (
+            <button type="button" className="wallet-quiet-link" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</button>
+          )}
+          {focus !== 'assets' && (
+            <button className="wallet-token-refresh" onClick={() => void loadTokens()}><RefreshCw size={14} /> Refresh balances and prices</button>
+          )}
         </section>
       ) : showProfile ? (
         <section className="wallet-profile-token">

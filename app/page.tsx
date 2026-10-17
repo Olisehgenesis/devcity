@@ -32,7 +32,6 @@ import { OnboardingFlow } from "./components/OnboardingFlow";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
 import { GameIcon } from "./components/game/GameIcons";
-import { HudBar } from "./components/game/HudBar";
 import { BuildingSprite } from "./components/game/Buildings";
 import { useGameStore } from "./lib/game-store";
 import { TrendingSheet } from "./components/TrendingSheet";
@@ -266,7 +265,6 @@ export default function CityHome() {
   const [dropError, setDropError] = useState(false);
 
   const loadGame = useGameStore((s) => s.load);
-  const gameStreak = useGameStore((s) => s.streak);
   useEffect(() => {
     if (feedUserAddress) void loadGame(feedUserAddress);
   }, [feedUserAddress, loadGame]);
@@ -860,7 +858,6 @@ export default function CityHome() {
             <p>South Mumbai{cityCount > 0 && <> <b>·</b> {cityCount} in the city</>}</p>
           </div>
           <div className="top-actions">
-            <div className="hudbar-slot"><HudBar streak={gameStreak} /></div>
             <button className="round-action" onClick={() => setSearchSheetOpen(true)} aria-label="Search the city"><Search size={18} /></button>
             <button className="round-action" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">
               <GameIcon name="spark" size={20} />

@@ -34,10 +34,9 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, onSend,
   return (
     <section className="vault-hero">
       <div className="vault-identity">
-        <span className="wallet-network"><i /> {chainLabel}</span>
         <span className="vault-identity-text">
-          <strong>{name || 'My wallet'}</strong>
-          {short && <span>{short}</span>}
+          <strong>{name || 'Wallet'}</strong>
+          <span>{chainLabel}{short ? ` · ${short}` : ''}</span>
         </span>
         <div className="vault-hero-tools">
           <button type="button" className="vault-icon-button" onClick={onActivity} aria-label="Activity">
@@ -50,8 +49,9 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, onSend,
       </div>
 
       <div className="vault-balance">
-        <span>Balance</span>
-        <strong>{celoBalance} <small>CELO</small></strong>
+        <span>Your balance</span>
+        <strong>{celoBalance}</strong>
+        <em>CELO</em>
       </div>
 
       <div className="vault-actions" aria-label="Wallet actions">
@@ -59,7 +59,7 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, onSend,
           const Icon = action.icon;
           return (
             <button key={action.id} type="button" className="vault-action" onClick={actions[action.id]}>
-              <Icon size={20} />
+              <span className="vault-action-orb"><Icon size={18} /></span>
               <span>{action.label}</span>
             </button>
           );

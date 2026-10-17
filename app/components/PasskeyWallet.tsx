@@ -159,7 +159,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
     };
   }, [usdtBal.data, usdcBal.data, cusdBal.data]);
 
-  const { token: profileToken } = useProfileToken(wallet?.address);
+  const { token: profileToken, loading: profileLoading } = useProfileToken(wallet?.address);
   async function refreshSession() {
     try {
       const res = await authClient.getSession();
@@ -599,10 +599,10 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             onSettings={() => setScreen({ id: 'settings' })}
           />
           <WalletHome
-            chainLabel={chainLabel}
             celoBalance={celoLabel}
             stableBalances={stableBalances}
             profileToken={profileToken}
+            profileLoading={profileLoading}
             onOpenToken={(token) => setScreen({ id: 'token', token })}
             onOpenProfile={() => setScreen({ id: 'profile' })}
           >
