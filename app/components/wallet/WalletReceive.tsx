@@ -36,9 +36,9 @@ export function WalletReceive({ address, chainLabel, symbol, notify }: WalletRec
       </p>
       <div className="wallet-qr" aria-hidden="true">
         <svg width="196" height="196" viewBox={`0 0 ${size} ${size}`}>
-          <rect width={size} height={size} fill="#fffcf4" />
+          <rect width={size} height={size} fill="#FFF6FA" />
           {qr.data.map((row, y) => row.map((on, x) => on ? (
-            <rect key={`${x}-${y}`} x={x * cell} y={y * cell} width={cell} height={cell} fill="#30211d" />
+            <rect key={`${x}-${y}`} x={x * cell} y={y * cell} width={cell} height={cell} fill="#1A1028" />
           ) : null))}
         </svg>
       </div>

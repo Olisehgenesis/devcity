@@ -3,7 +3,9 @@ import { betterAuth } from 'better-auth';
 import { APIError } from 'better-auth/api';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { passkey } from '@better-auth/passkey';
+import { username } from 'better-auth/plugins/username';
 import { prisma } from './prisma';
+import { devTestAccountsEnabled } from './dev-test-auth';
 import { normalizeUsername } from './usernames';
 
 function resolveBaseUrl(): string {
@@ -15,6 +17,7 @@ function resolveBaseUrl(): string {
 
 const authUrl = resolveBaseUrl();
 const authOrigin = new URL(authUrl);
+const devAccounts = devTestAccountsEnabled();
 
 export const auth = betterAuth({
   appName: 'DEVCITY26',
@@ -22,11 +25,17 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
   emailAndPassword: {
-    enabled: true,
+    enabled: devAccounts,
     requireEmailVerification: false,
   },
   trustedOrigins: [authOrigin.origin],
   plugins: [
+    ...(devAccounts ? [username({
+      minUsernameLength: 3,
+      maxUsernameLength: 24,
+      displayUsername: false,
+      usernameValidator: (value) => /^[a-z0-9](?:[a-z0-9-]{1,22}[a-z0-9])$/i.test(value),
+    })] : []),
     passkey({
       rpID: authOrigin.hostname,
       rpName: 'DEVCITY26',

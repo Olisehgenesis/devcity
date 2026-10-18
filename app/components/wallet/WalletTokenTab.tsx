@@ -10,6 +10,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { CELO_SEPOLIA, CHAIN } from '@/lib/chain';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { UnlockSecret } from '../PinBoxes';
 
 const PROFILE_FACTORY_ABI = [
   { type: 'function', name: 'getUserToken', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ type: 'address' }] },
@@ -141,17 +142,7 @@ export function WalletTokenTab({ address, pinProtected, unlockedKey, handle, han
           {!effectiveKey ? (
             <div className="wallet-unlock">
               <p>Unlock to launch your profile token.</p>
-              <input
-                type="password"
-                className="you-passphrase"
-                value={pin}
-                onChange={(e) => setPin(pinProtected ? e.target.value.replace(/\D/g, '').slice(0, 6) : e.target.value)}
-                placeholder={pinProtected ? '6-digit wallet PIN' : 'Wallet passphrase'}
-                aria-label={pinProtected ? '6-digit wallet PIN' : 'Wallet passphrase'}
-                inputMode={pinProtected ? 'numeric' : undefined}
-                maxLength={pinProtected ? 6 : undefined}
-                autoComplete="current-password"
-              />
+              <UnlockSecret id="wallet-token-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
               <button className="you-connect-primary" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
                 <KeyRound size={16} /> Unlock wallet
               </button>

@@ -17,14 +17,32 @@ export type GameIconName =
   | 'drop'
   | 'spark';
 
-const LIME = '#d6ff55';
-const CORAL = '#ff795f';
-const INK = '#1c2925';
+const LIME = '#00987F';
+const CORAL = '#D01265';
+const INK = '#1A1028';
 
 function Icon({ size, children }: { size: number; children: React.ReactNode }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <g stroke={INK} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">{children}</g>
+    </svg>
+  );
+}
+
+const NAV_ICONS: Record<'map' | 'feed' | 'scan' | 'inbox' | 'wallet', React.ReactNode> = {
+  map: <path d="M12 21s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10Z" />,
+  feed: <><rect x="4" y="5" width="16" height="4" rx="2" /><rect x="4" y="11" width="16" height="4" rx="2" /><rect x="4" y="17" width="10" height="3" rx="1.5" /></>,
+  scan: <><path d="M8 4H6a2 2 0 0 0-2 2v2M16 4h2a2 2 0 0 1 2 2v2M8 20H6a2 2 0 0 1-2-2v-2M16 20h2a2 2 0 0 0 2-2v-2" /><circle cx="12" cy="12" r="2.2" /></>,
+  inbox: <path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5V14a2.5 2.5 0 0 1-2.5 2.5H13l-3.2 2.4c-.7.5-1.8 0-1.8-.9V16.5H7.5A2.5 2.5 0 0 1 5 14V7.5Z" />,
+  wallet: <><rect x="3.5" y="6" width="17" height="13" rx="2.5" /><path d="M3.5 10h17" /><circle cx="16" cy="14.2" r="1.1" /></>,
+};
+
+export function NavIcon({ name, size = 22 }: { name: keyof typeof NAV_ICONS; size?: number }) {
+  return (
+    <svg className="nav-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <g stroke="#1A1028" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {NAV_ICONS[name]}
+      </g>
     </svg>
   );
 }

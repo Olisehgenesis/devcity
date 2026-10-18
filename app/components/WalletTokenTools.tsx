@@ -29,6 +29,7 @@ import {
 import { writeContractWithFee, type TxRequest } from '@/lib/gas';
 import { useFeeQuote } from '../hooks/useFeeQuote';
 import { FeePreview } from './wallet/FeePreview';
+import { UnlockSecret } from './PinBoxes';
 import {
   getImportedWalletTokens,
   removeImportedWalletToken,
@@ -881,7 +882,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
               {!unlockedKey && (
                 <div className="wallet-token-unlock">
                   <label className="wallet-field-label" htmlFor="profile-token-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                  <input id="profile-token-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
+                  <UnlockSecret id="profile-token-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                 </div>
               )}
               <FeePreview quote={launchFee.quote} error={launchFee.error} loading={launchFee.loading} />
@@ -927,7 +928,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   {!unlockedKey && (
                     <div className="wallet-token-unlock">
                       <label className="wallet-field-label" htmlFor="profile-token-buy-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                      <input id="profile-token-buy-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
+                      <UnlockSecret id="profile-token-buy-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                     </div>
                   )}
                   <FeePreview quote={buyFee.quote} error={buyFee.error} loading={buyFee.loading} />
@@ -939,7 +940,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   {!unlockedKey && (
                     <div className="wallet-token-unlock">
                       <label className="wallet-field-label" htmlFor="profile-token-sell-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                      <input id="profile-token-sell-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
+                      <UnlockSecret id="profile-token-sell-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                     </div>
                   )}
                   <FeePreview quote={sellFee.quote} error={sellFee.error} loading={sellFee.loading} />
@@ -964,7 +965,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 {!unlockedKey && (
                   <div className="wallet-token-unlock">
                     <label className="wallet-field-label" htmlFor="profile-token-send-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                    <input id="profile-token-send-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
+                    <UnlockSecret id="profile-token-send-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                   </div>
                 )}
                 <FeePreview quote={tipFee.quote} error={tipFee.error} loading={tipFee.loading} />
@@ -980,7 +981,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 {!unlockedKey && (
                   <div className="wallet-token-unlock">
                     <label className="wallet-field-label" htmlFor="profile-token-manage-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                    <input id="profile-token-manage-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
+                    <UnlockSecret id="profile-token-manage-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                   </div>
                 )}
                 <button className="you-connect-secondary" disabled={operation === 'update-uri'} onClick={() => void updateTokenURI()}>{operation === 'update-uri' ? 'Saving…' : 'Update token details'}</button>
@@ -1001,7 +1002,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   {!unlockedKey && (
                     <div className="wallet-token-unlock">
                       <label className="wallet-field-label" htmlFor="profile-token-liquidity-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                      <input id="profile-token-liquidity-pin" type="password" className="you-passphrase" value={pin} onChange={(event) => setPin(wallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)} placeholder={wallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'} inputMode={wallet.pinProtected ? 'numeric' : undefined} maxLength={wallet.pinProtected ? 6 : undefined} autoComplete="current-password" />
+                      <UnlockSecret id="profile-token-liquidity-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                     </div>
                   )}
                   {!profileToken.poolCreated && Number.isFinite(initialPricePreview) && initialPricePreview > 0 && (

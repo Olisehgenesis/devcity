@@ -5,12 +5,12 @@ export const TOKEN_TONES = ['lime', 'coral', 'sky', 'blush', 'sun', 'mint'] as c
 export type TokenTone = (typeof TOKEN_TONES)[number];
 
 const TONE_HEX: Record<TokenTone, string> = {
-  lime: '#d6ff55',
-  coral: '#ff795f',
-  sky: '#83d8ee',
-  blush: '#f5a6c6',
-  sun: '#ffb35c',
-  mint: '#8bffcc',
+  lime: '#00987F',
+  coral: '#D01265',
+  sky: '#00987F',
+  blush: '#D01265',
+  sun: '#E45700',
+  mint: '#00987F',
 };
 
 export function TokenCoin({
@@ -28,13 +28,13 @@ export function TokenCoin({
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true" className="token-coin">
       {/* rim */}
-      <circle cx="24" cy="24" r="22" fill="#fffef9" stroke="#1c2925" strokeWidth="2.5" />
-      <circle cx="24" cy="24" r="17.5" fill={hex} stroke="#1c2925" strokeWidth="2" />
+      <circle cx="24" cy="24" r="22" fill="#FFF6FA" stroke="#1A1028" strokeWidth="2.5" />
+      <circle cx="24" cy="24" r="17.5" fill={hex} stroke="#1A1028" strokeWidth="2" />
       {/* subtle shine */}
       <path d="M13 12c4-3 9-3 12-1" stroke="#fff" strokeWidth="3" strokeLinecap="round" opacity=".5" />
       {/* center emblem */}
       {empty ? (
-        <circle cx="24" cy="24" r="6.5" fill="none" stroke="#1c2925" strokeWidth="2" opacity=".5" />
+        <circle cx="24" cy="24" r="6.5" fill="none" stroke="#1A1028" strokeWidth="2" opacity=".5" />
       ) : (
         <text
           x="24"
@@ -43,7 +43,7 @@ export function TokenCoin({
           dominantBaseline="middle"
           fontSize="11"
           fontWeight="800"
-          fill="#1c2925"
+          fill="#1A1028"
           fontFamily="var(--font-body)"
         >
           {symbol ? symbol.slice(0, 4).toUpperCase() : 'DEV'}

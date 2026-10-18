@@ -8,6 +8,7 @@ import { ERC20_ABI } from '@/lib/chain';
 import { ACTIVE_CHAIN, toGasCurrency } from '@/lib/celo';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { UnlockSecret } from '../PinBoxes';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
 
 interface Fee {
@@ -110,17 +111,7 @@ export function WalletDropTab({ address, pinProtected, unlockedKey, fees, import
       {!effectiveKey ? (
         <div className="wallet-unlock">
           <p>Unlock to create a drop.</p>
-          <input
-            type="password"
-            className="you-passphrase"
-            value={pin}
-            onChange={(e) => setPin(pinProtected ? e.target.value.replace(/\D/g, '').slice(0, 6) : e.target.value)}
-            placeholder={pinProtected ? '6-digit wallet PIN' : 'Wallet passphrase'}
-            aria-label={pinProtected ? '6-digit wallet PIN' : 'Wallet passphrase'}
-            inputMode={pinProtected ? 'numeric' : undefined}
-            maxLength={pinProtected ? 6 : undefined}
-            autoComplete="current-password"
-          />
+          <UnlockSecret id="wallet-drop-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
           <button className="you-connect-primary" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
           </button>

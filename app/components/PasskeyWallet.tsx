@@ -20,6 +20,7 @@ import {
   type LocalWallet,
 } from '@/lib/keystore';
 import { ACTIVE_CHAIN, CELO_MAINNET_ID, CELO_SEPOLIA_ID, IS_MAINNET, feeCurrenciesFor } from '@/lib/celo';
+import { PinBoxes } from './PinBoxes';
 import { ERC20_ABI } from '@/lib/chain';
 import type { Hex, Address } from 'viem';
 import { removeImportedWalletToken, type ImportedWalletToken } from '@/lib/wallet-assets';
@@ -527,17 +528,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         <p className="you-sheet-lede">
           Set a 6-digit PIN to encrypt your new wallet on this device.
         </p>
-        <input
-          type="password"
-          className="you-passphrase"
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-          placeholder="6-digit wallet PIN"
-          aria-label="6-digit wallet PIN"
-          inputMode="numeric"
-          autoComplete="new-password"
-          maxLength={6}
-        />
+        <PinBoxes id="wallet-register-pin" value={pin} onChange={setPin} />
         <button className="you-connect-primary" disabled={pin.length !== 6} onClick={handleCreateWallet}>
           Create wallet
         </button>
@@ -557,17 +548,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         <p className="you-note">
           Enter your 6-digit wallet PIN to decrypt the backup and restore this wallet to this device.
         </p>
-        <input
-          type="password"
-          className="you-passphrase"
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-          placeholder="6-digit wallet PIN"
-          aria-label="6-digit wallet PIN"
-          inputMode="numeric"
-          autoComplete="current-password"
-          maxLength={6}
-        />
+        <PinBoxes id="wallet-restore-pin" value={pin} onChange={setPin} />
         <button className="you-connect-primary" disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
           {backupSaving ? 'Restoring…' : 'Restore wallet'}
         </button>

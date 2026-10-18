@@ -1,0 +1,41 @@
+{
+  "original": true,
+  "copiedFromBrand": false,
+  "author": "DEVCITY 26",
+  "style": "Flat sticker drawings with a thick ink outline. Map markers, badges, avatars, and the emoji set are hand-built SVG. The empty-state courier is an original generated illustration in the same three colors.",
+  "fonts": ["Nunito", "DM Sans"],
+  "fontLicense": "Nunito and DM Sans are loaded with next/font from Google Fonts.",
+  "colors": {
+    "primary": "#D01265",
+    "secondary": "#00987F",
+    "accent": "#E45700",
+    "ink": "#1A1028",
+    "paper": "#FFF6FA"
+  },
+  "contrast": {
+    "whiteOnPrimary": 5.31,
+    "primaryOnPaper": 5.01,
+    "inkOnSecondary": 5.05,
+    "secondaryOnPaper": 3.42,
+    "inkOnAccent": 4.93,
+    "accentOnPaper": 3.5,
+    "inkOnPaper": 17.25,
+    "notes": "White text is used on the primary. Ink text is used on the secondary, the accent, and the paper. Teal and orange do not use white body text."
+  },
+  "assets": [
+    "marker-family.svg",
+    "drop-crate.svg",
+    "badge.svg",
+    "avatar-sample.svg",
+    "empty-city.svg",
+    "empty-courier.jpg",
+    "sticker-wave.svg",
+    "sticker-drop.svg",
+    "sticker-pin.svg",
+    "sticker-spark.svg",
+    "sticker-star.svg",
+    "sticker-heart.svg",
+    "sticker-check.svg",
+    "sticker-face.svg"
+  ]
+}

@@ -11,6 +11,7 @@ import { useFeeQuote } from '../../hooks/useFeeQuote';
 import { FeePreview } from './FeePreview';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { clearUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { UnlockSecret } from '../PinBoxes';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
 
 interface Fee {
@@ -155,17 +156,7 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
       {!effectiveKey ? (
         <div className="wallet-unlock">
           <p>Unlock to review and send a tip.</p>
-          <input
-            type="password"
-            className="you-passphrase"
-            value={pin}
-            onChange={(e) => setPin(pinProtected ? e.target.value.replace(/\D/g, '').slice(0, 6) : e.target.value)}
-            placeholder={pinProtected ? '6-digit wallet PIN' : 'Wallet passphrase'}
-            aria-label={pinProtected ? '6-digit wallet PIN' : 'Wallet passphrase'}
-            inputMode={pinProtected ? 'numeric' : undefined}
-            maxLength={pinProtected ? 6 : undefined}
-            autoComplete="current-password"
-          />
+          <UnlockSecret id="wallet-tip-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
           <button className="you-connect-primary" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
           </button>

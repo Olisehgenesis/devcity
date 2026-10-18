@@ -1,6 +1,9 @@
-export function dicebearAvatarUrl(seed: string, backgroundColor = 'fffc00') {
-  const params = new URLSearchParams({ seed, backgroundColor });
-  return `https://api.dicebear.com/9.x/notionists/svg?${params.toString()}`;
+import { originalAvatarDataUri } from '@/lib/original-avatar';
+
+/** Original avatar drawing. The name stays so existing callers keep working. */
+export function dicebearAvatarUrl(seed: string, backgroundColor?: string) {
+  void backgroundColor;
+  return originalAvatarDataUri(seed);
 }
 
 export function avatarBackgroundForColor(color: string) {

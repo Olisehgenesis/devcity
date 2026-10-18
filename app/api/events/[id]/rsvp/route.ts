@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateUser, ApiError } from '@/lib/db-helpers';
+import { eventPhase, rsvpAllowed } from '@/lib/event-phase';
 
 // GET /api/events/[id]/rsvp - Get event RSVPs
 export async function GET(
@@ -75,6 +76,15 @@ export async function POST(
 
     const validStatuses = ['going', 'interested', 'attended'];
     const rsvpStatus = validStatuses.includes(status) ? status : 'going';
+    const phase = eventPhase({
+      startDate: event.startDate ? event.startDate.toISOString() : null,
+      endDate: event.endDate ? event.endDate.toISOString() : null,
+      startTime: event.startTime,
+      endTime: event.endTime,
+    });
+    if (!rsvpAllowed(phase, rsvpStatus)) {
+      throw new ApiError(409, phase === 'past' ? 'This event has ended.' : 'This event does not have a date you can RSVP to.');
+    }
 
     const rsvp = await prisma.eventRsvp.upsert({
       where: {

@@ -8,8 +8,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#e9e4d5",
-  "theme_color": "#e9e4d5",
+  "background_color": "#FFF6FA",
+  "theme_color": "#D01265",
   "categories": ["social", "productivity", "lifestyle"],
   "icons": [
     { "src": "/devcity-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

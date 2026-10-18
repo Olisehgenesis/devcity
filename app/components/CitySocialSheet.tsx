@@ -7,6 +7,8 @@ import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
 import { stories, type Story } from '../lib/stories';
 import { AvatarBubble } from './game/AvatarBubble';
+import { FriendDesk } from './FriendDesk';
+import { UnlockSecret } from './PinBoxes';
 import { useXmtpChat, type XmtpUiMessage } from '../hooks/useXmtpChat';
 import type { Attachment } from '@xmtp/browser-sdk';
 import type { Hex } from 'viem';
@@ -490,6 +492,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
 
       {view === 'chat' && (
         <div className="social-chat">
+          <FriendDesk open={open} />
           {shouldConnectPasskeyInbox ? (
             <div className="xmtp-state xmtp-passkey-state">
               <span className="xmtp-state-icon"><KeyRound size={21} /></span>
@@ -507,17 +510,11 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                     <>
                       <p>Unlock {inboxWallet.name || 'your DEVCITY wallet'} to connect to XMTP and load your messages.</p>
                       <label className="xmtp-pin-label" htmlFor="xmtp-wallet-pin">{inboxWallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                      <input
+                      <UnlockSecret
                         id="xmtp-wallet-pin"
-                        className="xmtp-pin-input"
-                        type="password"
-                        inputMode={inboxWallet.pinProtected ? 'numeric' : 'text'}
-                        autoComplete="current-password"
-                        maxLength={inboxWallet.pinProtected ? 6 : undefined}
+                        pinProtected={inboxWallet.pinProtected}
                         value={inboxPin}
-                        onChange={(event) => setInboxPin(inboxWallet.pinProtected ? event.target.value.replace(/\D/g, '').slice(0, 6) : event.target.value)}
-                        onKeyDown={(event) => { if (event.key === 'Enter') void connectPasskeyInbox(); }}
-                        placeholder={inboxWallet.pinProtected ? '6-digit PIN' : 'Wallet passphrase'}
+                        onChange={setInboxPin}
                       />
                       <button className="xmtp-wallet-connect" onClick={() => void connectPasskeyInbox()} disabled={inboxWallet.pinProtected ? inboxPin.length !== 6 : !inboxPin}>
                         {xmtp.status === 'error' ? 'Retry and open inbox' : 'Unlock and show messages'}

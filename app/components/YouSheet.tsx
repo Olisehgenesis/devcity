@@ -1,13 +1,19 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { CalendarDays, Check, ImagePlus, KeyRound, Shuffle, Wallet, X } from 'lucide-react';
 import { Sheet } from './Sheet';
+import type { SelfLegacyQrConfig } from './SelfLegacyQr';
+import { DevTestAccountPanel } from './DevTestAccountPanel';
+import { PushButton } from './PushButton';
 import { useCityStore, timeAgo, type AvatarMode } from '../lib/city-store';
 import { dicebearAvatarUrl } from '../lib/avatars';
 import { normalizeUsername } from '@/lib/usernames';
 import { authClient } from '@/lib/auth-client';
 import { clearUnlockedWallet } from '@/lib/unlocked-wallet';
+
+const SelfLegacyQr = dynamic(() => import('./SelfLegacyQr').then((mod) => mod.SelfLegacyQr), { ssr: false });
 
 interface YouSheetProps {
   open: boolean;
@@ -15,7 +21,16 @@ interface YouSheetProps {
   onOpenWallet: () => void;
 }
 
-type ProfileUser = { id: string; name?: string | null; email?: string | null };
+type ProfileUser = { id: string; name?: string | null; email?: string | null; username?: string | null };
+
+function profileHandle(user: ProfileUser): string | null {
+  const fromEmail = user.email?.toLowerCase().endsWith('@test.devcity.local')
+    ? user.email.split('@')[0]
+    : '';
+  return normalizeUsername(user.username ?? '')
+    || normalizeUsername(user.name ?? '')
+    || normalizeUsername(fromEmail);
+}
 
 function formatEventDate(date: string | null) {
   if (!date) return 'Date to be announced';
@@ -120,9 +135,16 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
   const [sessionError, setSessionError] = useState('');
   const [signingOut, setSigningOut] = useState(false);
   const [retrySession, setRetrySession] = useState(0);
-  const accountHandle = normalizeUsername(sessionUser?.name ?? '');
+  const [verified, setVerified] = useState(false);
+  const [verifyConfigured, setVerifyConfigured] = useState(false);
+  const [verifyCallback, setVerifyCallback] = useState('/api/webhooks/self');
+  const [verifyMode, setVerifyMode] = useState<'test' | 'live'>('test');
+  const [verifyError, setVerifyError] = useState('');
+  const [startingVerify, setStartingVerify] = useState(false);
+  const [selfQr, setSelfQr] = useState<SelfLegacyQrConfig | null>(null);
+  const accountHandle = sessionUser ? profileHandle(sessionUser) : null;
   const profileName = accountHandle ? `${accountHandle}.devcity.fun` : sessionUser?.name || 'City explorer';
-  const profileInitials = (sessionUser?.name || sessionUser?.email || 'You').slice(0, 2).toUpperCase();
+  const profileInitials = (accountHandle || sessionUser?.name || sessionUser?.email || 'You').slice(0, 2).toUpperCase();
 
   useEffect(() => {
     if (!open) return;
@@ -146,6 +168,69 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
   }, [open, retrySession]);
 
   useEffect(() => {
+    if (!open || !sessionUser) return;
+    let active = true;
+    void fetch('/api/me/verification')
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({})) as {
+          verified?: boolean;
+          configured?: boolean;
+          missing?: string[];
+          callbackPath?: string;
+          mode?: 'test' | 'live';
+        };
+        if (!active || !response.ok) return;
+        setVerified(Boolean(body.verified));
+        setVerifyConfigured(Boolean(body.configured));
+        setVerifyCallback(body.callbackPath || '/api/webhooks/self');
+        setVerifyMode(body.mode === 'live' ? 'live' : 'test');
+      })
+      .catch(() => {
+        if (active) setVerifyError('Could not load verification.');
+      });
+    return () => { active = false; };
+  }, [open, sessionUser]);
+
+  async function startVerification() {
+    setStartingVerify(true);
+    setVerifyError('');
+    try {
+      const response = await fetch('/api/me/verification', { method: 'POST' });
+      const body = await response.json().catch(() => ({})) as {
+        error?: string;
+        missing?: string[];
+        callbackPath?: string;
+        endpoint?: string;
+        appName?: string;
+        scope?: string;
+        endpointType?: 'https' | 'staging_https';
+        userId?: string;
+        userDefinedData?: string;
+        logo?: string;
+      };
+      if (body.callbackPath) setVerifyCallback(body.callbackPath);
+      if (!response.ok || !body.userDefinedData || !body.userId || !body.endpoint || !body.scope || !body.endpointType || !body.logo) {
+        setVerifyConfigured(false);
+        setSelfQr(null);
+        throw new Error(body.error || 'Self can only send proofs to a public https address.');
+      }
+      setSelfQr({
+        appName: body.appName || 'DEVCITY',
+        scope: body.scope,
+        endpoint: body.endpoint,
+        endpointType: body.endpointType,
+        userId: body.userId,
+        userDefinedData: body.userDefinedData,
+        logo: body.logo,
+      });
+    } catch (error) {
+      setVerifyError(error instanceof Error ? error.message : 'Verification is not configured.');
+    } finally {
+      setStartingVerify(false);
+    }
+  }
+
+  useEffect(() => {
     const onSession = () => setRetrySession((attempt) => attempt + 1);
     window.addEventListener('devcity-session-changed', onSession);
     return () => window.removeEventListener('devcity-session-changed', onSession);
@@ -167,7 +252,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
   }
 
   return (
-    <Sheet open={open} onClose={onClose} eyebrow="Your DEVCITY identity" title="Profile">
+    <Sheet open={open} onClose={onClose} eyebrow="DEVCITY 26: Mumbai Edition" title="Profile">
       {sessionLoading ? (
         <p className="you-note">Loading your profile…</p>
       ) : !sessionUser ? (
@@ -184,7 +269,8 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
               <button onClick={() => setRetrySession((attempt) => attempt + 1)}>Try again</button>
             </div>
           )}
-          <button className="you-connect-primary" onClick={onOpenWallet}><Wallet size={17} /> Open wallet to sign in</button>
+          <PushButton className="you-connect-primary" onClick={onOpenWallet}><Wallet size={17} /> Open wallet to sign in</PushButton>
+          <DevTestAccountPanel onChanged={() => setRetrySession((attempt) => attempt + 1)} />
         </div>
       ) : (
         <div className="you-profile">
@@ -198,10 +284,33 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
             </div>
             <div className="you-identity-text">
               <strong className="profile-display-name">{profileName}</strong>
-              <span className="profile-account-label">Here for the city.</span>
+              <span className="profile-account-label">{sessionUser.email?.endsWith('@test.devcity.local') ? 'Test account' : 'Here for the city.'}</span>
+              {verified ? (
+                <span className="profile-verified"><Check size={14} /> Verified</span>
+              ) : verifyConfigured ? (
+                <PushButton className="profile-verify-button" onClick={() => void startVerification()} disabled={startingVerify}>
+                  {startingVerify ? 'Preparing Self…' : `Get verified · ${verifyMode === 'live' ? 'live' : 'test'}`}
+                </PushButton>
+              ) : (
+                <p className="profile-verify-note">Self sends the proof to {verifyCallback}. It needs the public address https://devcity.fun/api/webhooks/self.</p>
+              )}
+              {verifyError && <p className="avatar-upload-error" role="alert">{verifyError}</p>}
             </div>
             <button className="profile-edit-avatar" onClick={() => document.querySelector<HTMLDetailsElement>('.profile-appearance-disclosure')?.setAttribute('open', '')}>Edit look</button>
           </header>
+          {selfQr && !verified && (
+            <SelfLegacyQr config={selfQr} onVerified={() => {
+              void fetch('/api/me/verification')
+                .then(async (response) => {
+                  const body = await response.json().catch(() => ({})) as { verified?: boolean };
+                  if (response.ok && body.verified) {
+                    setVerified(true);
+                    setSelfQr(null);
+                  }
+                })
+                .catch(() => undefined);
+            }} />
+          )}
 
           <div className="profile-stat-strip" aria-label="Your DEVCITY activity">
             <div><strong>{savedEvents.filter((event) => event.attendance === 'attended').length}</strong><span>attended</span></div>

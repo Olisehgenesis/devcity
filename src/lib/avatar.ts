@@ -1,3 +1,5 @@
+import { originalAvatarDataUri } from './original-avatar';
+
 export interface AvatarFeatures {
   faceShape: string;
   eyes: string;
@@ -203,55 +205,28 @@ export function featuresToDiceBearParams(features: AvatarFeatures): Record<strin
   return styleMap;
 }
 
-export function generateDiceBearUrl(features: AvatarFeatures, size = 200): string {
-  const params = featuresToDiceBearParams(features);
-  const query = new URLSearchParams(params);
-  query.set('size', size.toString());
-  query.set('backgroundType', 'solid');
-  query.set('backgroundColor', 'ffffff');
-  return `https://api.dicebear.com/9.x/avataaars/svg?${query.toString()}`;
+export function generateDiceBearUrl(features: AvatarFeatures, _size = 200): string {
+  return originalAvatarDataUri(JSON.stringify(features));
 }
 
 export function generateDiceBearPngUrl(features: AvatarFeatures, size = 200): string {
-  const params = featuresToDiceBearParams(features);
-  const query = new URLSearchParams(params);
-  query.set('size', size.toString());
-  query.set('backgroundType', 'solid');
-  query.set('backgroundColor', 'ffffff');
-  return `https://api.dicebear.com/9.x/avataaars/png?${query.toString()}`;
+  return generateDiceBearUrl(features, size);
 }
 
-export function generateInitialsAvatar(name: string, size = 200): string {
-  const initials = name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-  const colors = [
-    '#3b82f6',
-    '#22c55e',
-    '#f97316',
-    '#8b5cf6',
-    '#ec4899',
-    '#eab308',
-    '#06b6d4',
-    '#f43f5e',
-  ];
-  const color = colors[name.length % colors.length];
-  return `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(initials)}&size=${size}&backgroundColor=${color.replace('#', '')}&fontSize=50&charLimit=2`;
+export function generateInitialsAvatar(name: string, _size = 200): string {
+  return originalAvatarDataUri(name);
 }
 
-export function generateIdenticonAvatar(seed: string, size = 200): string {
-  return `https://api.dicebear.com/9.x/identicon/svg?seed=${encodeURIComponent(seed)}&size=${size}`;
+export function generateIdenticonAvatar(seed: string, _size = 200): string {
+  return originalAvatarDataUri(seed);
 }
 
-export function generateBotttsAvatar(seed: string, size = 200): string {
-  return `https://api.dicebear.com/9.x/bottts/svg?seed=${encodeURIComponent(seed)}&size=${size}`;
+export function generateBotttsAvatar(seed: string, _size = 200): string {
+  return originalAvatarDataUri(`bot-${seed}`);
 }
 
-export function generatePersonaAvatar(seed: string, size = 200): string {
-  return `https://api.dicebear.com/9.x/personas/svg?seed=${encodeURIComponent(seed)}&size=${size}`;
+export function generatePersonaAvatar(seed: string, _size = 200): string {
+  return originalAvatarDataUri(`person-${seed}`);
 }
 
 export function getAvatarUrl(

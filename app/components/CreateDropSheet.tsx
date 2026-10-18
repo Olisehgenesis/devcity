@@ -22,6 +22,7 @@ import { ACTIVE_CHAIN, feeCurrenciesFor } from '@/lib/celo';
 import { writeContractWithFee, type TxRequest } from '@/lib/gas';
 import { useFeeQuote } from '../hooks/useFeeQuote';
 import { FeePreview } from './wallet/FeePreview';
+import { PinBoxes } from './PinBoxes';
 import { ERC20_ABI, CELO_SEPOLIA } from '@/lib/chain';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { getUnlockedPrivateKey, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
@@ -631,17 +632,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 {needsUnlock && (
                   <div className="wallet-unlock">
                     <p>Enter your 6-digit wallet PIN to sign this transaction.</p>
-                    <input
-                      type="password"
-                      className="you-passphrase"
-                      value={pin}
-                      onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setUnlockError(''); }}
-                      placeholder="6-digit wallet PIN"
-                      aria-label="6-digit wallet PIN"
-                      inputMode="numeric"
-                      maxLength={6}
-                      autoComplete="current-password"
-                    />
+                    <PinBoxes id="create-drop-pin" value={pin} onChange={(next) => { setPin(next); setUnlockError(''); }} />
                     {unlockError && <p className="you-error" role="alert">{unlockError}</p>}
                   </div>
                 )}

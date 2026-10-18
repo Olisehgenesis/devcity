@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { eventPhase } from '@/lib/event-phase';
 import { CalendarDays, Check, Clock, ExternalLink, LocateFixed, MapPin, Navigation, Ticket, Video, X } from 'lucide-react';
 
 export interface EventCardData {
@@ -34,14 +35,11 @@ export interface EventCardData {
   }>;
 }
 
-function parseTs(event: EventCardData): { start: number; end: number } {
-  const start = event.startDate
-    ? new Date(`${event.startDate}T${event.startTime || '00:00:00'}Z`).getTime()
-    : Date.now();
-  const end = event.endDate
-    ? new Date(`${event.endDate}T${event.endTime || '23:59:59'}Z`).getTime()
-    : start + 24 * 3600 * 1000;
-  return { start: Number.isNaN(start) ? Date.now() : start, end: Number.isNaN(end) ? start + 24 * 3600 * 1000 : end };
+function eventStartMs(event: EventCardData): number | null {
+  if (!event.startDate) return null;
+  const day = event.startDate.slice(0, 10);
+  const ms = Date.parse(`${day}T${event.startTime || '00:00:00'}Z`);
+  return Number.isNaN(ms) ? null : ms;
 }
 
 function formatCountdown(ms: number): string {
@@ -67,7 +65,8 @@ export function EventCard({
   attendance: 'going' | 'attended' | null;
   onToggleGoing: () => void;
 }) {
-  const { start, end } = useMemo(() => parseTs(event), [event]);
+  const phase = eventPhase(event);
+  const startMs = useMemo(() => eventStartMs(event), [event]);
   const [, setTick] = useState(0);
 
   // 1s ticker while the card is open so the countdown/live window stays accurate.
@@ -77,8 +76,9 @@ export function EventCard({
   }, []);
 
   const now = Date.now();
-  const isLive = now >= start && now <= end;
-  const isUpcoming = now < start;
+  const isLive = phase === 'live';
+  const isUpcoming = phase === 'upcoming';
+  const canRsvp = isLive || isUpcoming;
   const isDevcon = /devcon/i.test(event.name || '') || /devcon/i.test(event.organizer || '');
 
   const startLabel = useMemo(() => {
@@ -113,12 +113,14 @@ export function EventCard({
           <>
             <span className="live-dot" /> LIVE NOW
           </>
-        ) : isUpcoming ? (
+        ) : isUpcoming && startMs ? (
           <>
-            <Clock size={13} /> Starts in {formatCountdown(start - now)}
+            <Clock size={13} /> Starts in {formatCountdown(startMs - now)}
           </>
-        ) : (
+        ) : phase === 'past' ? (
           <>Ended</>
+        ) : (
+          <>Date not set</>
         )}
         {isDevcon && <span className="event-gold-badge">★ Devcon</span>}
       </div>
@@ -154,11 +156,11 @@ export function EventCard({
         <button
           className={`event-attendance-button${attendance ? ' is-going' : ''}`}
           onClick={onToggleGoing}
-          disabled={attendance === 'attended'}
+          disabled={!canRsvp || attendance === 'attended'}
           aria-pressed={Boolean(attendance)}
         >
           <Check size={15} />
-          {attendance === 'attended' ? 'Marked attended' : attendance === 'going' ? 'You’re going' : 'I’m going'}
+          {attendance === 'attended' ? 'Marked attended' : !canRsvp ? 'Not open' : attendance === 'going' ? 'You’re going' : 'I’m going'}
         </button>
 
         {/* Meta chips */}

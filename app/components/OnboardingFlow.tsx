@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, MapPin, Gift, UsersRound, Radio, Wallet, ArrowRight, Check } from 'lucide-react';
+import { PushButton } from './PushButton';
 
 interface OnboardingFlowProps {
   onComplete: () => void;
@@ -112,10 +113,10 @@ export function OnboardingFlow({ onComplete, onSkip }: OnboardingFlowProps) {
         </div>
 
         <div className="onboarding-footer">
-          <button onClick={handleNext} className="onboarding-button">
+          <PushButton onClick={handleNext} className="onboarding-button">
             {isLastStep ? 'Start Exploring' : 'Continue'}
             <ArrowRight size={18} />
-          </button>
+          </PushButton>
         </div>
       </div>
     </div>

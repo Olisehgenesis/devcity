@@ -2,16 +2,7 @@
 
 import { BADGES, type BadgeId } from '../../lib/game-store';
 
-const STICKER_FILL: Record<string, string> = {
-  lime: '#d6ff55',
-  coral: '#ff795f',
-  sky: '#83d8ee',
-  blush: '#f5a6c6',
-  butter: '#ffe27a',
-  sun: '#ffb35c',
-  mint: '#8bffcc',
-  ink: '#1c2925',
-};
+const STICKER_FILL = ['#D01265', '#00987F', '#E45700'] as const;
 
 /**
  * Round enamel sticker with thick white border.
@@ -27,20 +18,21 @@ export function BadgeSticker({
   earned?: boolean;
 }) {
   const def = BADGES.find((b) => b.id === id);
-  if (!def) return null;
-  const fill = STICKER_FILL[def.tone] ?? '#d6ff55';
+  const tone = BADGES.findIndex((b) => b.id === id);
+  if (!def || tone < 0) return null;
+  const fill = STICKER_FILL[tone % STICKER_FILL.length];
   return (
     <svg width={size} height={size} viewBox="0 0 96 96" fill="none" aria-hidden="true" className={earned ? '' : 'badge-locked'}>
-      <circle cx="48" cy="48" r="46" fill="#fff" stroke="#1c2925" strokeWidth="4" />
+      <circle cx="48" cy="48" r="46" fill="#FFF6FA" stroke="#1A1028" strokeWidth="4" />
       <circle cx="48" cy="48" r="40" fill={fill} opacity={earned ? 1 : 0.25} />
       {earned && <BadgeGlyph id={id} />}
-      {!earned && <circle cx="48" cy="48" r="40" fill="#1c2925" opacity=".14" />}
+      {!earned && <circle cx="48" cy="48" r="40" fill="#1A1028" opacity=".14" />}
     </svg>
   );
 }
 
 function BadgeGlyph({ id }: { id: BadgeId }) {
-  const ink = '#1c2925';
+  const ink = '#1A1028';
   const common = { stroke: ink, strokeWidth: 4, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' as const };
   switch (id) {
     case 'first-claim':

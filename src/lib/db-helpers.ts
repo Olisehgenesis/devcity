@@ -365,6 +365,7 @@ export async function nearbyPresence(lat: number, lng: number, radiusKm: number)
     where: {
       visibility: { not: 'INVISIBLE' },
       expiresAt: { gte: new Date() },
+      user: { profile: { locationSharing: true } },
     },
     include: { user: true },
   });
