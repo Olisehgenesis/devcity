@@ -427,7 +427,9 @@ export default function CityHome() {
   const selectedDropId = selected?.kind === "drop" ? selected.id.replace(/^drop-/, "") : "";
   const isClaimed = Boolean(chainClaims[selectedDropId]);
   const selectedClaimedCount = selected?.kind === "drop" ? (chainCounts[selectedDropId] ?? selected.claimedCount) : selected?.claimedCount;
-  const claimLocationStatus: ClaimLocationStatus = locationState === "denied"
+  const claimLocationStatus: ClaimLocationStatus = locationPreferenceReady && !locationSharing
+    ? "off"
+    : locationState === "denied"
     ? "denied"
     : locationState === "unavailable"
       ? "unavailable"
@@ -1808,6 +1810,11 @@ export default function CityHome() {
             <div className="drop-sheet-meta"><span><MapPin size={14} /> {claimView.distanceM != null ? claimDistanceSentence(claimView.distanceM) : claimView.title}</span><span><UsersRound size={14} /> {selectedClaimedCount ?? 0} claimed</span></div>
             {claimView.state !== "success" ? (
               <>
+                {claimView.state === "location-off" && (
+                  <button className="secondary-action claim-location-retry" onClick={() => void toggleLocationSharing()}>
+                    <MapPin size={15} /> Turn location on
+                  </button>
+                )}
                 {(claimView.state === "permission-required" || claimView.state === "location-unavailable") && (
                   <button className="secondary-action claim-location-retry" onClick={requestLocation} disabled={requestingLocation}>
                     <LocateFixed size={15} /> {requestingLocation ? "Checking location" : "Try location again"}
@@ -1829,6 +1836,7 @@ export default function CityHome() {
                   onClick={() => { if (selectedIsTest) return; if (!feedUserAddress) { openWallet(); return; } void handleClaim(); }}
                 >
                   {claimView.state === "checking-location" && "Checking location"}
+                  {claimView.state === "location-off" && "Location is off"}
                   {claimView.state === "permission-required" && "Location permission required"}
                   {claimView.state === "location-unavailable" && "Location unavailable"}
                   {claimView.state === "too-far" && "You're too far away"}

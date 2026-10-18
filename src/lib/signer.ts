@@ -1,6 +1,7 @@
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { celo, celoSepolia } from 'viem/chains';
-import { recoverTypedDataAddress, keccak256, toHex, zeroAddress, type Hex } from 'viem';
+import { recoverTypedDataAddress, keccak256, toHex, type Hex } from 'viem';
+import { CELO_SEPOLIA } from './chain';
 
 const isMainnet = process.env.NEXT_PUBLIC_CELO_NETWORK === 'mainnet';
 export const CLAIM_CHAIN = isMainnet ? celo : celoSepolia;
@@ -9,7 +10,7 @@ export const CLAIM_DOMAIN = {
   name: 'DEVCITY26',
   version: '1',
   chainId: CLAIM_CHAIN.id,
-  verifyingContract: (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS as Hex | undefined) ?? zeroAddress,
+  verifyingContract: (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS as Hex | undefined) || CELO_SEPOLIA.dropClaim,
 } as const;
 
 export const CLAIM_TYPES = {

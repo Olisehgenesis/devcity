@@ -7,6 +7,7 @@ import { rateLimit, RATE_LIMITS, getClientIdentifier } from './rate-limit';
 import { NextRequest } from 'next/server';
 import { CLAIM_RADIUS_M, distanceMeters } from './geo';
 import { claimOutOfRangeMessage, parseClaimCoordinate } from './claim-eligibility';
+import { CELO_SEPOLIA } from './chain';
 
 export class ApiError extends Error {
   status: number;
@@ -237,12 +238,12 @@ export async function authorizeClaim(
   const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 60 * 15);
 
   let nonce = BigInt(0);
-  if (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS) {
-    try {
-      nonce = await getNonce(user.walletAddress as Hex);
-    } catch (e) {
-      throw new ApiError(503, 'Unable to read chain nonce. Please try again.');
-    }
+  try {
+    nonce = await getNonce(user.walletAddress as Hex, {
+      dropClaimAddress: (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS as Hex | undefined) || CELO_SEPOLIA.dropClaim,
+    });
+  } catch {
+    throw new ApiError(503, 'Unable to read chain nonce. Please try again.');
   }
 
   const amountWei = parseUnits(claimAmount.toFixed(tokenDecimals), tokenDecimals);

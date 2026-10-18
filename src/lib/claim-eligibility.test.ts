@@ -31,6 +31,14 @@ describe("claim eligibility", () => {
     assert.match(claimOutOfRangeMessage(5_000_000), /You're 5,000 km away from this drop/);
   });
 
+  it("reminds the person when location sharing is off", () => {
+    const result = view({ locationStatus: "off" });
+    assert.equal(result.state, "location-off");
+    assert.equal(result.title, "Location is off");
+    assert.equal(result.canPressClaim, false);
+    assert.match(result.detail, /Turn it on to claim/);
+  });
+
   it("stays on checking location before a fix, even if coordinates are already present", () => {
     const result = view({ locationStatus: "checking" });
     assert.equal(result.state, "checking-location");

@@ -1,9 +1,10 @@
 import { CLAIM_RADIUS_M, distanceMeters, formatDistance } from "./geo";
 
-export type ClaimLocationStatus = "checking" | "ready" | "denied" | "unavailable";
+export type ClaimLocationStatus = "checking" | "ready" | "denied" | "unavailable" | "off";
 
 export type ClaimFlowState =
   | "checking-location"
+  | "location-off"
   | "permission-required"
   | "location-unavailable"
   | "too-far"
@@ -65,6 +66,15 @@ export function resolveClaimView(input: {
       canPressClaim: false,
       title: "Waiting for wallet signature",
       detail: "Waiting for wallet signature. Nothing is claimed until the transaction is confirmed.",
+    };
+  }
+  if (input.locationStatus === "off") {
+    return {
+      state: "location-off",
+      distanceM: null,
+      canPressClaim: false,
+      title: "Location is off",
+      detail: "Location is off. Turn it on to claim this drop. Friends cannot see you on the map until it is on.",
     };
   }
   if (input.locating || input.locationStatus === "checking") {
