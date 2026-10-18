@@ -47,7 +47,7 @@ export function SelfLegacyQr({ config, onVerified }: { config: SelfLegacyQrConfi
 
   return (
     <div className="self-qr-panel">
-      <p>Scan with the Self app. This check does not use Self credits.</p>
+      <p>Open Self, then come back. The result arrives here from Self, or from the proof sent to DEVCITY.</p>
       <SelfQRcodeWrapper
         selfApp={app}
         size={220}

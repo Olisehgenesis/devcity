@@ -1,0 +1,18 @@
+---
+description: Legacy Self verification uses relayer feedback or the proof webhook
+globs: "{app/api/webhooks/self/**,app/api/me/verification/**,app/components/SelfLegacyQr.tsx,app/components/YouSheet.tsx,src/lib/self-legacy.ts,src/lib/self-enterprise.ts}"
+alwaysApply: false
+---
+
+# Self legacy verification
+
+User-facing checks use Self Pass (`@selfxyz/qrcode` and `SelfBackendVerifier`). Do not call `sessions.create`.
+
+A check is finished in either of these ways:
+
+- Self feedback: the QR wrapper `onSuccess` when the relayer reports `proof_verified`.
+- The legacy webhook: Self's relayer POSTs the proof to `https://devcity.fun/api/webhooks/self`. Mark the account only after `SelfBackendVerifier` accepts it.
+
+The deeplink only brings the person back. The Verified tick comes from the webhook result. Keep a pending check so a return without the deeplink still looks up that result. Enterprise signed webhooks stay a fallback when `svix-signature` is present.
+
+A person verifies once. If `identityVerifiedAt` is already set, do not start another Self check and do not replace the stored time or document. A repeat proof for that same account is a success so Self can finish. A document already stored on a different account stays rejected.

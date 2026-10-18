@@ -459,7 +459,8 @@ export default function CityHome() {
   const claimFee = useFeeQuote(claimView.state === "ready" ? feedUserAddress : null, claimFeeRequest);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('self') === 'done') setYouOpen(true);
+    const returning = new URLSearchParams(window.location.search).get('self') === 'done';
+    if (returning || sessionStorage.getItem('devcity-self-check')) setYouOpen(true);
   }, []);
 
   useEffect(() => {

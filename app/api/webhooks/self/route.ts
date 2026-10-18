@@ -71,9 +71,9 @@ async function verifyLegacy(body: { attestationId: unknown; proof: unknown; publ
     }, secret);
     if (!decision) return legacyResponse(false, 'Verification did not match this account.');
     const marked = await markIdentityVerified(decision.userId, decision.nullifier);
+    if (marked === 'already' || marked === 'marked') return legacyResponse(true);
     if (marked === 'duplicate') return legacyResponse(false, 'This document is already used on another DEVCITY account.');
-    if (marked !== 'marked') return legacyResponse(false, 'Verification did not match a DEVCITY account.');
-    return legacyResponse(true);
+    return legacyResponse(false, 'Verification did not match a DEVCITY account.');
   } catch (error) {
     console.error('Self legacy verification failed', error instanceof Error ? error.name : 'error');
     return legacyResponse(false, 'Verification failed.');

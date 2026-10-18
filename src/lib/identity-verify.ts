@@ -1,13 +1,14 @@
 import { prisma } from './prisma';
 
-export type MarkVerifiedResult = 'marked' | 'missing-user' | 'duplicate' | 'no-profile';
+export type MarkVerifiedResult = 'marked' | 'already' | 'missing-user' | 'duplicate' | 'no-profile';
 
 export async function markIdentityVerified(userId: string, nullifier: string | null): Promise<MarkVerifiedResult> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, username: true, profile: { select: { id: true } } },
+    select: { id: true, username: true, profile: { select: { id: true, identityVerifiedAt: true } } },
   });
   if (!user) return 'missing-user';
+  if (user.profile?.identityVerifiedAt) return 'already';
   if (nullifier) {
     const owner = await prisma.profile.findUnique({ where: { selfNullifier: nullifier }, select: { userId: true } });
     if (owner && owner.userId !== user.id) return 'duplicate';

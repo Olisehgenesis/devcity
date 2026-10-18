@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { CalendarDays, Check, ImagePlus, KeyRound, Shuffle, Wallet, X } from 'lucide-react';
 import { Sheet } from './Sheet';
 import type { SelfLegacyQrConfig } from './SelfLegacyQr';
+import { clearSelfCheck, rememberSelfCheck, selfCheckPending } from '../lib/self-check';
 import { DevTestAccountPanel } from './DevTestAccountPanel';
 import { PushButton } from './PushButton';
 import { useCityStore, timeAgo, type AvatarMode } from '../lib/city-store';
@@ -193,7 +194,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
 
   useEffect(() => {
     if (!open || !sessionUser || verified) return;
-    const returning = new URLSearchParams(window.location.search).get('self') === 'done';
+    const returning = new URLSearchParams(window.location.search).get('self') === 'done' || selfCheckPending();
     if (!returning && !selfQr) return;
     let active = true;
     const look = () => {
@@ -203,6 +204,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
           if (!active || !response.ok || !body.verified) return;
           setVerified(true);
           setSelfQr(null);
+          clearSelfCheck();
           const url = new URL(window.location.href);
           url.searchParams.delete('self');
           window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
@@ -239,13 +241,21 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
         userDefinedData?: string;
         logo?: string;
         returnUrl?: string;
+        verified?: boolean;
       };
+      if (body.verified) {
+        setVerified(true);
+        setSelfQr(null);
+        clearSelfCheck();
+        return;
+      }
       if (body.callbackPath) setVerifyCallback(body.callbackPath);
       if (!response.ok || !body.userDefinedData || !body.userId || !body.endpoint || !body.scope || !body.endpointType || !body.logo || !body.returnUrl) {
         setVerifyConfigured(false);
         setSelfQr(null);
         throw new Error(body.error || 'Self can only send proofs to a public https address.');
       }
+      rememberSelfCheck();
       setSelfQr({
         appName: body.appName || 'DEVCITY',
         scope: body.scope,
@@ -322,6 +332,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
             </div>
             <button className="profile-edit-avatar" onClick={() => document.querySelector<HTMLDetailsElement>('.profile-appearance-disclosure')?.setAttribute('open', '')}>Edit look</button>
           </header>
+          {verified && <p className="profile-verify-note">You verify once. This account keeps that check.</p>}
           {!verified && verifyConfigured && (
             <PushButton className="profile-verify-button" onClick={() => void startVerification()} disabled={startingVerify}>
               {startingVerify ? 'Preparing Self…' : 'Get verified'}
@@ -339,6 +350,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
                   if (response.ok && body.verified) {
                     setVerified(true);
                     setSelfQr(null);
+                    clearSelfCheck();
                   }
                 })
                 .catch(() => undefined);

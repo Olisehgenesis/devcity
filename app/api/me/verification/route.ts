@@ -52,6 +52,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const userId = await sessionUserId(request);
   if (!userId) return NextResponse.json({ error: 'Sign in before getting verified.' }, { status: 401 });
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    select: { identityVerifiedAt: true },
+  });
+  if (profile?.identityVerifiedAt) {
+    return NextResponse.json({ ...verificationView(process.env), verified: true });
+  }
   const view = verificationView(process.env);
   const accountId = selfLegacyUserId(userId);
   const secret = process.env.BETTER_AUTH_SECRET?.trim() ?? '';
