@@ -1,7 +1,7 @@
 import { prisma } from './prisma';
 import { Decimal } from '@prisma/client/runtime/library';
 import { signClaimAuthorization, dropIdToBytes32, CLAIM_CHAIN } from './signer';
-import { getNonce } from '../../contracts/interact';
+import { getConfig, getNonce } from '../../contracts/interact';
 import { parseUnits, type Hex } from 'viem';
 import { rateLimit, RATE_LIMITS, getClientIdentifier } from './rate-limit';
 import { NextRequest } from 'next/server';
@@ -239,9 +239,12 @@ export async function authorizeClaim(
 
   let nonce = BigInt(0);
   try {
-    nonce = await getNonce(user.walletAddress as Hex, {
-      dropClaimAddress: (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS as Hex | undefined) || CELO_SEPOLIA.dropClaim,
-    });
+    nonce = await getNonce(
+      user.walletAddress as Hex,
+      getConfig({
+        dropClaimAddress: (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS as Hex | undefined) || CELO_SEPOLIA.dropClaim,
+      }),
+    );
   } catch {
     throw new ApiError(503, 'Unable to read chain nonce. Please try again.');
   }
