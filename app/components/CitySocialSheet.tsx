@@ -5,15 +5,13 @@ import { ArrowLeft, Heart, KeyRound, MapPin, MessageCircle, Paperclip, Search, S
 import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
-import { stories, type Story } from '../lib/stories';
-import { AvatarBubble } from './game/AvatarBubble';
 import { FriendDesk } from './FriendDesk';
-import { UnlockSecret } from './PinBoxes';
 import { useXmtpChat, type XmtpUiMessage } from '../hooks/useXmtpChat';
 import type { Attachment } from '@xmtp/browser-sdk';
 import type { Hex } from 'viem';
 import type { LocalWallet } from '@/lib/keystore';
 import { getUnlockedPrivateKey, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { useUnlockedKey } from '../hooks/useUnlockedKey';
 
 export type SocialView = 'feed' | 'chat' | 'people';
 export type FeedProfileStatus = 'checking' | 'signed-out' | 'wallet-needed' | 'ready' | 'error';
@@ -53,7 +51,6 @@ interface CitySocialSheetProps {
   onClose: () => void;
   onTip: (name: string, initials: string, color: string, address?: string) => void;
   startChatAddress?: string | null;
-  onOpenStory?: (story: Story) => void;
 }
 
 type PresenceUser = {
@@ -81,7 +78,7 @@ function initialsFor(username: string) {
     .join('') || username.slice(0, 2).toUpperCase();
 }
 
-export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress, onOpenStory }: CitySocialSheetProps) {
+export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
   const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
@@ -107,6 +104,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [inboxPin, setInboxPin] = useState('');
   const [inboxWalletRetry, setInboxWalletRetry] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
+  const sessionKey = useUnlockedKey(userAddress);
   const xmtp = useXmtpChat(open && view === 'chat', onNotify);
   const connectWithLocalWallet = xmtp.connectWithLocalWallet;
 
@@ -148,7 +146,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
         if (!cancelled) setInboxWalletLoading(false);
       });
     return () => { cancelled = true; };
-  }, [open, profileStatus, userAddress, view, inboxWalletRetry, connectWithLocalWallet]);
+  }, [open, profileStatus, userAddress, view, inboxWalletRetry, connectWithLocalWallet, sessionKey]);
 
   useEffect(() => {
     if (!open || view !== 'feed') return;
@@ -250,10 +248,12 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     `${person.username} ${person.status}`.toLowerCase().includes(query.toLowerCase())), [nearbyPeople, query]);
   const thread = xmtp.threads.find((item) => item.id === xmtp.activeThreadId);
   const title = view === 'feed' ? 'Around the city' : view === 'people' ? 'People nearby' : thread ? shortInbox(thread.peerInboxId) : 'Your chats';
+  const signedIn = profileStatus === 'ready' || profileStatus === 'wallet-needed';
   const shouldConnectPasskeyInbox = profileStatus === 'ready'
-    && !!userAddress
+    && Boolean(userAddress)
+    && !sessionKey
     && xmtp.status !== 'connecting'
-    && (xmtp.status === 'idle' || xmtp.status === 'error' || xmtp.connectedAddress?.toLowerCase() !== userAddress.toLowerCase());
+    && (xmtp.status === 'idle' || xmtp.status === 'error' || xmtp.connectedAddress?.toLowerCase() !== userAddress?.toLowerCase());
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -401,23 +401,10 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   }
 
   return (
-    <Sheet open={open && view !== null} onClose={onClose} eyebrow="MUMBAI · YOUR CITY" title={title}>
+    <Sheet open={open && view !== null} onClose={onClose} eyebrow="DEVCITY" title={title}>
       {view === 'feed' && (
         <div className="social-feed">
-          <div className="social-live-line"><span className="live-dot" /> SHARED CITY FEED <span>·</span> posts sync across devices</div>
-          {onOpenStory && (
-            <div className="stories-rail" aria-label="City stories">
-              {Object.entries(stories).map(([key]) => {
-                const s = stories[key];
-                return (
-                  <button key={key} className="story-ring" onClick={() => onOpenStory?.(s)} aria-label={`View ${s.name}'s story`}>
-                    <AvatarBubble name={s.name} tone={s.color} size={46} />
-                    <small>{s.name}</small>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div className="social-live-line"><span className="live-dot" /> City feed</div>
           {profileStatus === 'ready' ? (
             <form className="broadcast-composer" onSubmit={sendBroadcast}>
               <span className="broadcast-composer-avatar">{avatarSrc ? <img src={avatarSrc} alt="" /> : 'Y'}</span>
@@ -426,9 +413,9 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
             </form>
           ) : (
             <div className="feed-profile-gate">
-              <strong>{profileStatus === 'checking' ? 'Checking your profile…' : profileStatus === 'error' ? 'Profile check failed' : profileStatus === 'wallet-needed' ? 'Finish setting up your profile' : 'Sign in to join the conversation'}</strong>
-              <p>{profileStatus === 'checking' ? 'Your account is needed to post, like, or comment.' : profileStatus === 'error' ? 'Open your profile to retry sign-in before posting.' : 'Sign in with a passkey and set up your wallet to post, like, and comment.'}</p>
-              {profileStatus !== 'checking' && <button className="you-connect-primary" onClick={onRequestProfile}>{profileStatus === 'wallet-needed' ? 'Finish profile setup' : 'Open your profile'}</button>}
+              <strong>{profileStatus === 'checking' ? 'Checking your profile…' : profileStatus === 'wallet-needed' ? 'Your account is signed in' : profileStatus === 'error' ? 'Profile check failed' : 'Sign in to join the conversation'}</strong>
+              <p>{profileStatus === 'checking' ? 'Your account is needed to post, like, or comment.' : profileStatus === 'wallet-needed' ? 'A wallet on this device is needed before you can post.' : profileStatus === 'error' ? 'Open your profile to retry.' : 'Use the same sign-in as your profile.'}</p>
+              {profileStatus !== 'checking' && profileStatus !== 'wallet-needed' && <button className="you-connect-primary" onClick={onRequestProfile}>Open your profile</button>}
             </div>
           )}
           {feedError && <p className="feed-error" role="alert">{feedError}{broadcasts.length === 0 && <button onClick={() => setFeedRetry((count) => count + 1)}>Try again</button>}</p>}
@@ -508,17 +495,8 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                     </>
                   ) : (
                     <>
-                      <p>Unlock {inboxWallet.name || 'your DEVCITY wallet'} to connect to XMTP and load your messages.</p>
-                      <label className="xmtp-pin-label" htmlFor="xmtp-wallet-pin">{inboxWallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                      <UnlockSecret
-                        id="xmtp-wallet-pin"
-                        pinProtected={inboxWallet.pinProtected}
-                        value={inboxPin}
-                        onChange={setInboxPin}
-                      />
-                      <button className="xmtp-wallet-connect" onClick={() => void connectPasskeyInbox()} disabled={inboxWallet.pinProtected ? inboxPin.length !== 6 : !inboxPin}>
-                        {xmtp.status === 'error' ? 'Retry and open inbox' : 'Unlock and show messages'}
-                      </button>
+                      <p>Unlock your wallet once. Inbox, claims, and sends share that unlock.</p>
+                      <button className="outside-cta" onClick={onConnectWallet}>Open wallet</button>
                     </>
                   )}
                 </>
@@ -536,7 +514,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
           ) : !xmtp.isWalletConnected && profileStatus !== 'ready' ? (
             <div className="xmtp-state">
               <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
-              <strong>{profileStatus === 'wallet-needed' ? 'Finish setting up your wallet' : 'Sign in to your passkey wallet'}</strong>
+              <strong>{signedIn ? 'Finish setting up your wallet' : 'Sign in once'}</strong>
               <p>Your encrypted messages are tied to your DEVCITY wallet. Sign in on this device to load your XMTP inbox.</p>
               <button className="outside-cta xmtp-open-wallet" onClick={onConnectWallet}>{profileStatus === 'wallet-needed' ? 'Finish wallet setup' : 'Open Wallet to sign in'}</button>
             </div>

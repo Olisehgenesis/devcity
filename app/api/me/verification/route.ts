@@ -72,6 +72,7 @@ export async function POST(request: Request) {
     userIdType: 'uuid',
     userDefinedData: pass,
     logo: `${base}/icons/apple-touch-icon.png`,
+    returnUrl: `${base}/?self=done`,
     disclosures: SELF_LEGACY_DISCLOSURES,
   });
 }

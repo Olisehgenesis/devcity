@@ -27,6 +27,7 @@ import { removeImportedWalletToken, type ImportedWalletToken } from '@/lib/walle
 import { WalletTradeTab } from './wallet/WalletTradeTab';
 import { WalletOverview } from './wallet/WalletOverview';
 import { WalletHome } from './wallet/WalletHome';
+import { WalletCityTab } from './wallet/WalletCityTab';
 import { WalletSendTab } from './wallet/WalletSendTab';
 import { WalletTipTab } from './wallet/WalletTipTab';
 import { WalletSecurityTab } from './wallet/WalletSecurityTab';
@@ -80,6 +81,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupDone, setBackupDone] = useState(false);
   const [screen, setScreen] = useState<WalletScreen>({ id: 'home' });
+  const [homePane, setHomePane] = useState<'money' | 'city'>('money');
   const [exporting, setExporting] = useState(false);
   const [restoreAddress, setRestoreAddress] = useState<string | null>(null);
 
@@ -653,6 +655,11 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             onSettings={() => setScreen({ id: 'settings' })}
             onSignOut={() => { void leaveAccount(); }}
           />
+          <div className="wallet-segment" role="tablist" aria-label="Wallet sections">
+            <button type="button" role="tab" aria-selected={homePane === 'money'} className={homePane === 'money' ? 'is-active' : ''} onClick={() => setHomePane('money')}>Money</button>
+            <button type="button" role="tab" aria-selected={homePane === 'city'} className={homePane === 'city' ? 'is-active' : ''} onClick={() => setHomePane('city')}>Badges & drops</button>
+          </div>
+          {homePane === 'city' ? <WalletCityTab address={wallet.address} /> : (
           <WalletHome
             celoBalance={celoLabel}
             stableBalances={stableBalances}
@@ -687,6 +694,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               })}
             />
           </WalletHome>
+          )}
         </>
       )}
 

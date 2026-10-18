@@ -11,6 +11,7 @@ import { useFeeQuote } from '../../hooks/useFeeQuote';
 import { FeePreview } from './FeePreview';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { clearUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { useUnlockedKey } from '../../hooks/useUnlockedKey';
 import { UnlockSecret } from '../PinBoxes';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
 
@@ -41,7 +42,8 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
   const [explorer, setExplorer] = useState('');
   const [localKey, setLocalKey] = useState<Hex | null>(null);
 
-  const effectiveKey = unlockedKey ?? localKey;
+  const sessionKey = useUnlockedKey(address);
+  const effectiveKey = unlockedKey ?? sessionKey ?? localKey;
   const token = tipToken === 'CELO' ? null : fees.find((f) => f.symbol === tipToken) ?? importedTokens.find((item) => tipToken === `CUSTOM:${item.address}`);
   const feeRequest = useMemo<TxRequest | null>(() => {
     if (!isAddress(tipTo) || !tipAmount || Number(tipAmount) <= 0) return null;

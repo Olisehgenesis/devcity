@@ -4743,7 +4743,10 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   font-weight: 800;
   letter-spacing: 0.02em;
 }
-.profile-verify-button { margin-top: 10px; }
+.profile-verify-button {
+  width: 100%;
+  margin: 0;
+}
 .profile-verify-note {
   margin: 8px 0 0;
   padding: 8px 10px;
@@ -4877,12 +4880,15 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   font-weight: 700;
 }
 .self-qr-link {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   min-height: 44px;
-  margin-top: 8px;
-  color: #1a1028;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: #d01265;
+  color: #fff;
   font-weight: 800;
 }
 @media (min-width: 768px) {

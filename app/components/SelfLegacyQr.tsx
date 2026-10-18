@@ -11,6 +11,7 @@ export type SelfLegacyQrConfig = {
   userId: string;
   userDefinedData: string;
   logo: string;
+  returnUrl: string;
 };
 
 export function SelfLegacyQr({ config, onVerified }: { config: SelfLegacyQrConfig; onVerified: () => void }) {
@@ -29,6 +30,7 @@ export function SelfLegacyQr({ config, onVerified }: { config: SelfLegacyQrConfi
         userIdType: 'uuid',
         userDefinedData: config.userDefinedData,
         logoBase64: config.logo,
+        deeplinkCallback: config.returnUrl,
         disclosures: {},
       }).build();
       setApp(built);

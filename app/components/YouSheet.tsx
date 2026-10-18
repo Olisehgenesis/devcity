@@ -191,6 +191,37 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
     return () => { active = false; };
   }, [open, sessionUser]);
 
+  useEffect(() => {
+    if (!open || !sessionUser || verified) return;
+    const returning = new URLSearchParams(window.location.search).get('self') === 'done';
+    if (!returning && !selfQr) return;
+    let active = true;
+    const look = () => {
+      void fetch('/api/me/verification')
+        .then(async (response) => {
+          const body = await response.json().catch(() => ({})) as { verified?: boolean };
+          if (!active || !response.ok || !body.verified) return;
+          setVerified(true);
+          setSelfQr(null);
+          const url = new URL(window.location.href);
+          url.searchParams.delete('self');
+          window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+        })
+        .catch(() => {});
+    };
+    look();
+    const timer = window.setInterval(look, 2000);
+    const onVisible = () => { if (document.visibilityState === 'visible') look(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const stop = window.setTimeout(() => window.clearInterval(timer), 40000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.clearTimeout(stop);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [open, sessionUser, verified, selfQr]);
+
   async function startVerification() {
     setStartingVerify(true);
     setVerifyError('');
@@ -207,9 +238,10 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
         userId?: string;
         userDefinedData?: string;
         logo?: string;
+        returnUrl?: string;
       };
       if (body.callbackPath) setVerifyCallback(body.callbackPath);
-      if (!response.ok || !body.userDefinedData || !body.userId || !body.endpoint || !body.scope || !body.endpointType || !body.logo) {
+      if (!response.ok || !body.userDefinedData || !body.userId || !body.endpoint || !body.scope || !body.endpointType || !body.logo || !body.returnUrl) {
         setVerifyConfigured(false);
         setSelfQr(null);
         throw new Error(body.error || 'Self can only send proofs to a public https address.');
@@ -222,6 +254,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
         userId: body.userId,
         userDefinedData: body.userDefinedData,
         logo: body.logo,
+        returnUrl: body.returnUrl,
       });
     } catch (error) {
       setVerifyError(error instanceof Error ? error.message : 'Verification is not configured.');
@@ -285,19 +318,19 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
             <div className="you-identity-text">
               <strong className="profile-display-name">{profileName}</strong>
               <span className="profile-account-label">{sessionUser.email?.endsWith('@test.devcity.local') ? 'Test account' : 'Here for the city.'}</span>
-              {verified ? (
-                <span className="profile-verified"><Check size={14} /> Verified</span>
-              ) : verifyConfigured ? (
-                <PushButton className="profile-verify-button" onClick={() => void startVerification()} disabled={startingVerify}>
-                  {startingVerify ? 'Preparing Self…' : `Get verified · ${verifyMode === 'live' ? 'live' : 'test'}`}
-                </PushButton>
-              ) : (
-                <p className="profile-verify-note">Self sends the proof to {verifyCallback}. It needs the public address https://devcity.fun/api/webhooks/self.</p>
-              )}
-              {verifyError && <p className="avatar-upload-error" role="alert">{verifyError}</p>}
+              {verified && <span className="profile-verified"><Check size={14} /> Verified</span>}
             </div>
             <button className="profile-edit-avatar" onClick={() => document.querySelector<HTMLDetailsElement>('.profile-appearance-disclosure')?.setAttribute('open', '')}>Edit look</button>
           </header>
+          {!verified && verifyConfigured && (
+            <PushButton className="profile-verify-button" onClick={() => void startVerification()} disabled={startingVerify}>
+              {startingVerify ? 'Preparing Self…' : 'Get verified'}
+            </PushButton>
+          )}
+          {!verified && !verifyConfigured && (
+            <p className="profile-verify-note">Self sends the proof to {verifyCallback}. It needs the public address https://devcity.fun/api/webhooks/self.</p>
+          )}
+          {verifyError && <p className="avatar-upload-error" role="alert">{verifyError}</p>}
           {selfQr && !verified && (
             <SelfLegacyQr config={selfQr} onVerified={() => {
               void fetch('/api/me/verification')

@@ -8,6 +8,7 @@ import { ERC20_ABI } from '@/lib/chain';
 import { ACTIVE_CHAIN, toGasCurrency } from '@/lib/celo';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { useUnlockedKey } from '../../hooks/useUnlockedKey';
 import { UnlockSecret } from '../PinBoxes';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
 
@@ -37,7 +38,8 @@ export function WalletDropTab({ address, pinProtected, unlockedKey, fees, import
   const [error, setError] = useState('');
   const [localKey, setLocalKey] = useState<Hex | null>(null);
 
-  const effectiveKey = unlockedKey ?? localKey;
+  const sessionKey = useUnlockedKey(address);
+  const effectiveKey = unlockedKey ?? sessionKey ?? localKey;
 
   async function handleUnlock() {
     if (!pin) {

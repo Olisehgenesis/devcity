@@ -10,6 +10,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { CELO_SEPOLIA, CHAIN } from '@/lib/chain';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { useUnlockedKey } from '../../hooks/useUnlockedKey';
 import { UnlockSecret } from '../PinBoxes';
 
 const PROFILE_FACTORY_ABI = [
@@ -34,7 +35,8 @@ export function WalletTokenTab({ address, pinProtected, unlockedKey, handle, han
   const [token, setToken] = useState<{ address: string; name: string; symbol: string } | null>(null);
   const [localKey, setLocalKey] = useState<Hex | null>(null);
 
-  const effectiveKey = unlockedKey ?? localKey;
+  const sessionKey = useUnlockedKey(address);
+  const effectiveKey = unlockedKey ?? sessionKey ?? localKey;
   const tokenName = `${handle}.devcity.fun`;
   const feeRequest = useMemo<TxRequest>(() => ({
     to: CELO_SEPOLIA.profileTokenFactory as Address,

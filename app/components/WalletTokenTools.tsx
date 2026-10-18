@@ -28,6 +28,7 @@ import {
 } from '@/lib/keystore';
 import { writeContractWithFee, type TxRequest } from '@/lib/gas';
 import { useFeeQuote } from '../hooks/useFeeQuote';
+import { useUnlockedKey } from '../hooks/useUnlockedKey';
 import { FeePreview } from './wallet/FeePreview';
 import { UnlockSecret } from './PinBoxes';
 import {
@@ -378,8 +379,11 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     if (!tokenSymbol && normalizedUsername !== 'CITY') setTokenSymbol(normalizedUsername);
   }, [normalizedUsername, tokenName, tokenSymbol, username]);
 
+  const sessionKey = useUnlockedKey(wallet.address);
+  const signingKey = unlockedKey ?? sessionKey;
+
   const ensureUnlocked = async (): Promise<Hex> => {
-    if (unlockedKey) return unlockedKey;
+    if (signingKey) return signingKey;
     if (wallet.pinProtected && !/^\d{6}$/.test(pin)) throw new Error('Enter your 6-digit wallet PIN to approve this transaction.');
     if (!pin) throw new Error('Enter your wallet passphrase to approve this transaction.');
     const storedWallet = await loadLocalWallet(wallet.address);
@@ -879,7 +883,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 <div><strong>{tokenName || `${username || 'Your name'}.devcity.fun`}</strong><span>${tokenSymbol || normalizedUsername || 'TICKER'} · 1,000,000 supply</span></div>
               </div>
               <div className="wallet-token-contract-note"><strong>Fixed launch terms</strong><span>1,000,000 tokens · 18 decimals · 900,000 to you · 100,000 held in the factory treasury · one token per wallet</span></div>
-              {!unlockedKey && (
+              {!signingKey && (
                 <div className="wallet-token-unlock">
                   <label className="wallet-field-label" htmlFor="profile-token-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
                   <UnlockSecret id="profile-token-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
@@ -925,7 +929,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <h3>Buy or sell on your pool</h3>
                   <label className="wallet-field-label" htmlFor="profile-token-buy-usdt">Buy with USDT</label>
                   <input id="profile-token-buy-usdt" className="you-passphrase" value={buyUsdtAmount} onChange={(event) => setBuyUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="USDT amount" inputMode="decimal" />
-                  {!unlockedKey && (
+                  {!signingKey && (
                     <div className="wallet-token-unlock">
                       <label className="wallet-field-label" htmlFor="profile-token-buy-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
                       <UnlockSecret id="profile-token-buy-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
@@ -937,7 +941,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   </button>
                   <label className="wallet-field-label" htmlFor="profile-token-sell-amount">Sell {profileToken.symbol}</label>
                   <input id="profile-token-sell-amount" className="you-passphrase" value={sellTokenAmount} onChange={(event) => setSellTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder={`${profileToken.symbol} amount`} inputMode="decimal" />
-                  {!unlockedKey && (
+                  {!signingKey && (
                     <div className="wallet-token-unlock">
                       <label className="wallet-field-label" htmlFor="profile-token-sell-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
                       <UnlockSecret id="profile-token-sell-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
@@ -962,7 +966,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 <input id="profile-token-recipient" className="you-passphrase" value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="0x…" autoComplete="off" />
                 <label className="wallet-field-label" htmlFor="profile-token-amount">Amount · available {Number(formatUnits(profileToken.balance, profileToken.decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 })}</label>
                 <input id="profile-token-amount" className="you-passphrase" value={tipAmount} onChange={(event) => setTipAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
-                {!unlockedKey && (
+                {!signingKey && (
                   <div className="wallet-token-unlock">
                     <label className="wallet-field-label" htmlFor="profile-token-send-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
                     <UnlockSecret id="profile-token-send-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
@@ -978,7 +982,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 <summary>Manage token details</summary>
                 <label className="wallet-field-label" htmlFor="profile-token-uri-edit">Token details URL</label>
                 <input id="profile-token-uri-edit" className="you-passphrase" value={editTokenURI} onChange={(event) => setEditTokenURI(event.target.value)} placeholder="https://… or ipfs://…" maxLength={2048} />
-                {!unlockedKey && (
+                {!signingKey && (
                   <div className="wallet-token-unlock">
                     <label className="wallet-field-label" htmlFor="profile-token-manage-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
                     <UnlockSecret id="profile-token-manage-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
@@ -999,7 +1003,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                       ⚡ Use defaults (1,000 {profileToken.symbol} + 10 USDT · 0.01 USDT start)
                     </button>
                   )}
-                  {!unlockedKey && (
+                  {!signingKey && (
                     <div className="wallet-token-unlock">
                       <label className="wallet-field-label" htmlFor="profile-token-liquidity-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
                       <UnlockSecret id="profile-token-liquidity-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
@@ -1028,7 +1032,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         </section>
       ) : null}
 
-      {!unlockedKey && (tab === 'assets' && tokens.length > 0) && (
+      {!signingKey && (tab === 'assets' && tokens.length > 0) && (
         <p className="wallet-token-hint">Unlock is requested only when you approve a transaction.</p>
       )}
       {transactionHash && !profileToken && (

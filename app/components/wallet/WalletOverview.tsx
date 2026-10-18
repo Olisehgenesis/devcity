@@ -1,6 +1,6 @@
 'use client';
 
-import { History, Settings } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpRight, Gift, History, Power, Settings } from 'lucide-react';
 
 interface WalletOverviewProps {
   chainLabel: string;
@@ -19,10 +19,10 @@ interface WalletOverviewProps {
 }
 
 const ACTIONS = [
-  { id: 'send', label: 'Send' },
-  { id: 'receive', label: 'Receive' },
-  { id: 'swap', label: 'Swap' },
-  { id: 'drop', label: 'Drop' },
+  { id: 'send', label: 'Send', icon: ArrowUpRight },
+  { id: 'receive', label: 'Receive', icon: ArrowDownToLine },
+  { id: 'swap', label: 'Swap', icon: ArrowLeftRight },
+  { id: 'drop', label: 'Drop', icon: Gift },
 ] as const;
 
 export function WalletOverview({ chainLabel, name, address, celoBalance, usdBalance, balanceLoading, onSend, onReceive, onSwap, onDrop, onActivity, onSettings, onSignOut }: WalletOverviewProps) {
@@ -48,6 +48,9 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, usdBala
           <button type="button" className="vault-icon-button" onClick={onSettings} aria-label="Wallet settings">
             <Settings size={16} />
           </button>
+          <button type="button" className="vault-icon-button" onClick={onSignOut} aria-label="Sign out">
+            <Power size={16} />
+          </button>
         </div>
       </div>
 
@@ -60,11 +63,11 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, usdBala
       <div className="vault-actions" aria-label="Wallet actions">
         {ACTIONS.map((action) => (
           <button key={action.id} type="button" className="vault-action" onClick={actions[action.id]}>
+            <action.icon size={18} aria-hidden="true" />
             {action.label}
           </button>
         ))}
       </div>
-      <button type="button" className="you-disconnect vault-signout" onClick={onSignOut}>Sign out</button>
     </section>
   );
 }

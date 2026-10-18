@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
-import { clearUnlockedWallet } from '@/lib/unlocked-wallet';
 import {
   exportEncryptedKeystore,
   downloadEncryptedKeystore,
@@ -15,6 +14,7 @@ import {
   type EncryptedKeystoreFile,
 } from '@/lib/keystore';
 import type { Hex } from 'viem';
+import { useUnlockedKey } from '../../hooks/useUnlockedKey';
 
 interface Fee {
   symbol: string;
@@ -33,7 +33,7 @@ interface WalletSecurityTabProps {
   notify?: (message: string) => void;
 }
 
-export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFeeSymbol, onWalletChange, onUnlockKey, onSignOut, notify }: WalletSecurityTabProps) {
+export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFeeSymbol, onWalletChange, onUnlockKey, notify }: WalletSecurityTabProps) {
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupDone, setBackupDone] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -63,13 +63,16 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
     }
   }
 
+  const sessionKey = useUnlockedKey(wallet.address);
+  const activeKey = unlockedKey ?? sessionKey;
+
   async function handleExport() {
-    if (!unlockedKey) { setError('Unlock your wallet before exporting.'); return; }
+    if (!activeKey) { setError('Unlock your wallet before exporting.'); return; }
     if (!passphrase) { setError('Choose a passphrase for the keystore file.'); return; }
     setExporting(true);
     setError('');
     try {
-      const file = await exportEncryptedKeystore(wallet.address, unlockedKey, passphrase);
+      const file = await exportEncryptedKeystore(wallet.address, activeKey, passphrase);
       downloadEncryptedKeystore(file, wallet.address);
       setPassphrase('');
       notify?.('Encrypted keystore file downloaded.');
@@ -122,11 +125,6 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
     }
   }
 
-  function handleSignOut() {
-    clearUnlockedWallet();
-    onSignOut?.();
-  }
-
   return (
     <section className="wallet-security-details wallet-security-tab" aria-label="Wallet security">
       <div className="wallet-security-content">
@@ -148,7 +146,7 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
         {backupDone && <p className="you-note">Encrypted backup saved.</p>}
         <h3 className="you-section-title wallet-backup-title">Encrypted keystore file</h3>
         <p className="profile-control-hint">Export your key as an encrypted file you can save anywhere, or import one on any device.</p>
-        {!unlockedKey ? (
+        {!activeKey ? (
           <p className="you-note">Unlock your wallet to export or import a keystore file.</p>
         ) : (
           <>
@@ -182,7 +180,6 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
             <button className="you-connect-secondary" onClick={() => { setKeystoreFile(null); setPassphrase(''); }}>Cancel</button>
           </div>
         )}
-        <button className="you-disconnect wallet-signout" onClick={handleSignOut}>Sign out</button>
       </div>
       {error && <p className="you-error" role="alert">{error}</p>}
     </section>

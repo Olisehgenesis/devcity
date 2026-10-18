@@ -26,6 +26,7 @@ import { PinBoxes } from './PinBoxes';
 import { ERC20_ABI, CELO_SEPOLIA } from '@/lib/chain';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { getUnlockedPrivateKey, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { useUnlockedKey } from '../hooks/useUnlockedKey';
 import { getImportedWalletTokens, type ImportedWalletToken } from '@/lib/wallet-assets';
 import { Sheet } from './Sheet';
 
@@ -120,6 +121,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
   const [publishError, setPublishError] = useState('');
   const [pin, setPin] = useState('');
   const [unlockError, setUnlockError] = useState('');
+  const sessionKey = useUnlockedKey(walletAddress);
 
   const openedWithLocation = useRef(false);
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -135,7 +137,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
     () => tokens.find((t) => t.key === tokenKey) ?? null,
     [tokenKey, tokens],
   );
-  const needsUnlock = Boolean(walletAddress) && (walletAddress ? !getUnlockedPrivateKey(walletAddress) : true);
+  const needsUnlock = Boolean(walletAddress) && !sessionKey;
 
   // ─── Load owned tokens with real balances (public reads, no unlock needed) ──
   useEffect(() => {

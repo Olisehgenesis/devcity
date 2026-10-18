@@ -459,6 +459,10 @@ export default function CityHome() {
   const claimFee = useFeeQuote(claimView.state === "ready" ? feedUserAddress : null, claimFeeRequest);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('self') === 'done') setYouOpen(true);
+  }, []);
+
+  useEffect(() => {
     setClaimAskPin(false);
     setClaimPin("");
     setClaimError("");
@@ -1705,7 +1709,6 @@ export default function CityHome() {
         onClose={() => { setSocialView(null); setActiveTab("map"); }}
         onTip={(name, initials, color, address) => { closeSheets("tip"); setTipTarget({ name, initials, color, address }); }}
         startChatAddress={startChatAddress}
-        onOpenStory={setActiveStory}
       />
       <TipSheet
         open={tipTarget !== null}

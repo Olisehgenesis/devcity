@@ -11,6 +11,7 @@ import { useFeeQuote } from '../../hooks/useFeeQuote';
 import { FeePreview } from './FeePreview';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
 import { clearUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { useUnlockedKey } from '../../hooks/useUnlockedKey';
 import { UnlockSecret } from '../PinBoxes';
 import { resolveRecipient } from '../../lib/resolve-user';
 import type { ImportedWalletToken } from '@/lib/wallet-assets';
@@ -45,7 +46,8 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
   const [explorer, setExplorer] = useState('');
   const [localKey, setLocalKey] = useState<Hex | null>(null);
 
-  const effectiveKey = unlockedKey ?? localKey;
+  const sessionKey = useUnlockedKey(address);
+  const effectiveKey = unlockedKey ?? sessionKey ?? localKey;
   const customToken = importedTokens.find((item) => sendToken === `CUSTOM:${item.address}`);
   const token = sendToken === 'CELO' ? null : fees.find((f) => f.symbol === sendToken) ?? customToken;
   const sendTokenLabel = customToken?.symbol ?? sendToken;
