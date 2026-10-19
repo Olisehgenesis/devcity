@@ -22,7 +22,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { cityPinSvg } from "@/lib/city-markers";
+import { cityPinSvg, markerScaleForZoom } from "@/lib/city-markers";
 import { eventPhase } from "@/lib/event-phase";
 import { Button } from "@/components/ui/button";
 import { EventCard } from "./components/EventCard";
@@ -228,6 +228,7 @@ export default function CityHome() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const mapMarkersRef = useRef(new globalThis.Map<string, MapLibreMarker>());
+  const settleMarkersRef = useRef<() => void>(() => {});
   const [filter, setFilter] = useState<FilterKind>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cardClosed, setCardClosed] = useState(false);
@@ -568,6 +569,38 @@ export default function CityHome() {
       onMapTapRef.current(event.lngLat.lng, event.lngLat.lat);
     });
     map.on("movestart", cancelPress);
+    let scaleFrame = 0;
+    const paintScale = () => {
+      scaleFrame = 0;
+      map.getContainer().style.setProperty('--marker-scale', String(markerScaleForZoom(map.getZoom())));
+    };
+    const settleMarkers = () => {
+      paintScale();
+      const scale = markerScaleForZoom(map.getZoom());
+      const cell = 28 + scale * 36;
+      const pins = [...map.getContainer().querySelectorAll<HTMLElement>('.city-pin:not(.marker-person)')];
+      pins.sort((a, b) => Number(b.classList.contains('marker-selected') || b.classList.contains('is-live')) - Number(a.classList.contains('marker-selected') || a.classList.contains('is-live')));
+      const taken = new Set<string>();
+      for (const el of pins) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 2) continue;
+        const key = `${Math.round((rect.left + rect.width / 2) / cell)}:${Math.round(rect.bottom / cell)}`;
+        if (el.classList.contains('marker-selected') || !taken.has(key)) {
+          el.classList.remove('marker-crowded');
+          taken.add(key);
+        } else {
+          el.classList.add('marker-crowded');
+        }
+      }
+    };
+    settleMarkersRef.current = settleMarkers;
+    const onZoom = () => {
+      if (scaleFrame) return;
+      scaleFrame = window.requestAnimationFrame(paintScale);
+    };
+    map.on('zoom', onZoom);
+    map.on('moveend', settleMarkers);
+    map.on('zoomend', settleMarkers);
     map.on("load", () => {
       setMapReady(true);
       setMapError(false);
@@ -835,7 +868,7 @@ export default function CityHome() {
         kind: marker.kind === 'person' ? 'person' : marker.kind,
         title: marker.name,
       });
-      element.className = 'map-marker city-pin marker-test';
+      element.className = `map-marker city-pin marker-test${marker.kind === 'person' ? ' marker-person' : ''}`;
       element.setAttribute('aria-label', `TEST. ${marker.name}. ${marker.detail}`);
       element.innerHTML = pin.svg;
       element.addEventListener('click', (event) => {
@@ -993,9 +1026,11 @@ export default function CityHome() {
       marker.getElement().classList.toggle("marker-filtered-out", !visible);
       marker.getElement().classList.toggle("marker-selected", selected?.id === id);
     });
+    const frame = window.requestAnimationFrame(() => settleMarkersRef.current());
     if (selected && mapReady) {
       mapRef.current?.flyTo({ center: [selected.longitude, selected.latitude], zoom: 15, duration: 650 });
     }
+    return () => window.cancelAnimationFrame(frame);
   }, [dropMarkers, eventMarkers, personMarkers, placeMarkers, friendMarkers, filter, kindById, mapReady, selected]);
 
   useEffect(() => {

@@ -2322,6 +2322,21 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 }
 .maplibregl-marker.map-marker:hover { scale: 1.06; translate: 0 -3px; }
 .maplibregl-marker.map-marker.marker-selected { scale: 1.1; translate: 0 -3px; z-index: 2; }
+.maplibregl-marker.map-marker.city-pin,
+.maplibregl-marker.map-marker.city-pin:hover,
+.maplibregl-marker.map-marker.city-pin.marker-selected {
+  scale: 1;
+  translate: none;
+}
+.city-pin:not(.marker-person) > svg {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  transform: scale(var(--marker-scale, 1));
+}
+.city-pin.marker-crowded:not(.marker-selected) {
+  visibility: hidden;
+  pointer-events: none;
+}
 .map-marker.marker-filtered-out,
 .maplibregl-marker.map-marker.marker-filtered-out,
 .maplibregl-marker:has(.marker-filtered-out) {

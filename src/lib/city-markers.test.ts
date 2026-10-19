@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BRAND, cityPinSvg } from './city-markers';
+import { BRAND, cityPinSvg, markerScaleForZoom } from './city-markers';
 
 describe('city pin family', () => {
-  it('keeps the people pin and gives every other kind its own tailed sticker', () => {
+  it('keeps the people pin and gives every other kind its own 3D marker', () => {
     const person = cityPinSvg({ kind: 'person', title: 'A very long marker name' });
     assert.equal(person.anchor, 'bottom');
     assert.match(person.svg, new RegExp(`viewBox="0 0 ${person.width} ${person.height}"`));
@@ -17,9 +17,22 @@ describe('city pin family', () => {
       assert.match(pin.svg, new RegExp(`viewBox="0 0 ${pin.width} ${pin.height}"`));
       assert.equal(pin.svg.includes('y="-'), false);
       assert.equal(pin.svg.includes('x="-'), false);
-      assert.match(pin.svg, /l-4 2[45]z/);
+      assert.match(pin.svg, /l-4 18z/);
       assert.equal(pin.svg.includes('cy="54"'), false);
+      assert.equal(pin.svg.includes('M6 10h28'), false);
     }
+    const event = cityPinSvg({ kind: 'event', title: 'Stage' }).svg;
+    const drop = cityPinSvg({ kind: 'drop', title: 'Crate' }).svg;
+    const place = cityPinSvg({ kind: 'place', title: 'Shop' }).svg;
+    assert.notEqual(event, drop);
+    assert.notEqual(drop, place);
+    assert.match(event, /M12 36 L32 16/);
+    assert.match(drop, /M14 32 L32 22/);
+    assert.match(place, /M8 38 L30 24/);
+    assert.ok(markerScaleForZoom(10) < markerScaleForZoom(14));
+    assert.ok(markerScaleForZoom(14) < markerScaleForZoom(17));
+    assert.ok(markerScaleForZoom(10) >= 0.5);
+    assert.ok(markerScaleForZoom(18) <= 1.22);
 
     const family = ['person', 'place', 'event', 'drop'].map((kind) => cityPinSvg({
       kind: kind as 'person' | 'place' | 'event' | 'drop',
