@@ -5054,6 +5054,47 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   top: 16px;
   left: 16px;
 }
+.ptoken { display: flex; max-width: 880px; margin: 0 auto; flex-direction: column; gap: 16px; color: #1a1028; }
+.ptoken-head { display: flex; align-items: center; gap: 12px; }
+.ptoken-icon { width: 44px; height: 44px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; background: #f4f4f5; }
+.ptoken-head h3 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.03em; }
+.ptoken-head p { margin: 2px 0 0; color: #5c4a62; font-size: 13px; }
+.ptoken-layout { display: flex; flex-direction: column; gap: 16px; }
+.ptoken-main { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
+.ptoken-card, .ptoken-panel, .ptoken-details {
+  border: 1px solid #e7e7ea;
+  border-radius: 16px;
+  background: #fff;
+  padding: 16px;
+}
+.ptoken-card > p, .ptoken-note { margin: 0; color: #5c4a62; font-size: 12px; }
+.ptoken-card > strong { display: block; margin-top: 4px; font-size: 32px; font-weight: 650; letter-spacing: -0.04em; line-height: 1.1; }
+.ptoken-card > strong small { margin-left: 4px; font-size: 14px; font-weight: 650; }
+.ptoken-stats, .ptoken-details dl { display: grid; gap: 12px; margin: 16px 0 0; }
+.ptoken-stats { grid-template-columns: 1fr 1fr; }
+.ptoken-stats > div:nth-child(3) { grid-column: 1 / -1; }
+.ptoken-stats div, .ptoken-details dl > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.ptoken-stats dt, .ptoken-details dt { color: #5c4a62; font-size: 12px; }
+.ptoken-stats dd, .ptoken-details dd { margin: 0; overflow-wrap: anywhere; font-weight: 650; }
+.ptoken-note { margin-top: 8px; }
+.ptoken-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.ptoken .ptoken-tabs { display: flex; gap: 6px; }
+.ptoken .ptoken-tabs > button {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #fff;
+  color: #5c4a62;
+  font-size: 14px;
+  font-weight: 650;
+}
+.ptoken .ptoken-tabs > button.is-active { background: #1a1028; color: #fff; }
+.ptoken-panel h3 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+.ptoken-details summary { color: #1a1028; font-size: 14px; font-weight: 650; cursor: pointer; }
+@media (min-width: 861px) {
+  .ptoken-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; align-items: start; }
+  .ptoken-details summary { display: none; }
+}
 .wallet-app {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);

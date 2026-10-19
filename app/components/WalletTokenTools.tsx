@@ -161,6 +161,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
   const [balances, setBalances] = useState<Record<string, bigint>>({});
   const [prices, setPrices] = useState<Record<string, TokenPrice>>({});
   const [profileToken, setProfileToken] = useState<ProfileTokenDetails | null>(null);
+  const [profileAction, setProfileAction] = useState<'send' | 'trade' | 'liquidity'>('send');
   const [profileStats, setProfileStats] = useState<{ icon?: string; totalSupplyFormatted?: number } | null>(null);
   const [priceAwareFactory, setPriceAwareFactory] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -906,135 +907,48 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
             )
           ) : (
             <>
-              {focus !== 'trade' && (
-              <div className="wallet-profile-token-card">
-                <div className="wallet-profile-token-head">
-                {profileStats?.icon
-                  ? <img className="wallet-profile-token-icon" src={profileStats.icon} alt={`${profileToken.symbol} token icon`} />
-                  : <span className="wallet-token-mark">{profileToken.symbol.slice(0, 1)}</span>}
-                <div><strong>{profileToken.name}</strong><span>${profileToken.symbol} · Celo Sepolia</span></div>
-              </div>
-                <div className="wallet-profile-token-balance">
-                  <strong>{Number(formatUnits(profileToken.balance, profileToken.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
-                  <span>available to you · {Number(formatUnits(profileToken.totalSupply, profileToken.decimals)).toLocaleString()} total supply</span>
-                </div>
-                <div className="wallet-profile-token-meta">
-                  <span>Factory treasury reserve</span>
-                  <strong>{Number(formatUnits(profileToken.treasuryBalance, profileToken.decimals)).toLocaleString(undefined, { maximumFractionDigits: 2 })} {profileToken.symbol}</strong>
-                </div>
-                <div className="wallet-profile-token-meta">
-                <span>Price</span><strong>{profileToken.price == null ? 'Price unavailable' : `${profileToken.price.toPrecision(5)} USDT`}</strong>
-                  {profileToken.priceSource && <small>{profileToken.priceSource} · indicative, not a sale quote</small>}
-                </div>
-                <Button variant="outline" className="min-w-0" onClick={() => void copyAddress(profileToken.address)}><span className="min-w-0 truncate">{profileToken.address}</span><Copy size={15} />{copied ? 'Copied' : 'Copy'}</Button>
-                <a className="wallet-token-explorer" href={`${window.location.origin}/api/token-icon?owner=${wallet.address}&chainId=${assetChainId}`} target="_blank" rel="noreferrer">Token profile image <ExternalLink size={13} /></a>
-                <a className="wallet-token-explorer" href={`${CELO_SEPOLIA.blockExplorer}/address/${profileToken.address}`} target="_blank" rel="noreferrer">View token on Blockscout <ExternalLink size={13} /></a>
-              </div>
-              )}
-
-              {profileToken.poolCreated && (
-                <div className="wallet-profile-token-actions wallet-profile-token-trade">
-                  <h3>Buy or sell on your pool</h3>
-                  <label className="wallet-field-label" htmlFor="profile-token-buy-usdt">Buy with USDT</label>
-                  <input id="profile-token-buy-usdt" className="you-passphrase" value={buyUsdtAmount} onChange={(event) => setBuyUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="USDT amount" inputMode="decimal" />
-                  {!signingKey && (
-                    <div className="wallet-token-unlock">
-                      <label className="wallet-field-label" htmlFor="profile-token-buy-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                      <UnlockSecret id="profile-token-buy-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
-                    </div>
-                  )}
-                  <FeePreview quote={buyFee.quote} error={buyFee.error} loading={buyFee.loading} />
-                  <Button disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || Boolean(buyFee.error)} onClick={() => void buyProfileToken()}>
-                    {operation === 'buy' ? 'Buying…' : `Buy ${profileToken.symbol}`}
-                  </Button>
-                  <label className="wallet-field-label" htmlFor="profile-token-sell-amount">Sell {profileToken.symbol}</label>
-                  <input id="profile-token-sell-amount" className="you-passphrase" value={sellTokenAmount} onChange={(event) => setSellTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder={`${profileToken.symbol} amount`} inputMode="decimal" />
-                  {!signingKey && (
-                    <div className="wallet-token-unlock">
-                      <label className="wallet-field-label" htmlFor="profile-token-sell-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                      <UnlockSecret id="profile-token-sell-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
-                    </div>
-                  )}
-                  <FeePreview quote={sellFee.quote} error={sellFee.error} loading={sellFee.loading} />
-                  <Button variant="outline" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || Boolean(sellFee.error)} onClick={() => void sellProfileToken()}>
-                    {operation === 'sell' ? 'Selling…' : `Sell ${profileToken.symbol} for USDT`}
-                  </Button>
-                  <p className="wallet-token-footnote">No protocol trade tax. Trades use a 5% minimum-receive tolerance against the displayed spot price; large price moves or price impact can make a trade revert.</p>
-                </div>
-              )}
-              {focus === 'trade' && !profileToken.poolCreated && (
-                <p className="you-note">This profile token has no pool yet. Seed one from the profile token screen when the factory allows it.</p>
-              )}
-
-              {focus !== 'trade' && (
-              <>
-              <div className="wallet-profile-token-actions">
-                <h3>Send or tip your token</h3>
-                <label className="wallet-field-label" htmlFor="profile-token-recipient">Recipient address</label>
-                <input id="profile-token-recipient" className="you-passphrase" value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="0x…" autoComplete="off" />
-                <label className="wallet-field-label" htmlFor="profile-token-amount">Amount · available {Number(formatUnits(profileToken.balance, profileToken.decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 })}</label>
-                <input id="profile-token-amount" className="you-passphrase" value={tipAmount} onChange={(event) => setTipAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
-                {!signingKey && (
-                  <div className="wallet-token-unlock">
-                    <label className="wallet-field-label" htmlFor="profile-token-send-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                    <UnlockSecret id="profile-token-send-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
-                  </div>
-                )}
-                <FeePreview quote={tipFee.quote} error={tipFee.error} loading={tipFee.loading} />
-                <Button disabled={operation === 'tip' || !recipient || !tipAmount || Boolean(tipFee.error)} onClick={() => void tipProfileToken()}>
-                  {operation === 'tip' ? 'Sending…' : <><ArrowUpRight size={16} /> Send {profileToken.symbol}</>}
-                </Button>
-              </div>
-
-              <details className="wallet-token-manage-details">
-                <summary>Manage token details</summary>
-                <label className="wallet-field-label" htmlFor="profile-token-uri-edit">Token details URL</label>
-                <input id="profile-token-uri-edit" className="you-passphrase" value={editTokenURI} onChange={(event) => setEditTokenURI(event.target.value)} placeholder="https://… or ipfs://…" maxLength={2048} />
-                {!signingKey && (
-                  <div className="wallet-token-unlock">
-                    <label className="wallet-field-label" htmlFor="profile-token-manage-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                    <UnlockSecret id="profile-token-manage-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
-                  </div>
-                )}
-                <Button variant="outline" disabled={operation === 'update-uri'} onClick={() => void updateTokenURI()}>{operation === 'update-uri' ? 'Saving…' : 'Update token details'}</Button>
-              </details>
-
-              {profileToken.poolCreated || priceAwareFactory ? (
-                <div className="wallet-profile-token-actions wallet-liquidity-form">
-                  <h3>{profileToken.poolCreated ? 'Add to your Uniswap V4 pool' : 'Seed your Uniswap V4 pool'}</h3>
-                  <label className="wallet-field-label" htmlFor="profile-token-liquidity-token">{profileToken.symbol} amount</label>
-                  <input id="profile-token-liquidity-token" className="you-passphrase" value={liquidityTokenAmount} onChange={(event) => setLiquidityTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
-                  <label className="wallet-field-label" htmlFor="profile-token-liquidity-usdt">USDT amount</label>
-                  <input id="profile-token-liquidity-usdt" className="you-passphrase" value={liquidityUsdtAmount} onChange={(event) => setLiquidityUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
-                  {!profileToken.poolCreated && (
-                    <Button type="button" variant="outline" className="whitespace-normal" onClick={() => { setLiquidityTokenAmount('1000'); setLiquidityUsdtAmount('10'); setError(''); }}>
-                      ⚡ Use defaults (1,000 {profileToken.symbol} + 10 USDT · 0.01 USDT start)
-                    </Button>
-                  )}
-                  {!signingKey && (
-                    <div className="wallet-token-unlock">
-                      <label className="wallet-field-label" htmlFor="profile-token-liquidity-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
-                      <UnlockSecret id="profile-token-liquidity-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
-                    </div>
-                  )}
-                  {!profileToken.poolCreated && Number.isFinite(initialPricePreview) && initialPricePreview > 0 && (
-                    <p className="wallet-token-price-preview">Starting spot price · {initialPricePreview.toPrecision(5)} USDT per {profileToken.symbol}</p>
-                  )}
-                  <Button disabled={operation === 'liquidity' || !liquidityTokenAmount || !liquidityUsdtAmount} onClick={() => void provideLiquidity()}>
-                    {operation === 'liquidity' ? 'Approving and adding…' : profileToken.poolCreated ? 'Add liquidity' : 'Create pool and seed'}
-                  </Button>
-                  <p className="wallet-token-footnote">{profileToken.poolCreated
-                    ? 'The pool keeps its current price. The factory may use less than the amounts entered and returns unused tokens.'
-                    : 'The starting spot price is set from the token and USDT amounts above. The factory may use less than those amounts and returns unused tokens.'} You will approve only the amounts needed.</p>
-                </div>
-              ) : (
-                <div className="wallet-liquidity-notice">
-                  <div><ArrowDownToLine size={16} /><strong>Uniswap liquidity</strong></div>
-                  <p>Initial liquidity seeding is paused for safety. The deployed factory initializes new pools at a hard-coded raw 1:1 price instead of the price you choose. The contract must be upgraded before adding USDT liquidity.</p>
-                </div>
-              )}
-              </>
-              )}
+              <ProfileTokenPage
+                token={profileToken}
+                iconSrc={profileIconSrc(profileToken, profileStats?.icon)}
+                chainLabel={assetChainLabel}
+                explorerBase={assetChainId === celo.id ? (celo.blockExplorers?.default.url ?? CELO_SEPOLIA.blockExplorer) : CELO_SEPOLIA.blockExplorer}
+                copied={copied}
+                onCopy={() => void copyAddress(profileToken.address)}
+                action={profileAction}
+                onAction={setProfileAction}
+                poolReady={profileToken.poolCreated}
+                canSeed={priceAwareFactory}
+                recipient={recipient}
+                onRecipient={setRecipient}
+                tipAmount={tipAmount}
+                onTipAmount={setTipAmount}
+                buyUsdtAmount={buyUsdtAmount}
+                onBuyUsdtAmount={setBuyUsdtAmount}
+                sellTokenAmount={sellTokenAmount}
+                onSellTokenAmount={setSellTokenAmount}
+                liquidityTokenAmount={liquidityTokenAmount}
+                onLiquidityTokenAmount={setLiquidityTokenAmount}
+                liquidityUsdtAmount={liquidityUsdtAmount}
+                onLiquidityUsdtAmount={setLiquidityUsdtAmount}
+                onUseDefaults={() => { setLiquidityTokenAmount('1000'); setLiquidityUsdtAmount('10'); setError(''); }}
+                initialPricePreview={initialPricePreview}
+                signingKey={Boolean(signingKey)}
+                pinProtected={wallet.pinProtected}
+                pin={pin}
+                onPin={setPin}
+                operation={operation}
+                tipFee={tipFee}
+                buyFee={buyFee}
+                sellFee={sellFee}
+                editTokenURI={editTokenURI}
+                onEditTokenURI={setEditTokenURI}
+                transactionHash={transactionHash}
+                onTip={() => void tipProfileToken()}
+                onBuy={() => void buyProfileToken()}
+                onSell={() => void sellProfileToken()}
+                onLiquidity={() => void provideLiquidity()}
+                onUpdateUri={() => void updateTokenURI()}
+              />
             </>
           )}
         </section>
@@ -1050,5 +964,276 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
       )}
       {error && <p className="you-error wallet-token-error" role="alert">{error}</p>}
     </section>
+  );
+}
+
+function profileIconSrc(token: ProfileTokenDetails, statsIcon?: string) {
+  const uri = token.tokenURI;
+  if (uri.startsWith('https://') || uri.startsWith('http://') || uri.startsWith('data:') || uri.startsWith('/')) return uri;
+  return statsIcon || null;
+}
+
+function shownAmount(value: bigint, decimals: number, digits = 4) {
+  const amount = Number(formatUnits(value, decimals));
+  if (!Number.isFinite(amount)) return formatUnits(value, decimals);
+  return amount.toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
+function ProfileTokenPage({
+  token,
+  iconSrc,
+  chainLabel,
+  explorerBase,
+  copied,
+  onCopy,
+  action,
+  onAction,
+  poolReady,
+  canSeed,
+  recipient,
+  onRecipient,
+  tipAmount,
+  onTipAmount,
+  buyUsdtAmount,
+  onBuyUsdtAmount,
+  sellTokenAmount,
+  onSellTokenAmount,
+  liquidityTokenAmount,
+  onLiquidityTokenAmount,
+  liquidityUsdtAmount,
+  onLiquidityUsdtAmount,
+  onUseDefaults,
+  initialPricePreview,
+  signingKey,
+  pinProtected,
+  pin,
+  onPin,
+  operation,
+  tipFee,
+  buyFee,
+  sellFee,
+  editTokenURI,
+  onEditTokenURI,
+  transactionHash,
+  onTip,
+  onBuy,
+  onSell,
+  onLiquidity,
+  onUpdateUri,
+}: {
+  token: ProfileTokenDetails;
+  iconSrc: string | null;
+  chainLabel: string;
+  explorerBase: string;
+  copied: boolean;
+  onCopy: () => void;
+  action: 'send' | 'trade' | 'liquidity';
+  onAction: (action: 'send' | 'trade' | 'liquidity') => void;
+  poolReady: boolean;
+  canSeed: boolean;
+  recipient: string;
+  onRecipient: (value: string) => void;
+  tipAmount: string;
+  onTipAmount: (value: string) => void;
+  buyUsdtAmount: string;
+  onBuyUsdtAmount: (value: string) => void;
+  sellTokenAmount: string;
+  onSellTokenAmount: (value: string) => void;
+  liquidityTokenAmount: string;
+  onLiquidityTokenAmount: (value: string) => void;
+  liquidityUsdtAmount: string;
+  onLiquidityUsdtAmount: (value: string) => void;
+  onUseDefaults: () => void;
+  initialPricePreview: number;
+  signingKey: boolean;
+  pinProtected?: boolean;
+  pin: string;
+  onPin: (value: string) => void;
+  operation: 'import' | 'launch' | 'tip' | 'buy' | 'sell' | 'update-uri' | 'liquidity' | null;
+  tipFee: { quote: Parameters<typeof FeePreview>[0]['quote']; error: string; loading: boolean };
+  buyFee: { quote: Parameters<typeof FeePreview>[0]['quote']; error: string; loading: boolean };
+  sellFee: { quote: Parameters<typeof FeePreview>[0]['quote']; error: string; loading: boolean };
+  editTokenURI: string;
+  onEditTokenURI: (value: string) => void;
+  transactionHash: string;
+  onTip: () => void;
+  onBuy: () => void;
+  onSell: () => void;
+  onLiquidity: () => void;
+  onUpdateUri: () => void;
+}) {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 861px)');
+    const update = () => setWide(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  const available = shownAmount(token.balance, token.decimals);
+  const supply = shownAmount(token.totalSupply, token.decimals, 2);
+  const treasury = shownAmount(token.treasuryBalance, token.decimals, 2);
+  const explorer = `${explorerBase}/address/${token.address}`;
+  let tipTooMuch = false;
+  if (tipAmount) {
+    try {
+      tipTooMuch = parseUnits(tipAmount, token.decimals) > token.balance;
+    } catch {
+      tipTooMuch = true;
+    }
+  }
+  const unlock = (id: string) => signingKey ? null : (
+    <div className="wallet-token-unlock">
+      <label className="wallet-field-label" htmlFor={id}>{pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
+      <UnlockSecret id={id} pinProtected={pinProtected} value={pin} onChange={onPin} />
+    </div>
+  );
+  const facts: Array<[string, string]> = [
+    ['Symbol', token.symbol],
+    ['Decimals', String(token.decimals)],
+    ['Total supply', `${supply} ${token.symbol}`],
+    ['Treasury reserve', `${treasury} ${token.symbol}`],
+    ['Network', chainLabel],
+  ];
+
+  return (
+    <div className="ptoken">
+      <header className="ptoken-head">
+        {iconSrc ? (
+          // Token art comes from the token's own URI, which is not a fixed image host.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="ptoken-icon" src={iconSrc} alt="" />
+        ) : null}
+        <div>
+          <h3>{token.name}</h3>
+          <p>{token.symbol}</p>
+        </div>
+      </header>
+      <div className="ptoken-layout">
+        <div className="ptoken-main">
+          <section className="ptoken-card" aria-label="Token balance">
+            <p>Available to you</p>
+            <strong>{available} <small>{token.symbol}</small></strong>
+            <dl className="ptoken-stats">
+              <div><dt>Total supply</dt><dd>{supply} {token.symbol}</dd></div>
+              <div><dt>Treasury reserve</dt><dd>{treasury} {token.symbol}</dd></div>
+              <div>
+                <dt>Price</dt>
+                <dd>{token.price == null ? 'Price unavailable' : `${token.price.toPrecision(5)} USDT`}</dd>
+              </div>
+            </dl>
+            {token.price != null && token.priceSource && <p className="ptoken-note">{token.priceSource} · indicative, not a sale quote</p>}
+            <div className="ptoken-links">
+              <Button type="button" variant="outline" onClick={onCopy}><Copy size={15} />{copied ? 'Copied' : 'Copy address'}</Button>
+              <a className="wallet-token-explorer" href={explorer} target="_blank" rel="noreferrer">View on explorer <ExternalLink size={13} /></a>
+            </div>
+          </section>
+
+          <div className="ptoken-tabs" role="tablist" aria-label="Token actions">
+            <button type="button" role="tab" aria-selected={action === 'send'} className={action === 'send' ? 'is-active' : ''} onClick={() => onAction('send')}>Send</button>
+            {poolReady && <button type="button" role="tab" aria-selected={action === 'trade'} className={action === 'trade' ? 'is-active' : ''} onClick={() => onAction('trade')}>Trade</button>}
+            <button type="button" role="tab" aria-selected={action === 'liquidity'} className={action === 'liquidity' ? 'is-active' : ''} onClick={() => onAction('liquidity')}>Liquidity</button>
+          </div>
+
+          {action === 'send' && (
+            <section className="ptoken-panel" aria-label="Send or tip">
+              <h3>Send or tip</h3>
+              <label className="wallet-field-label" htmlFor="profile-token-recipient">Recipient address</label>
+              <input id="profile-token-recipient" className="you-passphrase" value={recipient} onChange={(event) => onRecipient(event.target.value)} placeholder="0x…" autoComplete="off" />
+              <label className="wallet-field-label" htmlFor="profile-token-amount">Amount · available {available} {token.symbol}</label>
+              <div className="wallet-send-amount-row">
+                <input id="profile-token-amount" className="you-passphrase" value={tipAmount} onChange={(event) => onTipAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
+                <Button type="button" variant="outline" onClick={() => onTipAmount(formatUnits(token.balance, token.decimals))}>Max</Button>
+              </div>
+              {tipTooMuch && <p className="you-error" role="alert">Amount exceeds the available balance.</p>}
+              {unlock('profile-token-send-pin')}
+              <FeePreview quote={tipFee.quote} error={tipFee.error} loading={tipFee.loading} />
+              <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={operation === 'tip' || !recipient || !tipAmount || tipTooMuch || Boolean(tipFee.error)} onClick={onTip}>
+                {operation === 'tip' ? 'Sending…' : <><ArrowUpRight size={16} /> Send {token.symbol}</>}
+              </Button>
+            </section>
+          )}
+
+          {action === 'trade' && poolReady && (
+            <section className="ptoken-panel" aria-label="Buy or sell">
+              <h3>Buy or sell on your pool</h3>
+              <label className="wallet-field-label" htmlFor="profile-token-buy-usdt">Buy with USDT</label>
+              <input id="profile-token-buy-usdt" className="you-passphrase" value={buyUsdtAmount} onChange={(event) => onBuyUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="USDT amount" inputMode="decimal" />
+              {unlock('profile-token-buy-pin')}
+              <FeePreview quote={buyFee.quote} error={buyFee.error} loading={buyFee.loading} />
+              <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || Boolean(buyFee.error)} onClick={onBuy}>
+                {operation === 'buy' ? 'Buying…' : `Buy ${token.symbol}`}
+              </Button>
+              <label className="wallet-field-label" htmlFor="profile-token-sell-amount">Sell {token.symbol}</label>
+              <input id="profile-token-sell-amount" className="you-passphrase" value={sellTokenAmount} onChange={(event) => onSellTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder={`${token.symbol} amount`} inputMode="decimal" />
+              {unlock('profile-token-sell-pin')}
+              <FeePreview quote={sellFee.quote} error={sellFee.error} loading={sellFee.loading} />
+              <Button type="button" variant="outline" className="w-full" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || Boolean(sellFee.error)} onClick={onSell}>
+                {operation === 'sell' ? 'Selling…' : `Sell ${token.symbol} for USDT`}
+              </Button>
+              <p className="wallet-token-footnote">No protocol trade tax. Trades use a 5% minimum-receive tolerance against the displayed spot price; large price moves or price impact can make a trade revert.</p>
+            </section>
+          )}
+
+          {action === 'liquidity' && (
+            poolReady || canSeed ? (
+              <section className="ptoken-panel" aria-label="Liquidity">
+                <h3>{poolReady ? 'Add to your Uniswap V4 pool' : 'Seed your Uniswap V4 pool'}</h3>
+                <label className="wallet-field-label" htmlFor="profile-token-liquidity-token">{token.symbol} amount</label>
+                <input id="profile-token-liquidity-token" className="you-passphrase" value={liquidityTokenAmount} onChange={(event) => onLiquidityTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
+                <label className="wallet-field-label" htmlFor="profile-token-liquidity-usdt">USDT amount</label>
+                <input id="profile-token-liquidity-usdt" className="you-passphrase" value={liquidityUsdtAmount} onChange={(event) => onLiquidityUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
+                {!poolReady && (
+                  <Button type="button" variant="outline" className="whitespace-normal" onClick={onUseDefaults}>
+                    Use defaults (1,000 {token.symbol} + 10 USDT · 0.01 USDT start)
+                  </Button>
+                )}
+                {unlock('profile-token-liquidity-pin')}
+                {!poolReady && Number.isFinite(initialPricePreview) && initialPricePreview > 0 && (
+                  <p className="wallet-token-price-preview">Starting spot price · {initialPricePreview.toPrecision(5)} USDT per {token.symbol}</p>
+                )}
+                <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={operation === 'liquidity' || !liquidityTokenAmount || !liquidityUsdtAmount} onClick={onLiquidity}>
+                  {operation === 'liquidity' ? 'Approving and adding…' : poolReady ? 'Add liquidity' : 'Create pool and seed'}
+                </Button>
+                <p className="wallet-token-footnote">{poolReady
+                  ? 'The pool keeps its current price. The factory may use less than the amounts entered and returns unused tokens.'
+                  : 'The starting spot price is set from the token and USDT amounts above. The factory may use less than those amounts and returns unused tokens.'} You will approve only the amounts needed.</p>
+              </section>
+            ) : (
+              <div className="wallet-liquidity-notice">
+                <div><ArrowDownToLine size={16} /><strong>Uniswap liquidity</strong></div>
+                <p>Initial liquidity seeding is paused for safety. The deployed factory initializes new pools at a hard-coded raw 1:1 price instead of the price you choose. The contract must be upgraded before adding USDT liquidity.</p>
+              </div>
+            )
+          )}
+
+          <details className="wallet-token-manage-details">
+            <summary>Manage token details</summary>
+            <label className="wallet-field-label" htmlFor="profile-token-uri-edit">Token details URL</label>
+            <input id="profile-token-uri-edit" className="you-passphrase" value={editTokenURI} onChange={(event) => onEditTokenURI(event.target.value)} placeholder="https://… or ipfs://" maxLength={2048} />
+            {unlock('profile-token-manage-pin')}
+            <Button type="button" variant="outline" disabled={operation === 'update-uri'} onClick={onUpdateUri}>{operation === 'update-uri' ? 'Saving…' : 'Update token details'}</Button>
+          </details>
+          {transactionHash && (
+            <p className="wallet-transaction-status" role="status">
+              Confirmed: <a href={`${explorerBase}/tx/${transactionHash}`} target="_blank" rel="noreferrer">{transactionHash.slice(0, 10)}…</a>
+            </p>
+          )}
+        </div>
+        <details className="ptoken-details" open={wide || undefined}>
+          <summary>Token details</summary>
+          <dl>
+            {facts.map(([label, value]) => (
+              <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+            ))}
+            <div><dt>Contract</dt><dd>{token.address.slice(0, 6)}…{token.address.slice(-4)}</dd></div>
+          </dl>
+          <div className="ptoken-links">
+            <Button type="button" variant="outline" onClick={onCopy}><Copy size={15} />{copied ? 'Copied' : 'Copy address'}</Button>
+            <a className="wallet-token-explorer" href={explorer} target="_blank" rel="noreferrer">View on explorer <ExternalLink size={13} /></a>
+          </div>
+        </details>
+      </div>
+    </div>
   );
 }
