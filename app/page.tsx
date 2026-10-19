@@ -883,12 +883,17 @@ export default function CityHome() {
     return () => window.clearTimeout(timer);
   }, [mapError, mapReady]);
 
-  // Check onboarding status
+  const onboardingShown = useRef(false);
   useEffect(() => {
     const completed = localStorage.getItem('devcity_onboarding_completed');
-    setHasCompletedOnboarding(!!completed);
-
+    if (completed && !onboardingShown.current) {
+      setHasCompletedOnboarding(true);
+      setShowOnboarding(false);
+      return;
+    }
     if (!completed && !showIntro && mapReady) {
+      localStorage.setItem('devcity_onboarding_completed', 'true');
+      onboardingShown.current = true;
       setShowOnboarding(true);
     }
   }, [showIntro, mapReady]);
@@ -900,6 +905,7 @@ export default function CityHome() {
   };
 
   const handleOnboardingSkip = () => {
+    localStorage.setItem('devcity_onboarding_completed', 'true');
     setHasCompletedOnboarding(true);
     setShowOnboarding(false);
   };
