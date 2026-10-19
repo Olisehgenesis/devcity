@@ -2,6 +2,41 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateUser, ApiError } from '@/lib/db-helpers';
 
+const KNOWN_ICONS = new Set(['CELO', 'USDT', 'USDC', 'USDM', 'CUSD']);
+
+function amountText(value: { toString(): string }) {
+  const raw = value.toString();
+  if (!raw.includes('.')) return raw;
+  return raw.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
+function tokenIcon(token: {
+  iconUrl: string | null;
+  symbol: string;
+  contractAddress: string | null;
+  chainId: number;
+  creator?: { walletAddress: string | null } | null;
+} | null | undefined) {
+  if (!token) return null;
+  if (token.iconUrl) return token.iconUrl;
+  if (KNOWN_ICONS.has(token.symbol.toUpperCase())) return null;
+  const owner = token.creator?.walletAddress;
+  if (owner) return `/api/token-icon?owner=${owner}&chainId=${token.chainId}`;
+  if (token.contractAddress) return `/api/token-icon?address=${token.contractAddress}&chainId=${token.chainId}`;
+  return null;
+}
+
+const tokenSelect = {
+  name: true,
+  symbol: true,
+  description: true,
+  iconUrl: true,
+  chainId: true,
+  contractAddress: true,
+  decimals: true,
+  creator: { select: { walletAddress: true } },
+} as const;
+
 // GET /api/wallet/transactions - Get user's transaction history
 export async function GET(request: Request) {
   try {
@@ -9,123 +44,127 @@ export async function GET(request: Request) {
     const userAddress = searchParams.get('userAddress');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-    const type = searchParams.get('type'); // tips, claims, tokens, all
+    const type = searchParams.get('type');
 
     if (!userAddress) {
       throw new ApiError(400, 'userAddress is required');
     }
 
     const user = await getOrCreateUser(userAddress);
+    const transactions: Array<Record<string, unknown>> = [];
 
-    const transactions: any[] = [];
-
-    // Get tips sent
     if (!type || type === 'all' || type === 'tips') {
       const tipsSent = await prisma.tip.findMany({
         where: { fromUserId: user.id },
         include: {
-          toUser: { select: { username: true, avatarUrl: true, walletAddress: true } },
-          token: { select: { symbol: true, iconUrl: true } },
+          toUser: { select: { username: true, name: true, avatarUrl: true, walletAddress: true } },
+          token: { select: tokenSelect },
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
       });
-
-      tipsSent.forEach((t) => {
+      tipsSent.forEach((tip) => {
         transactions.push({
-          id: t.id,
+          id: tip.id,
           type: 'tip_sent',
-          amount: t.amount.toString(),
-          tokenSymbol: t.token.symbol,
-          tokenIconUrl: t.token.iconUrl,
-          counterparty: t.toUser.username,
-          counterpartyAddress: t.toUser.walletAddress,
-          txHash: t.txHash,
-          message: t.message,
-          createdAt: t.createdAt,
+          amount: amountText(tip.amount),
+          tokenName: tip.token.name,
+          tokenSymbol: tip.token.symbol,
+          tokenDescription: tip.token.description,
+          tokenIconUrl: tokenIcon(tip.token),
+          contractAddress: tip.token.contractAddress,
+          counterparty: tip.toUser.username || tip.toUser.name,
+          counterpartyAddress: tip.toUser.walletAddress,
+          counterpartyAvatar: tip.toUser.avatarUrl,
+          txHash: tip.txHash,
+          message: tip.message,
+          createdAt: tip.createdAt,
         });
       });
     }
 
-    // Get tips received
     if (!type || type === 'all' || type === 'tips') {
       const tipsReceived = await prisma.tip.findMany({
         where: { toUserId: user.id },
         include: {
-          fromUser: { select: { username: true, avatarUrl: true, walletAddress: true } },
-          token: { select: { symbol: true, iconUrl: true } },
+          fromUser: { select: { username: true, name: true, avatarUrl: true, walletAddress: true } },
+          token: { select: tokenSelect },
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
       });
-
-      tipsReceived.forEach((t) => {
+      tipsReceived.forEach((tip) => {
         transactions.push({
-          id: t.id,
+          id: tip.id,
           type: 'tip_received',
-          amount: t.amount.toString(),
-          tokenSymbol: t.token.symbol,
-          tokenIconUrl: t.token.iconUrl,
-          counterparty: t.fromUser.username,
-          counterpartyAddress: t.fromUser.walletAddress,
-          txHash: t.txHash,
-          message: t.message,
-          createdAt: t.createdAt,
+          amount: amountText(tip.amount),
+          tokenName: tip.token.name,
+          tokenSymbol: tip.token.symbol,
+          tokenDescription: tip.token.description,
+          tokenIconUrl: tokenIcon(tip.token),
+          contractAddress: tip.token.contractAddress,
+          counterparty: tip.fromUser.username || tip.fromUser.name,
+          counterpartyAddress: tip.fromUser.walletAddress,
+          counterpartyAvatar: tip.fromUser.avatarUrl,
+          txHash: tip.txHash,
+          message: tip.message,
+          createdAt: tip.createdAt,
         });
       });
     }
 
-    // Get claims
     if (!type || type === 'all' || type === 'claims') {
       const claims = await prisma.dropClaim.findMany({
         where: { userId: user.id },
         include: {
           drop: { select: { name: true } },
-          token: { select: { symbol: true, iconUrl: true } },
+          token: { select: tokenSelect },
         },
         orderBy: { claimedAt: 'desc' },
         take: limit,
       });
-
-      claims.forEach((c) => {
+      claims.forEach((claim) => {
         transactions.push({
-          id: c.id,
+          id: claim.id,
           type: 'claim',
-          amount: c.amount.toString(),
-          tokenSymbol: c.token?.symbol || '?',
-          tokenIconUrl: c.token?.iconUrl,
-          dropName: c.drop.name,
-          status: c.status,
-          txHash: c.txHash,
-          createdAt: c.claimedAt,
+          amount: amountText(claim.amount),
+          tokenName: claim.token?.name,
+          tokenSymbol: claim.token?.symbol,
+          tokenDescription: claim.token?.description,
+          tokenIconUrl: tokenIcon(claim.token),
+          contractAddress: claim.token?.contractAddress,
+          dropName: claim.drop.name,
+          status: claim.status,
+          txHash: claim.txHash,
+          createdAt: claim.claimedAt,
         });
       });
     }
 
-    // Get tokens created
     if (!type || type === 'all' || type === 'tokens') {
       const tokensCreated = await prisma.token.findMany({
         where: { creatorId: user.id },
+        include: { creator: { select: { walletAddress: true } } },
         orderBy: { createdAt: 'desc' },
         take: limit,
       });
-
-      tokensCreated.forEach((t) => {
+      tokensCreated.forEach((token) => {
         transactions.push({
-          id: t.id,
+          id: token.id,
           type: 'token_created',
-          tokenName: t.name,
-          tokenSymbol: t.symbol,
-          tokenIconUrl: t.iconUrl,
-          maxSupply: t.maxSupply.toString(),
-          contractAddress: t.contractAddress,
-          createdAt: t.createdAt,
+          amount: amountText(token.maxSupply),
+          tokenName: token.name,
+          tokenSymbol: token.symbol,
+          tokenDescription: token.description,
+          tokenIconUrl: tokenIcon(token),
+          maxSupply: amountText(token.maxSupply),
+          contractAddress: token.contractAddress,
+          createdAt: token.createdAt,
         });
       });
     }
 
-    // Sort by date and paginate
-    transactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    transactions.sort((a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime());
     const paginated = transactions.slice(offset, offset + limit);
 
     return NextResponse.json({

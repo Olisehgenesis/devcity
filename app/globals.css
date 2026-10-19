@@ -5303,17 +5303,8 @@ button.wdash-refresh {
   font: inherit;
   text-align: left;
 }
-.wact-icon {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #f4f4f5;
-  color: #1a1028;
-}
-.wact-icon.is-in { background: #e7f6f1; color: #0f6b4c; }
+.wact-mark { display: grid; flex: 0 0 auto; }
+.wtx-icon .wh-mark { width: 72px; height: 72px; font-size: 24px; }
 .wact-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .wact-copy strong, .wact-side strong { font-size: 14px; font-weight: 600; }
 .wact-copy small, .wact-side small, .wact-empty { color: #5c4a62; font-size: 12px; line-height: 1.4; }
@@ -5555,15 +5546,8 @@ button.wdash-refresh {
 .wtx-icon {
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
   margin-top: 12px;
-  border-radius: 50%;
-  background: #f4f4f5;
-  color: #1a1028;
 }
-.wtx-icon.is-in { background: #e7f6f1; color: #0f6b4c; }
-.wtx-icon.is-failed { background: #fde8ee; color: #9b1c3c; }
 .wtx h3 { margin: 12px 0 0; font-size: 18px; }
 .wtx-sub { margin: 2px 0 0; color: #5c4a62; font-size: 13px; }
 .wtx-amount { margin: 8px 0 0; font-size: 36px; font-weight: 600; letter-spacing: -0.04em; }

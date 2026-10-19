@@ -1,17 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, ExternalLink, Sparkles } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
+import { TokenMark } from './TokenMark';
 
 interface ActivityItem {
   id: string;
   type: string;
   amount?: string;
   tokenSymbol?: string;
+  tokenName?: string;
+  tokenDescription?: string;
+  tokenIconUrl?: string | null;
+  contractAddress?: string | null;
+  maxSupply?: string;
   counterparty?: string;
   counterpartyAddress?: string;
+  counterpartyAvatar?: string | null;
   dropName?: string;
-  tokenName?: string;
   status?: string;
   txHash?: string | null;
   message?: string;
@@ -57,6 +63,14 @@ function short(value?: string | null) {
   if (!value) return '';
   if (value.startsWith('0x') && value.length > 12) return `${value.slice(0, 6)}…${value.slice(-4)}`;
   return value;
+}
+
+function ActivityMark({ item, large = false }: { item: ActivityItem; large?: boolean }) {
+  return (
+    <span className={large ? 'wtx-icon' : 'wact-mark'} aria-hidden="true">
+      <TokenMark symbol={item.tokenSymbol || item.tokenName || 'Token'} src={item.tokenIconUrl} />
+    </span>
+  );
 }
 
 export function WalletActivity({
@@ -118,28 +132,39 @@ export function WalletActivity({
     const state = statusLabel(selected.status, selected.txHash);
     const explorer = selected.txHash && explorerBase ? `${explorerBase}/tx/${selected.txHash}` : null;
     const outbound = selected.type === 'tip_sent';
-    const Icon = selected.type === 'token_created' ? Sparkles : outbound ? ArrowUpRight : ArrowDownLeft;
+    const facts: Array<[string, string]> = [
+      ['Token', selected.tokenName || ''],
+      ['Symbol', selected.tokenSymbol || ''],
+      ['From', outbound ? short(address) : (short(selected.counterpartyAddress) || selected.counterparty || selected.dropName || '—')],
+      ['To', outbound ? (short(selected.counterpartyAddress) || selected.counterparty || '—') : short(address)],
+      ['Drop', selected.dropName || ''],
+      ['Network', chainLabel || ''],
+      ['Date', formatWhen(selected.createdAt)],
+      ['Status', state],
+      ['Supply', selected.type === 'token_created' ? (selected.maxSupply || selected.amount || '') : ''],
+      ['Contract', selected.contractAddress ? short(selected.contractAddress) : ''],
+      ['Transaction', selected.txHash ? short(selected.txHash) : ''],
+      ['Note', selected.message || ''],
+      ['About', selected.tokenDescription || ''],
+    ].filter((entry): entry is [string, string] => Boolean(entry[1]));
+    if (state === 'Failed') facts.push(['What happened', 'This did not confirm. It was not added to your balance.']);
     return (
       <section className="wallet-activity wtx" aria-labelledby="wallet-activity-detail-title">
         <button type="button" className="wtx-back" onClick={() => setSelected(null)}>Activity</button>
-        <span className={`wtx-icon${outbound ? '' : ' is-in'}${state === 'Failed' ? ' is-failed' : ''}`} aria-hidden="true">
-          <Icon size={22} />
-        </span>
+        <ActivityMark item={selected} large />
         <h3 id="wallet-activity-detail-title">{label}</h3>
-        <p className="wtx-sub">{selected.tokenSymbol || selected.tokenName || selected.dropName || chainLabel}</p>
+        <p className="wtx-sub">{selected.tokenName || selected.tokenSymbol || selected.dropName || chainLabel}</p>
         <p className="wtx-amount">
-          {selected.amount ? `${outbound ? '−' : '+'}${selected.amount}` : '—'}
+          {selected.amount ? `${outbound ? '−' : selected.type === 'token_created' ? '' : '+'}${selected.amount}` : '—'}
           {selected.tokenSymbol ? <small> {selected.tokenSymbol}</small> : null}
         </p>
         <dl className="wact-facts">
-          <div><dt>From</dt><dd>{outbound ? short(address) : (short(selected.counterpartyAddress) || selected.counterparty || selected.dropName || '—')}</dd></div>
-          <div><dt>To</dt><dd>{outbound ? (short(selected.counterpartyAddress) || selected.counterparty || '—') : short(address)}</dd></div>
-          {chainLabel && <div><dt>Network</dt><dd>{chainLabel}</dd></div>}
-          <div><dt>Date</dt><dd>{formatWhen(selected.createdAt)}</dd></div>
-          <div><dt>Status</dt><dd><span className={`wtx-pill ${statusTone(state)}`}>{state}</span></dd></div>
-          {selected.txHash && <div><dt>Transaction</dt><dd>{short(selected.txHash)}</dd></div>}
-          {selected.message && <div><dt>Note</dt><dd>{selected.message}</dd></div>}
-          {state === 'Failed' && <div><dt>What happened</dt><dd>This did not confirm. It was not added to your balance.</dd></div>}
+          {facts.map(([name, value]) => (
+            <div key={name}>
+              <dt>{name}</dt>
+              <dd>{name === 'Status' ? <span className={`wtx-pill ${statusTone(state)}`}>{value}</span> : value}</dd>
+            </div>
+          ))}
         </dl>
         {explorer && (
           <a className="wtx-explorer" href={explorer} target="_blank" rel="noreferrer">
@@ -197,11 +222,10 @@ export function WalletActivity({
             const label = LABELS[item.type] ?? item.type;
             const state = statusLabel(item.status, item.txHash);
             const inbound = item.type === 'tip_received' || item.type === 'claim';
-            const Icon = item.type === 'token_created' ? Sparkles : inbound ? ArrowDownLeft : ArrowUpRight;
-            const who = item.counterparty || item.dropName || (item.type === 'token_created' ? item.tokenName : '') || '';
+            const who = item.counterparty || item.dropName || item.tokenName || '';
             const body = (
               <>
-                <span className={`wact-icon${inbound ? ' is-in' : ''}`} aria-hidden="true"><Icon size={16} /></span>
+                <ActivityMark item={item} />
                 <span className="wact-copy">
                   <strong>{label}{item.tokenSymbol ? ` ${item.tokenSymbol}` : ''}</strong>
                   <small>{who || chainLabel || 'This wallet'}</small>
