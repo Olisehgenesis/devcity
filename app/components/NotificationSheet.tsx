@@ -4,7 +4,6 @@ import { useNotifications, type Notification } from '../hooks/useNotifications';
 import { Sheet } from './Sheet';
 import { Bell, CheckCheck, MessageCircle, Heart, UsersRound, Gift, Calendar } from 'lucide-react';
 import { timeAgo } from '../lib/city-store';
-import { DexMascot } from './game/DexMascot';
 
 interface NotificationSheetProps {
   open: boolean;
@@ -44,7 +43,7 @@ export function NotificationSheet({ open, userAddress, onClose }: NotificationSh
   const { notifications, unreadCount, loading, error, markAsRead, markAllAsRead } = useNotifications(userAddress);
 
   return (
-    <Sheet open={open} onClose={onClose} eyebrow="Mumbai · your alerts" title="Notifications">
+    <Sheet open={open} onClose={onClose} title="Notifications">
       <div className="gsheet">
         {unreadCount > 0 && (
           <div className="vault-room-head" style={{ padding: '2px 2px 6px' }}>
@@ -59,7 +58,6 @@ export function NotificationSheet({ open, userAddress, onClose }: NotificationSh
           <div className="gsheet-error">{error}</div>
         ) : notifications.length === 0 ? (
           <div className="gsheet-empty">
-            <DexMascot size={84} />
             <strong>All quiet</strong>
             <p>We&apos;ll ping you when someone interacts.</p>
           </div>

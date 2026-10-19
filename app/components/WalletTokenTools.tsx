@@ -890,7 +890,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 </div>
               )}
               <FeePreview quote={launchFee.quote} error={launchFee.error} loading={launchFee.loading} />
-              <button className="you-connect-primary" disabled={operation === 'launch' || launchFee.loading || Boolean(launchFee.error)} onClick={() => void launchToken()}>
+              <button className="you-connect-primary" disabled={operation === 'launch' || Boolean(launchFee.error)} onClick={() => void launchToken()}>
                 {operation === 'launch' ? 'Launching on Sepolia…' : `Launch ${tokenSymbol || normalizedUsername || 'your'} token`}
               </button>
               <p className="wallet-token-footnote">Launching requires a Celo Sepolia transaction and network fees. Your token is named from your handle and saved to your profile.</p>
@@ -936,7 +936,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                     </div>
                   )}
                   <FeePreview quote={buyFee.quote} error={buyFee.error} loading={buyFee.loading} />
-                  <button className="you-connect-primary" disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || buyFee.loading || Boolean(buyFee.error)} onClick={() => void buyProfileToken()}>
+                  <button className="you-connect-primary" disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || Boolean(buyFee.error)} onClick={() => void buyProfileToken()}>
                     {operation === 'buy' ? 'Buying…' : `Buy ${profileToken.symbol}`}
                   </button>
                   <label className="wallet-field-label" htmlFor="profile-token-sell-amount">Sell {profileToken.symbol}</label>
@@ -948,7 +948,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                     </div>
                   )}
                   <FeePreview quote={sellFee.quote} error={sellFee.error} loading={sellFee.loading} />
-                  <button className="you-connect-secondary" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || sellFee.loading || Boolean(sellFee.error)} onClick={() => void sellProfileToken()}>
+                  <button className="you-connect-secondary" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || Boolean(sellFee.error)} onClick={() => void sellProfileToken()}>
                     {operation === 'sell' ? 'Selling…' : `Sell ${profileToken.symbol} for USDT`}
                   </button>
                   <p className="wallet-token-footnote">No protocol trade tax. Trades use a 5% minimum-receive tolerance against the displayed spot price; large price moves or price impact can make a trade revert.</p>
@@ -973,7 +973,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   </div>
                 )}
                 <FeePreview quote={tipFee.quote} error={tipFee.error} loading={tipFee.loading} />
-                <button className="you-connect-primary" disabled={operation === 'tip' || !recipient || !tipAmount || tipFee.loading || Boolean(tipFee.error)} onClick={() => void tipProfileToken()}>
+                <button className="you-connect-primary" disabled={operation === 'tip' || !recipient || !tipAmount || Boolean(tipFee.error)} onClick={() => void tipProfileToken()}>
                   {operation === 'tip' ? 'Sending…' : <><ArrowUpRight size={16} /> Send {profileToken.symbol}</>}
                 </button>
               </div>

@@ -705,6 +705,8 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 
 .filter-list {
   display: flex;
+  flex: 1;
+  min-width: 0;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 2px;
@@ -1185,7 +1187,8 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   }
   .mobile-nav button { min-height: 48px; font-size: 9.5px; }
 
-  .topbar { padding: 14px 14px 22px; }
+  .topbar { flex-direction: column; align-items: stretch; padding: 14px 14px 22px; }
+  .top-actions { flex-wrap: wrap; }
   .location-heading h1 { font-size: 22px; }
   .location-heading p { font-size: 12px; }
 
@@ -1203,7 +1206,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   .search-field input { width: 100%; }
 
   .map-tools {
-    top: 112px;
+    top: 176px;
     left: 14px;
     right: 14px;
   }

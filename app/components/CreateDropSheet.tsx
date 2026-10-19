@@ -498,7 +498,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
   };
 
   return (
-    <Sheet open={open} onClose={close} eyebrow="Mumbai · create" title="Create a drop">
+    <Sheet open={open} onClose={close} title="Create a drop">
       <div className="create-drop-flow">
         <div className="create-drop-steps" role="tablist" aria-label="Create drop steps">
           {(['location', 'token', 'amount', 'review'] as Step[]).map((s) => (
@@ -556,7 +556,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
 
             {step === 'token' && (
               <div className="create-drop-step-panel">
-                <p className="wallet-send-caution">Choose a token you already own. Your balances are read live from {chainLabel} — no new token is deployed.</p>
+                <p className="wallet-send-caution">Choose a token you already own. Your balances are read live from {chainLabel}. No new token is deployed.</p>
                 {tokensLoading ? (
                   <p className="you-note"><span className="spinner" /> Loading balances…</p>
                 ) : tokens.length === 0 ? (
@@ -651,7 +651,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 {publishState !== 'success' && (
                   <div className="create-drop-actions">
                     <button className="you-connect-secondary" onClick={() => setStep('amount')}><ArrowLeft size={16} /> Back</button>
-                    <button className="claim-button" disabled={publishing || publishState === 'pending' || publishFee.loading || Boolean(publishFee.error)} onClick={() => void publish()}>
+                    <button className="claim-button" disabled={publishing || publishState === 'pending' || Boolean(publishFee.error)} onClick={() => void publish()}>
                       <Gift size={16} /> {publishing ? 'Publishing…' : 'Publish drop'}
                     </button>
                   </div>

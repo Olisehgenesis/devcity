@@ -19,7 +19,7 @@ const body = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "DEVCITY 26: Mumbai Edition",
+  title: "DEVCITY 26",
   description: "Enter the city. Find your people. Claim something worth sharing.",
   applicationName: "DEVCITY 26",
   manifest: "/manifest.json",

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Sparkles, KeyRound } from 'lucide-react';
+import { KeyRound } from 'lucide-react';
 import { createWalletClient, createPublicClient, encodeFunctionData, http, type Address, type Hex } from 'viem';
 import { writeContractWithFee, type TxRequest } from '@/lib/gas';
 import { useFeeQuote } from '../../hooks/useFeeQuote';
@@ -152,8 +152,8 @@ export function WalletTokenTab({ address, pinProtected, unlockedKey, handle, han
           ) : (
             <>
               <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
-              <button className="you-connect-primary" disabled={launching || networkFee.loading || Boolean(networkFee.error)} onClick={() => void handleLaunch()}>
-                <Sparkles size={16} /> {launching ? 'Launching…' : `Launch ${handleTicker} token`}
+              <button className="you-connect-primary" disabled={launching || Boolean(networkFee.error)} onClick={() => void handleLaunch()}>
+                {launching ? 'Launching…' : `Launch ${handleTicker} token`}
               </button>
             </>
           )}

@@ -201,7 +201,7 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
           </div>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
           <p className="wallet-send-caution">A tip is a real transfer. Confirm the recipient address before sending. Gas is paid in CELO, then USDT, then USDC.</p>
-          <button className="you-connect-primary" disabled={tipping || !tipTo || !tipAmount || networkFee.loading || Boolean(networkFee.error)} onClick={() => void handleTip()}>
+          <button className="you-connect-primary" disabled={tipping || !tipTo || !tipAmount || Boolean(networkFee.error)} onClick={() => void handleTip()}>
             <Heart size={16} /> {tipping ? 'Tipping…' : 'Send tip'}
           </button>
         </>

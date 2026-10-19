@@ -2,8 +2,7 @@
 
 import { useSuggestedUsers, type SuggestedUser } from '../hooks/useSuggestedUsers';
 import { Sheet } from './Sheet';
-import { UserPlus, Sparkles } from 'lucide-react';
-import { DexMascot } from './game/DexMascot';
+import { UserPlus } from 'lucide-react';
 import { AvatarBubble } from './game/AvatarBubble';
 
 interface SuggestedUsersSheetProps {
@@ -38,7 +37,6 @@ export function SuggestedUsersSheet({ open, userAddress, onClose, onFollow }: Su
           <div className="gsheet-error">{error}</div>
         ) : suggestions.length === 0 ? (
           <div className="gsheet-empty">
-            <DexMascot size={84} />
             <strong>No suggestions yet</strong>
             <p>Come back later for people to follow.</p>
           </div>

@@ -8,15 +8,17 @@ import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   ArrowUpRight,
-  Bell,
+  CalendarDays,
+  Check,
   Gift,
+  Heart,
   LocateFixed,
   MapPin,
   MapPinOff,
   MessageCircle,
   Plus,
-  Search,
-  Sparkles,
+  Trophy,
+  TrendingUp,
   UsersRound,
   X,
 } from "lucide-react";
@@ -201,10 +203,16 @@ const filters: { id: FilterKind; label: string }[] = [
   { id: "place", label: "Places" },
 ];
 
+function geoFailure(error: GeolocationPositionError): "denied" | "timeout" | "unavailable" {
+  if (error.code === error.PERMISSION_DENIED) return "denied";
+  if (error.code === error.TIMEOUT) return "timeout";
+  return "unavailable";
+}
+
 function MarkerIcon({ kind, size = 16 }: { kind: MarkerKind; size?: number }) {
   if (kind === "drop") return <Gift size={size} strokeWidth={2.4} />;
   if (kind === "person") return <UsersRound size={size} strokeWidth={2.2} />;
-  if (kind === "event") return <Sparkles size={size} strokeWidth={2.2} />;
+  if (kind === "event") return <CalendarDays size={size} strokeWidth={2.2} />;
   return <MapPin size={size} strokeWidth={2.2} />;
 }
 
@@ -249,7 +257,7 @@ export default function CityHome() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const introMount = useRef(Date.now());
-  const [locationState, setLocationState] = useState<"checking" | "inside" | "outside" | "denied" | "unavailable">("checking");
+  const [locationState, setLocationState] = useState<"checking" | "inside" | "outside" | "denied" | "unavailable" | "timeout">("checking");
   const [locationPromptOpen, setLocationPromptOpen] = useState(false);
   const [requestingLocation, setRequestingLocation] = useState(false);
   const [myPosition, setMyPosition] = useState<[number, number] | null>(null);
@@ -433,6 +441,8 @@ export default function CityHome() {
     ? "denied"
     : locationState === "unavailable"
       ? "unavailable"
+      : locationState === "timeout"
+        ? "timeout"
       : locationState === "inside" || locationState === "outside"
         ? "ready"
         : "checking";
@@ -945,23 +955,37 @@ export default function CityHome() {
       return;
     }
     let settled = false;
+    const accept = (coords: GeolocationCoordinates) => {
+      const position: [number, number] = [coords.longitude, coords.latitude];
+      setMyPosition(position);
+      const inside = isInsideMumbai(position[0], position[1]);
+      setLocationState(inside ? "inside" : "outside");
+      setLocationPromptOpen(false);
+      if (settled) return;
+      settled = true;
+      if (inside) mapRef.current?.flyTo({ center: position, zoom: 16, duration: 1100 });
+      else setOutsidePromptOpen(true);
+    };
     const watchId = navigator.geolocation.watchPosition(
-      ({ coords }) => {
-        const position: [number, number] = [coords.longitude, coords.latitude];
-        setMyPosition(position);
-        const inside = isInsideMumbai(position[0], position[1]);
-        setLocationState(inside ? "inside" : "outside");
-        if (settled) return;
-        settled = true;
-        if (inside) mapRef.current?.flyTo({ center: position, zoom: 16, duration: 1100 });
-        else setOutsidePromptOpen(true);
-      },
+      ({ coords }) => accept(coords),
       (error) => {
         if (settled) return;
-        setLocationState(error.code === error.PERMISSION_DENIED ? "denied" : "unavailable");
-        setLocationPromptOpen(true);
+        if (error.code !== error.TIMEOUT) {
+          setLocationState(geoFailure(error));
+          setLocationPromptOpen(true);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          ({ coords }) => accept(coords),
+          (retryError) => {
+            if (settled) return;
+            setLocationState(geoFailure(retryError));
+            setLocationPromptOpen(true);
+          },
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 },
+        );
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 },
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 },
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [devLocationMode, locationPreferenceReady, locationSharing]);
@@ -1029,13 +1053,15 @@ export default function CityHome() {
           resolve({ lat: coords.latitude, lng: coords.longitude });
         },
         (error) => {
-          const denied = error.code === error.PERMISSION_DENIED;
-          reject(Object.assign(
-            new Error(denied ? "Location permission is required." : "Location is unavailable."),
-            { claimLocation: denied ? "denied" as const : "unavailable" as const },
-          ));
+          const where = geoFailure(error);
+          const message = where === "denied"
+            ? "Location permission is required."
+            : where === "timeout"
+              ? "Location is on, but this reading timed out."
+              : "This device could not find a position.";
+          reject(Object.assign(new Error(message), { claimLocation: where }));
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+        { enableHighAccuracy: false, timeout: 15000, maximumAge: 20000 },
       );
     });
   }
@@ -1058,9 +1084,9 @@ export default function CityHome() {
     try {
       fresh = await readFreshClaimPosition();
     } catch (error) {
-      const where = (error as { claimLocation?: "denied" | "unavailable" }).claimLocation ?? "unavailable";
+      const where = (error as { claimLocation?: "denied" | "timeout" | "unavailable" }).claimLocation ?? "unavailable";
       setMyPosition(null);
-      setLocationState(where === "denied" ? "denied" : "unavailable");
+      setLocationState(where);
       setLocationPromptOpen(true);
       setClaimLocating(false);
       return;
@@ -1325,7 +1351,7 @@ export default function CityHome() {
       },
       (error) => {
         setRequestingLocation(false);
-        setLocationState(error.code === error.PERMISSION_DENIED ? "denied" : "unavailable");
+        setLocationState(geoFailure(error));
         setLocationPromptOpen(true);
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 },
@@ -1481,7 +1507,7 @@ export default function CityHome() {
         <div className="map-tint vignette" aria-hidden="true" />
         {showIntro && <div className={`city-intro${mapReady ? " is-leaving" : ""}`} aria-live="polite">
           <Image className="city-loader-art" src="/assets/loading.svg" alt="DEVCITY26" width={104} height={104} priority unoptimized />
-          <strong>DEVCITY 26: Mumbai Edition</strong>
+          <strong>DEVCITY 26</strong>
           <span className="intro-loading">{mapReady ? "CITY READY" : mapError ? "CITY MAP IS SLOW" : "LOADING CITY"}<i /><i /><i /></span>
         </div>}
         {showOnboarding && !hasCompletedOnboarding && (
@@ -1497,7 +1523,7 @@ export default function CityHome() {
           <div className="map-drops-status is-error" role="status">Couldn&apos;t load drops. <button onClick={() => void refreshDrops()}>Retry</button></div>
         )}
         {!dropLoading && !dropError && dropMarkers.length === 0 && devLocationMode === 'off' && (
-          <div className="map-drops-status" role="status">No live drops yet — press and hold, or double-press, the map to create one.</div>
+          <div className="map-drops-status" role="status">No live drops yet. Press and hold, or double-press, the map to create one.</div>
         )}
         {devLocationMode !== 'off' && (
           <div className="map-drops-status" role="status">TEST location is on. These places and events are not real.</div>
@@ -1512,17 +1538,12 @@ export default function CityHome() {
 
         <header className="topbar">
           <div className="location-heading">
-            <span className="eyebrow">DEVCITY 26: Mumbai Edition</span>
             <h1>City map</h1>
             <p>{cityCount > 0 ? `${cityCount} people nearby` : 'Drops, people, and events'}</p>
           </div>
           <div className="top-actions">
-            <button className="round-action" onClick={() => { closeSheets("search"); setSearchSheetOpen(true); }} aria-label="Search the city"><Search size={18} /></button>
             <button className="round-action" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">
               <GameIcon name="spark" size={20} />
-            </button>
-            <button className="notification-bell round-action" onClick={() => { closeSheets("notes"); setNotificationsOpen(true); }} aria-label="Notifications" title="Notifications">
-              <Bell size={18} />
             </button>
             <button className="invite-button" onClick={() => {
               const link = `${window.location.origin}/`;
@@ -1562,8 +1583,8 @@ export default function CityHome() {
             {cityMenuOpen && (
               <>
                 <span className="city-hub-label">City hub</span>
-                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setTrendingOpen(true); }}><Sparkles size={16} /> Trending</button>
-                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setLeaderboardOpen(true); }}><Sparkles size={16} /> Leaderboard</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setTrendingOpen(true); }}><TrendingUp size={16} /> Trending</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setLeaderboardOpen(true); }}><Trophy size={16} /> Leaderboard</button>
                 <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
               </>
             )}
@@ -1629,7 +1650,7 @@ export default function CityHome() {
               onClick={() => { closeSheets("drop"); setClaimError(""); setClaimPin(""); setDropSheetOpen(true); rememberPath(`/drop/${selected.id.replace(/^drop-/, "")}`); }}
               disabled={isClaimed || claiming}
             >
-              {isClaimed ? "Added to your tokens" : <>Explore drop <ArrowUpRight size={16} /></>}
+              {isClaimed ? "Added to your tokens" : "Open drop"}
             </button>
           ) : selected.kind === "person" ? (
             <div className="card-actions">
@@ -1640,7 +1661,7 @@ export default function CityHome() {
                 className="tip-action"
                 onClick={() => setTipTarget({ name: selected.name, initials: selected.initials ?? selected.name[0], color: selected.color })}
               >
-                <Sparkles size={15} /> Tip
+                <Heart size={15} /> Tip
               </button>
               <button className="secondary-action" onClick={() => { closeSheets("social"); setActiveTab('chat'); setSocialView('chat'); }}>
                 <MessageCircle size={15} /> Say hello
@@ -1648,11 +1669,11 @@ export default function CityHome() {
             </div>
           ) : selected.kind === "event" && selected.url ? (
             <a className="secondary-action" href={selected.url} target="_blank" rel="noreferrer">
-              View event <ArrowUpRight size={15} />
+              View event
             </a>
           ) : (
             <a className="secondary-action" href={directionsUrl(selected)} target="_blank" rel="noreferrer">
-              See what&apos;s happening <ArrowUpRight size={15} />
+              Walking directions
             </a>
           )}
           <p className="prototype-note">{selected.kind === "drop" ? claimView.title : connected ? "Ready when you are" : "Join the city to claim and tip"}</p>
@@ -1669,7 +1690,7 @@ export default function CityHome() {
         </nav>
       </section>
 
-      <YouSheet open={youOpen} onClose={closeProfile} onOpenWallet={openWallet} />
+      <YouSheet open={youOpen} onClose={closeProfile} onOpenWallet={openWallet} onOpenNotifications={() => { closeSheets("notes"); setNotificationsOpen(true); }} />
       <WalletSheet
         open={walletOpen}
         onClose={closeWallet}
@@ -1731,11 +1752,11 @@ export default function CityHome() {
       />
       <StoryViewer story={activeStory} onClose={() => setActiveStory(null)} />
       {placeMenu && (
-        <Sheet open onClose={() => setPlaceMenu(null)} eyebrow="DEVCITY 26: Mumbai Edition" title="Add here">
+        <Sheet open onClose={() => setPlaceMenu(null)} title="Add here">
           <div className="place-choices" role="menu">
             <span className="city-hub-label">This spot</span>
             <button className="create-menu-item" role="menuitem" onClick={() => { setSkipDropLocation(true); setCreateDropOpen(true); setPlaceMenu(null); }}><Gift size={16} /> Drop</button>
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("event"); setCreateName(""); setPlaceMenu(null); }}><Sparkles size={16} /> Event</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("event"); setCreateName(""); setPlaceMenu(null); }}><CalendarDays size={16} /> Event</button>
             <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateName(""); setPlaceMenu(null); }}><BuildingSprite id="cafe" size={30} /> Stall</button>
             <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateName(""); setPlaceMenu(null); }}><BuildingSprite id="booth" size={30} /> Other</button>
           </div>
@@ -1745,7 +1766,6 @@ export default function CityHome() {
         <Sheet
           open
           onClose={() => { setCreateKind(null); setCreateName(""); }}
-          eyebrow="DEVCITY 26: Mumbai Edition"
           title={createKind === "stall" ? "Create a stall" : createKind === "event" ? "Create an event" : "Create something else"}
         >
           <div className="drop-sheet-content">
@@ -1775,27 +1795,29 @@ export default function CityHome() {
         <div className="outside-overlay" role="dialog" aria-modal="true" aria-labelledby="outside-title">
           <div className="outside-panel">
             <span className="outside-pin"><MapPin size={20} /></span>
-            <p className="outside-kicker">DEVCITY26 · MUMBAI EDITION</p>
+            <p className="outside-kicker">DEVCITY 26</p>
             <h2 id="outside-title">You’re outside Mumbai</h2>
-            <p>DEVCITY26 is currently live in Mumbai. You can still explore the city and see what&apos;s happening.</p>
-            <PushButton className="outside-cta" onClick={exploreMumbai}>Explore Mumbai <ArrowUpRight size={17} /></PushButton>
+            <p>DEVCITY 26 is currently live in Mumbai. You can still look around the city and see what&apos;s happening.</p>
+            <PushButton className="outside-cta" onClick={exploreMumbai}>Show Mumbai</PushButton>
             <button className="outside-dismiss" onClick={() => setOutsidePromptOpen(false)}>Stay here</button>
           </div>
         </div>
       )}
-      {locationPromptOpen && locationSharing && (locationState === "denied" || locationState === "unavailable") && (
+      {locationPromptOpen && locationSharing && (locationState === "denied" || locationState === "unavailable" || locationState === "timeout") && (
         <div className="outside-overlay location-overlay" role="dialog" aria-modal="true" aria-labelledby="location-title">
           <div className="outside-panel location-panel">
             <span className="outside-pin"><LocateFixed size={20} /></span>
             <p className="outside-kicker">YOUR LOCATION STAYS PRIVATE</p>
-            <h2 id="location-title">{locationState === "denied" ? "Location isn’t on" : "Location isn’t available"}</h2>
+            <h2 id="location-title">{locationState === "denied" ? "Location isn’t on" : locationState === "timeout" ? "Location timed out" : "No position yet"}</h2>
             <p>{locationState === "denied"
               ? "Allow location for this site in your browser settings, then try again. Your exact location stays on your device and is never shown to other people."
-              : "Your browser couldn't find your location. Check that location services are on and try again. Your exact location is never shown to other people."}</p>
+              : locationState === "timeout"
+                ? "Location is already on. This reading timed out before a position arrived. Try again. Your exact location is never shown to other people."
+                : "This device could not find a position. Try again. Your exact location is never shown to other people."}</p>
             <PushButton className="outside-cta" onClick={requestLocation} disabled={requestingLocation}>
-              {requestingLocation ? "Checking permission…" : locationState === "denied" ? "Try location again" : "Enable location"}<LocateFixed size={17} />
+              {requestingLocation ? "Checking location…" : "Try location again"}
             </PushButton>
-            <button className="outside-dismiss" onClick={exploreMumbai}>Explore Mumbai without location</button>
+            <button className="outside-dismiss" onClick={exploreMumbai}>Show the Mumbai map</button>
           </div>
         </div>
       )}
@@ -1815,7 +1837,7 @@ export default function CityHome() {
                     <MapPin size={15} /> Turn location on
                   </button>
                 )}
-                {(claimView.state === "permission-required" || claimView.state === "location-unavailable") && (
+                {(claimView.state === "permission-required" || claimView.state === "location-unavailable" || claimView.state === "location-timeout") && (
                   <button className="secondary-action claim-location-retry" onClick={requestLocation} disabled={requestingLocation}>
                     <LocateFixed size={15} /> {requestingLocation ? "Checking location" : "Try location again"}
                   </button>
@@ -1832,20 +1854,21 @@ export default function CityHome() {
                 )}
                 <PushButton
                   className={`claim-button${claimView.state === "awaiting-signature" ? " is-signing" : ""}`}
-                  disabled={selectedIsTest || (feedUserAddress ? (!claimView.canPressClaim || claimSigning || claimLocating || claimFee.loading || Boolean(claimFee.error)) : claimView.state !== "ready")}
+                  disabled={selectedIsTest || (feedUserAddress ? (!claimView.canPressClaim || claimSigning || claimLocating || Boolean(claimFee.error)) : claimView.state !== "ready")}
                   onClick={() => { if (selectedIsTest) return; if (!feedUserAddress) { openWallet(); return; } void handleClaim(); }}
                 >
                   {claimView.state === "checking-location" && "Checking location"}
                   {claimView.state === "location-off" && "Location is off"}
                   {claimView.state === "permission-required" && "Location permission required"}
                   {claimView.state === "location-unavailable" && "Location unavailable"}
+                  {claimView.state === "location-timeout" && "Location timed out"}
                   {claimView.state === "too-far" && "You're too far away"}
                   {claimView.state === "awaiting-signature" && <><span className="spinner" /> Waiting for wallet signature</>}
-                  {claimView.state === "failed" && <>Claim <ArrowUpRight size={16} /></>}
-                  {claimView.state === "ready" && (selectedIsTest ? "TEST only" : feedUserAddress ? <>Claim <ArrowUpRight size={16} /></> : <>Open wallet</>)}
+                  {claimView.state === "failed" && "Claim"}
+                  {claimView.state === "ready" && (selectedIsTest ? "TEST only" : feedUserAddress ? "Claim" : "Open wallet")}
                 </PushButton>
               </>
-            ) : <PushButton className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}><Sparkles size={15} /> Claim successful · Back to city</PushButton>}
+            ) : <PushButton className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}><Check size={15} /> Claimed. Back to the city</PushButton>}
             <p className="prototype-note">Community token · no market value implied</p>
           </div>
         </Sheet>

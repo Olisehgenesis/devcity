@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { CalendarDays, Check, ImagePlus, KeyRound, Shuffle, Wallet, X } from 'lucide-react';
+import { Bell, CalendarDays, Check, ImagePlus, KeyRound, Shuffle, Wallet, X } from 'lucide-react';
 import { Sheet } from './Sheet';
 import type { SelfLegacyQrConfig } from './SelfLegacyQr';
 import { clearSelfCheck, rememberSelfCheck, selfCheckPending } from '../lib/self-check';
@@ -20,6 +20,7 @@ interface YouSheetProps {
   open: boolean;
   onClose: () => void;
   onOpenWallet: () => void;
+  onOpenNotifications: () => void;
 }
 
 type ProfileUser = { id: string; name?: string | null; email?: string | null; username?: string | null };
@@ -119,7 +120,7 @@ function AvatarControls({
   );
 }
 
-export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
+export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: YouSheetProps) {
   const activity = useCityStore((s) => s.activity);
   const savedEvents = useCityStore((s) => s.savedEvents);
   const markEventAttended = useCityStore((s) => s.markEventAttended);
@@ -144,7 +145,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
   const [startingVerify, setStartingVerify] = useState(false);
   const [selfQr, setSelfQr] = useState<SelfLegacyQrConfig | null>(null);
   const accountHandle = sessionUser ? profileHandle(sessionUser) : null;
-  const profileName = accountHandle ? `${accountHandle}.devcity.fun` : sessionUser?.name || 'City explorer';
+  const profileName = accountHandle ? `${accountHandle}.devcity.fun` : sessionUser?.name || 'Your profile';
   const profileInitials = (accountHandle || sessionUser?.name || sessionUser?.email || 'You').slice(0, 2).toUpperCase();
 
   useEffect(() => {
@@ -295,7 +296,7 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
   }
 
   return (
-    <Sheet open={open} onClose={onClose} eyebrow="DEVCITY 26: Mumbai Edition" title="Profile">
+    <Sheet open={open} onClose={onClose} title="Profile">
       {sessionLoading ? (
         <p className="you-note">Loading your profile…</p>
       ) : !sessionUser ? (
@@ -426,6 +427,10 @@ export function YouSheet({ open, onClose, onOpenWallet }: YouSheetProps) {
             </div>
           </details>
 
+          <button className="profile-open-wallet" onClick={onOpenNotifications}>
+            <span className="profile-open-wallet-icon"><Bell size={18} /></span>
+            <span><strong>Notifications</strong><small>Replies, follows, and drops</small></span>
+          </button>
           <button className="profile-open-wallet" onClick={onOpenWallet}>
             <span className="profile-open-wallet-icon"><Wallet size={18} /></span>
             <span><strong>Open wallet</strong><small>Balances, address and security</small></span>

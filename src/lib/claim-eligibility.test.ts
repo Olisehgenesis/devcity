@@ -60,6 +60,16 @@ describe("claim eligibility", () => {
     assert.equal(result.state, "location-unavailable");
     assert.equal(result.title, "Location unavailable");
     assert.equal(result.canPressClaim, false);
+    assert.match(result.detail, /could not find a position/);
+    assert.doesNotMatch(result.detail, /Turn on location services/);
+  });
+
+  it("says a timeout is a timeout when location sharing is already on", () => {
+    const result = view({ locationStatus: "timeout", userLat: null, userLng: null });
+    assert.equal(result.state, "location-timeout");
+    assert.equal(result.title, "Location timed out");
+    assert.equal(result.canPressClaim, false);
+    assert.match(result.detail, /Location is on/);
   });
 
   it("shows the real distance and disables claim when the user is far away", () => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Heart, KeyRound, MapPin, MessageCircle, Paperclip, Search, Send, Sparkles } from 'lucide-react';
+import { ArrowLeft, Heart, KeyRound, MapPin, MessageCircle, Paperclip, Radio, Search, Send } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
@@ -422,7 +422,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
           {feedLoading && broadcasts.length === 0 && <p className="social-empty" role="status">Loading the city feed…</p>}
           {broadcasts.map((broadcast) => {
             const isOwn = !!userAddress && broadcast.userId === `user_${userAddress.toLowerCase()}`;
-            const author = isOwn ? 'You' : broadcast.username && !broadcast.username.startsWith('user_') ? broadcast.username : 'City explorer';
+            const author = isOwn ? 'You' : broadcast.username && !broadcast.username.startsWith('user_') ? broadcast.username : 'Someone';
             const authorAvatar = broadcast.avatarUrl || (isOwn ? avatarSrc : undefined);
             return (
             <article className="broadcast-card" key={broadcast.id}>
@@ -433,7 +433,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                 <button onClick={() => setCommentingId(commentingId === broadcast.id ? null : broadcast.id)}><MessageCircle size={15} /> {broadcast.comments.length} comments</button>
                 <span className="broadcast-radius">CITY FEED</span>
               </div>
-              {broadcast.comments.map((comment) => <p className="broadcast-comment" key={comment.id}><strong>{comment.username && !comment.username.startsWith('user_') ? comment.username : comment.userId === `user_${userAddress?.toLowerCase()}` ? 'You' : 'City explorer'}</strong> {comment.text}</p>)}
+              {broadcast.comments.map((comment) => <p className="broadcast-comment" key={comment.id}><strong>{comment.username && !comment.username.startsWith('user_') ? comment.username : comment.userId === `user_${userAddress?.toLowerCase()}` ? 'You' : 'Someone'}</strong> {comment.text}</p>)}
               {commentingId === broadcast.id && <form className="broadcast-comment-form" onSubmit={(event) => sendBroadcastComment(event, broadcast.id)}>
                 <input value={commentDrafts[broadcast.id] ?? ''} onChange={(event) => setCommentDrafts((drafts) => ({ ...drafts, [broadcast.id]: event.target.value.slice(0, 240) }))} placeholder="Add a comment" aria-label="Add a comment" />
                 <button type="submit" disabled={!commentDrafts[broadcast.id]?.trim() || pendingBroadcastId === broadcast.id} aria-label="Post comment"><Send size={14} /></button>
@@ -469,7 +469,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                   }}
                   aria-label={`Tip ${person.username}`}
                   title={`Tip ${person.username}`}
-                ><Sparkles size={17} /></button>
+                ><Heart size={17} /></button>
               </article>
             );
           })}
@@ -595,7 +595,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
 }
 
 function RadioIcon() {
-  return <Sparkles size={14} />;
+  return <Radio size={14} />;
 }
 
 function shortInbox(inboxId: string) {

@@ -195,7 +195,7 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
           </div>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
           <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed. Gas is paid in CELO when you have it, otherwise USDT, then USDC, then another fee currency you hold.</p>
-          <button className="you-connect-primary" disabled={sending || !sendTo || !sendAmount || networkFee.loading || Boolean(networkFee.error)} onClick={() => void handleSend()}>
+          <button className="you-connect-primary" disabled={sending || !sendTo || !sendAmount || Boolean(networkFee.error)} onClick={() => void handleSend()}>
             {sending ? 'Sending…' : `Send ${sendTokenLabel}`}
           </button>
         </>

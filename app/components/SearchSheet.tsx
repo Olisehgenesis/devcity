@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageCircle, Search, X, Users, Radio, Sparkles, Hash } from 'lucide-react';
+import { Calendar, Hash, MessageCircle, Radio, Search, Users, X } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { useSearch, type SearchResult } from '../hooks/useSearch';
 
@@ -17,7 +17,7 @@ const TABS: { id: SearchTab; label: string; icon: any }[] = [
   { id: 'all', label: 'All', icon: Search },
   { id: 'users', label: 'People', icon: Users },
   { id: 'broadcasts', label: 'Posts', icon: Radio },
-  { id: 'events', label: 'Events', icon: Sparkles },
+  { id: 'events', label: 'Events', icon: Calendar },
   { id: 'hashtags', label: 'Tags', icon: Hash },
 ];
 

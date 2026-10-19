@@ -962,7 +962,7 @@ export async function createTip(input: {
   const from = await getOrCreateUser(input.fromAddress);
   const to = await getOrCreateUser(input.toAddress);
   const token = await prisma.token.findFirst({ where: { symbol: { equals: input.tokenSymbol, mode: 'insensitive' } } });
-  if (!token) throw new ApiError(404, `No token "${input.tokenSymbol}" — pick a token in the app.`);
+  if (!token) throw new ApiError(404, `No token "${input.tokenSymbol}". Pick a token in the app.`);
   if (from.id === to.id) throw new ApiError(400, 'Cannot tip yourself');
   const tip = await prisma.tip.create({
     data: {

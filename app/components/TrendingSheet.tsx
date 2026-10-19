@@ -4,7 +4,6 @@ import { useTrending, type TrendingData } from '../hooks/useTrending';
 import { Sheet } from './Sheet';
 import { TrendingUp, Hash, Calendar, Heart, MessageCircle, Flame } from 'lucide-react';
 import { timeAgo } from '../lib/city-store';
-import { DexMascot } from './game/DexMascot';
 
 interface TrendingSheetProps {
   open: boolean;
@@ -15,7 +14,7 @@ export function TrendingSheet({ open, onClose }: TrendingSheetProps) {
   const { data, loading, error } = useTrending();
 
   return (
-    <Sheet open={open} onClose={onClose} eyebrow="Mumbai · what&apos;s hot" title="Trending">
+    <Sheet open={open} onClose={onClose} title="Trending">
       <div className="gsheet">
         {loading ? (
           <div className="gsheet-loading">Gathering what&apos;s hot in the city…</div>
@@ -71,7 +70,6 @@ export function TrendingSheet({ open, onClose }: TrendingSheetProps) {
           </>
         ) : (
           <div className="gsheet-empty">
-            <DexMascot size={84} />
             <strong>Nothing trending yet</strong>
             <p>When the city gets loud, it shows up here first.</p>
           </div>

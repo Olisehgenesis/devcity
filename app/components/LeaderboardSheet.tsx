@@ -5,7 +5,6 @@ import { useLeaderboards, type LeaderboardEntry } from '../hooks/useLeaderboards
 import { Sheet } from './Sheet';
 import { Trophy, Gift, Heart, UsersRound, Radio } from 'lucide-react';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
-import { DexMascot } from './game/DexMascot';
 import { AvatarBubble } from './game/AvatarBubble';
 import { useGameStore } from '../lib/game-store';
 
@@ -42,7 +41,6 @@ function LeaderboardEntry({ entry, index }: { entry: LeaderboardEntry; index: nu
       />
       <div className="gsheet-copy">
         <strong>@{entry.username}</strong>
-        <span>City explorer</span>
       </div>
       <span className="gsheet-stat">{entry.count}</span>
     </div>
@@ -59,7 +57,7 @@ export function LeaderboardSheet({ open, onClose }: LeaderboardSheetProps) {
   ] || [];
 
   return (
-    <Sheet open={open} onClose={onClose} eyebrow="Mumbai · the city ranks" title="Leaderboard">
+    <Sheet open={open} onClose={onClose} title="Leaderboard">
       <div className="gsheet">
         <div className="gsheet-section">
           <div className="search-tabs">
@@ -81,7 +79,6 @@ export function LeaderboardSheet({ open, onClose }: LeaderboardSheetProps) {
           <div className="gsheet-error">{error}</div>
         ) : entries.length === 0 ? (
           <div className="gsheet-empty">
-            <DexMascot size={84} />
             <strong>No rankings yet</strong>
             <p>Be the first to top this leaderboard.</p>
           </div>
@@ -98,7 +95,7 @@ export function LeaderboardSheet({ open, onClose }: LeaderboardSheetProps) {
           </div>
           <p style={{ color: 'var(--muted)', fontSize: 12, lineHeight: 1.5 }}>
             Leaderboards are a friendly, non-financial game. Turn them on to let other
-            explorers see your level and badges.
+            people see your level and badges.
           </p>
           <button
             className="gsheet-action"

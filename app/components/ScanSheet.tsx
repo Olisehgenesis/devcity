@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ExternalLink, QrCode, Sparkles } from 'lucide-react';
+import { ExternalLink, Heart, QrCode } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { resolveRecipient } from '../lib/resolve-user';
 import type { TipTarget } from './TipSheet';
@@ -138,7 +138,7 @@ export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) 
             <p>{scannedAddress ?? scannedValue}</p>
             {scannedDropId && (
               <button className="claim-button" onClick={() => onOpenDrop?.(scannedDropId)}>
-                Open claim <Sparkles size={16} />
+                Open this drop
               </button>
             )}
             {scannedAddress && (
@@ -151,7 +151,7 @@ export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) 
                   address: scannedAddress,
                 })}
               >
-                <Sparkles size={16} /> Tip this wallet
+                <Heart size={16} /> Tip this wallet
               </button>
             )}
             {link && <a className="scan-open-link" href={link} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Open link</a>}

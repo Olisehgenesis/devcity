@@ -1,12 +1,13 @@
 import { CLAIM_RADIUS_M, distanceMeters, formatDistance } from "./geo";
 
-export type ClaimLocationStatus = "checking" | "ready" | "denied" | "unavailable" | "off";
+export type ClaimLocationStatus = "checking" | "ready" | "denied" | "unavailable" | "timeout" | "off";
 
 export type ClaimFlowState =
   | "checking-location"
   | "location-off"
   | "permission-required"
   | "location-unavailable"
+  | "location-timeout"
   | "too-far"
   | "ready"
   | "awaiting-signature"
@@ -95,13 +96,22 @@ export function resolveClaimView(input: {
       detail: "Location permission is required. Allow location for this site in your browser settings, then try again. Claims stay off until location is on.",
     };
   }
+  if (input.locationStatus === "timeout") {
+    return {
+      state: "location-timeout",
+      distanceM: null,
+      canPressClaim: false,
+      title: "Location timed out",
+      detail: "Location is on, but this reading timed out. Try again. Claims stay off until a position is found.",
+    };
+  }
   if (input.locationStatus === "unavailable") {
     return {
       state: "location-unavailable",
       distanceM: null,
       canPressClaim: false,
       title: "Location unavailable",
-      detail: "Location is unavailable. Turn on location services for this browser and try again. Claims stay off until a position is found.",
+      detail: "This device could not find a position. Try again. Claims stay off until a position is found.",
     };
   }
 
