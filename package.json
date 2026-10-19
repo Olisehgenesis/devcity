@@ -12,6 +12,8 @@
     "db:deploy": "dotenvx run -- prisma migrate deploy",
     "db:studio": "dotenvx run -- prisma studio",
     "db:seed": "dotenvx run -- node scripts/seed-events.mjs",
+    "events:sync": "node scripts/sync-mumbaionchain.mjs",
+    "events:seed": "dotenvx run -- node scripts/sync-mumbaionchain.mjs --seed",
     "test": "node --experimental-strip-types --import ./scripts/register-ts.mjs --test src/lib/*.test.ts",
     "dev:accounts": "dotenvx run -- node --experimental-strip-types --import ./scripts/register-ts.mjs scripts/dev-test-accounts.ts",
     "dev:faucet": "dotenvx run -- node --experimental-strip-types --import ./scripts/register-ts.mjs scripts/fund-sepolia-wallet.ts"
