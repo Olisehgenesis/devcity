@@ -27,10 +27,15 @@ function publish() {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('devcity-wallet-unlocked'));
 }
 
-export function getUnlockedPrivateKey(address: string): Hex | null {
+export function getUnlockedWallet(): { address: string; privateKey: Hex } | null {
   if (!unlockedWallet) unlockedWallet = readSession();
-  return unlockedWallet?.address.toLowerCase() === address.toLowerCase()
-    ? unlockedWallet.privateKey
+  return unlockedWallet;
+}
+
+export function getUnlockedPrivateKey(address: string): Hex | null {
+  const unlocked = getUnlockedWallet();
+  return unlocked?.address.toLowerCase() === address.toLowerCase()
+    ? unlocked.privateKey
     : null;
 }
 

@@ -608,6 +608,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
 }
 
 .search-field {
@@ -676,6 +677,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   place-items: center;
   width: 44px;
   height: 44px;
+  margin-left: auto;
   flex: 0 0 auto;
   border: 1px solid var(--line);
   border-radius: 50%;
@@ -692,7 +694,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 
 .map-tools {
   position: absolute;
-  top: 128px;
+  top: 72px;
   left: 20px;
   right: 20px;
   display: flex;
@@ -716,12 +718,12 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 
 .filter-chip {
   flex: 0 0 auto;
-  height: 44px;
-  padding: 0 15px;
+  height: 28px;
+  padding: 0 8px;
   border-radius: 999px;
   background: var(--paper);
   border: 1px solid var(--line);
-  font-size: 13.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   box-shadow: 0 4px 12px rgba(28, 41, 37, .08);
@@ -1206,7 +1208,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   .search-field input { width: 100%; }
 
   .map-tools {
-    top: 176px;
+    top: 64px;
     left: 14px;
     right: 14px;
   }
@@ -3089,6 +3091,47 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .sheet-close { width: 44px; height: 44px; background: var(--surface); }
 .sheet-close:hover { background: color-mix(in srgb, var(--lime) 44%, var(--surface)); transform: none; }
 .sheet-body { padding: 18px 22px 26px; }
+
+.sheet-backdrop.is-page {
+  align-items: stretch;
+  justify-content: stretch;
+  background: var(--paper);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.sheet.sheet-page {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.sheet-page .sheet-head {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+}
+.sheet-page .sheet-title { font-size: 22px; }
+.sheet-page .sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+.sheet-back {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+}
 
 .profile-auth-gate { text-align: left; }
 .profile-gate-art {

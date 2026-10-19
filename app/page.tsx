@@ -290,7 +290,6 @@ export default function CityHome() {
   const [testMarkers, setTestMarkers] = useState<CityMarker[]>([]);
   const [eventStatus, setEventStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [offline, setOffline] = useState(false);
-  const [cityCount, setCityCount] = useState(0);
   const locationStateRef = useRef(locationState);
 
   useEffect(() => {
@@ -650,7 +649,6 @@ export default function CityHome() {
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { users?: Array<{ userId: string; username: string | null; lat: number; lng: number; distance: number }> } | null) => {
         if (cancelled || !data?.users) return;
-        setCityCount(data.users.length);
         setPersonMarkers(data.users.filter((user) => Number.isFinite(user.lat) && Number.isFinite(user.lng)).map((user) => ({
           id: `person-${user.userId}`,
           kind: "person" as const,
@@ -1358,14 +1356,6 @@ export default function CityHome() {
     );
   }
 
-  function centerOnMe() {
-    if (myPosition) {
-      mapRef.current?.flyTo({ center: myPosition, zoom: 16, duration: 850 });
-      return;
-    }
-    requestLocation();
-  }
-
   const openCreateDrop = useCallback((location?: { lat: number; lng: number } | null) => {
     setCreateMenuOpen(false);
     setCityMenuOpen(false);
@@ -1537,18 +1527,10 @@ export default function CityHome() {
         <DevLocationGate onChange={applyDevLocation} />
 
         <header className="topbar">
-          <div className="location-heading">
-            <h1>City map</h1>
-            <p>{cityCount > 0 ? `${cityCount} people nearby` : 'Drops, people, and events'}</p>
-          </div>
           <div className="top-actions">
             <button className="round-action" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">
               <GameIcon name="spark" size={20} />
             </button>
-            <button className="invite-button" onClick={() => {
-              const link = `${window.location.origin}/`;
-              void navigator.clipboard?.writeText(link).then(() => setNotice("Invite link copied.")).catch(() => setNotice(link));
-            }}><Plus size={15} /> Invite</button>
             <button
               className={`round-action${locationSharing ? '' : ' is-location-off'}`}
               onClick={() => void toggleLocationSharing()}
@@ -1556,7 +1538,6 @@ export default function CityHome() {
               aria-label={locationSharing ? 'Turn location off' : 'Turn location on'}
               title={locationSharing ? 'Location is on' : 'Location is off'}
             >{locationSharing ? <MapPin size={18} /> : <MapPinOff size={18} />}</button>
-            <button className="round-action" onClick={centerOnMe} disabled={requestingLocation} aria-label="Go to my location" title="Go to my location"><LocateFixed size={18} /></button>
             <button className={`top-profile-button${youOpen ? " is-active" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
               <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" />
             </button>
@@ -1682,11 +1663,11 @@ export default function CityHome() {
         {notice && <div className="notice-toast" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
 
         <nav className="mobile-nav" aria-label="Main navigation">
-          <button className={activeTab === "map" ? "is-active" : ""} onClick={() => chooseTab("map")} aria-label="Map"><span className="nav-glyph"><NavIcon name="map" /></span><span>Map</span></button>
-          <button className={activeTab === "feed" ? "is-active" : ""} onClick={() => chooseTab("feed")} aria-label="Feed"><span className="nav-glyph"><NavIcon name="feed" /></span><span>Feed</span></button>
-          <button className={scanOpen ? "is-active" : ""} onClick={() => { closeSheets("scan"); setScanOpen(true); }} aria-label="Scan a QR code"><span className="nav-glyph"><NavIcon name="scan" /></span><span>Scan</span></button>
-          <button className={activeTab === "chat" ? "is-active" : ""} onClick={() => chooseTab("chat")} aria-label="Inbox"><span className="nav-glyph"><NavIcon name="inbox" /></span><span>Inbox</span></button>
-          <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Wallet"><span className="nav-glyph"><NavIcon name="wallet" /></span><span>Wallet</span></button>
+          <button className={activeTab === "map" ? "is-active" : ""} onClick={() => chooseTab("map")} aria-label="Map"><span className="nav-glyph"><NavIcon name="map" /></span></button>
+          <button className={activeTab === "feed" ? "is-active" : ""} onClick={() => chooseTab("feed")} aria-label="Feed"><span className="nav-glyph"><NavIcon name="feed" /></span></button>
+          <button className={scanOpen ? "is-active" : ""} onClick={() => { closeSheets("scan"); setScanOpen(true); }} aria-label="Scan a QR code"><span className="nav-glyph"><NavIcon name="scan" /></span></button>
+          <button className={activeTab === "chat" ? "is-active" : ""} onClick={() => chooseTab("chat")} aria-label="Inbox"><span className="nav-glyph"><NavIcon name="inbox" /></span></button>
+          <button className={activeTab === "wallet" ? "is-active" : ""} onClick={() => chooseTab("wallet")} aria-label="Wallet"><span className="nav-glyph"><NavIcon name="wallet" /></span></button>
         </nav>
       </section>
 

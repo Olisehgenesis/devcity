@@ -296,7 +296,7 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title="Profile">
+    <Sheet open={open} onClose={onClose} title="Profile" size="page">
       {sessionLoading ? (
         <p className="you-note">Loading your profile…</p>
       ) : !sessionUser ? (

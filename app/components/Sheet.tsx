@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { ArrowLeft } from 'lucide-react';
 
 interface SheetProps {
   open: boolean;
   onClose: () => void;
   title: string;
   eyebrow?: string;
-  /** Vault keeps a stable 80% stage. Other sheets size to their content. */
-  size?: 'default' | 'vault';
+  /** Page fills the screen and goes back from the header. Vault is a tall sheet. */
+  size?: 'default' | 'vault' | 'page';
   children: ReactNode;
 }
 
@@ -61,28 +62,37 @@ export function Sheet({ open, onClose, title, eyebrow, size = 'default', childre
 
   if (!open) return null;
 
+  const page = size === 'page';
+
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className={page ? 'sheet-backdrop is-page' : 'sheet-backdrop'} onClick={page ? undefined : onClose}>
       <div
         ref={dialogRef}
-        className={size === 'vault' ? 'sheet sheet-vault' : 'sheet'}
+        className={page ? 'sheet sheet-page' : size === 'vault' ? 'sheet sheet-vault' : 'sheet'}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
         tabIndex={-1}
       >
-        <div className="sheet-handle" />
+        {page ? null : <div className="sheet-handle" />}
         <div className="sheet-head">
+          {page ? (
+            <button className="sheet-back" onClick={onClose} aria-label="Back">
+              <ArrowLeft size={20} />
+            </button>
+          ) : null}
           <div>
             {eyebrow && <p className="sheet-eyebrow">{eyebrow}</p>}
             <h2 className="sheet-title" id={titleId}>{title}</h2>
           </div>
-          <button className="sheet-close" onClick={onClose} aria-label="Close">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
+          {page ? null : (
+            <button className="sheet-close" onClick={onClose} aria-label="Close">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
         <div className="sheet-body">{children}</div>
       </div>

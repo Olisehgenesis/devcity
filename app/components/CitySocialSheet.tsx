@@ -10,7 +10,7 @@ import { useXmtpChat, type XmtpUiMessage } from '../hooks/useXmtpChat';
 import type { Attachment } from '@xmtp/browser-sdk';
 import type { Hex } from 'viem';
 import type { LocalWallet } from '@/lib/keystore';
-import { getUnlockedPrivateKey, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
+import { getUnlockedPrivateKey, getUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
 import { useUnlockedKey } from '../hooks/useUnlockedKey';
 
 export type SocialView = 'feed' | 'chat' | 'people';
@@ -105,8 +105,16 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [inboxWalletRetry, setInboxWalletRetry] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const sessionKey = useUnlockedKey(userAddress);
+  const [openWalletAddress, setOpenWalletAddress] = useState<string | null>(null);
   const xmtp = useXmtpChat(open && view === 'chat', onNotify);
   const connectWithLocalWallet = xmtp.connectWithLocalWallet;
+
+  useEffect(() => {
+    const sync = () => setOpenWalletAddress(getUnlockedWallet()?.address ?? null);
+    sync();
+    window.addEventListener('devcity-wallet-unlocked', sync);
+    return () => window.removeEventListener('devcity-wallet-unlocked', sync);
+  }, []);
 
   useEffect(() => {
     if (startChatAddress) {
@@ -116,7 +124,15 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   }, [startChatAddress, xmtp]);
 
   useEffect(() => {
-    if (!open || view !== 'chat' || profileStatus !== 'ready' || !userAddress) {
+    if (!open || view !== 'chat') {
+      setInboxPin('');
+      return;
+    }
+    const unlocked = getUnlockedWallet();
+    if (unlocked && xmtp.status === 'idle') {
+      void connectWithLocalWallet(unlocked.privateKey, unlocked.address);
+    }
+    if (profileStatus !== 'ready' || !userAddress) {
       setInboxPin('');
       return;
     }
@@ -133,10 +149,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
         if (!wallet) throw new Error('This device does not have the wallet for your passkey account.');
         setInboxWallet(wallet);
         const privateKey = getUnlockedPrivateKey(wallet.address);
-        if (privateKey) {
-          setInboxWalletUnlocked(true);
-          void connectWithLocalWallet(privateKey, wallet.address);
-        }
+        if (privateKey) setInboxWalletUnlocked(true);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -146,7 +159,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
         if (!cancelled) setInboxWalletLoading(false);
       });
     return () => { cancelled = true; };
-  }, [open, profileStatus, userAddress, view, inboxWalletRetry, connectWithLocalWallet, sessionKey]);
+  }, [open, profileStatus, userAddress, view, inboxWalletRetry, connectWithLocalWallet, sessionKey, xmtp.status]);
 
   useEffect(() => {
     if (!open || view !== 'feed') return;
@@ -249,9 +262,10 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const thread = xmtp.threads.find((item) => item.id === xmtp.activeThreadId);
   const title = view === 'feed' ? 'Around the city' : view === 'people' ? 'People nearby' : thread ? shortInbox(thread.peerInboxId) : 'Your chats';
   const signedIn = profileStatus === 'ready' || profileStatus === 'wallet-needed';
+  const walletAlreadyOpen = Boolean(sessionKey || openWalletAddress);
   const shouldConnectPasskeyInbox = profileStatus === 'ready'
     && Boolean(userAddress)
-    && !sessionKey
+    && !walletAlreadyOpen
     && xmtp.status !== 'connecting'
     && (xmtp.status === 'idle' || xmtp.status === 'error' || xmtp.connectedAddress?.toLowerCase() !== userAddress?.toLowerCase());
 
@@ -401,7 +415,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   }
 
   return (
-    <Sheet open={open && view !== null} onClose={onClose} eyebrow="DEVCITY" title={title}>
+    <Sheet open={open && view !== null} onClose={onClose} title={title} size="page">
       {view === 'feed' && (
         <div className="social-feed">
           <div className="social-live-line"><span className="live-dot" /> City feed</div>
@@ -509,9 +523,9 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               )}
               {(chatActionError || xmtp.error) && <p className="xmtp-error" role="alert">{chatActionError || xmtp.error}</p>}
             </div>
-          ) : profileStatus === 'checking' && !xmtp.isWalletConnected ? (
+          ) : profileStatus === 'checking' && !walletAlreadyOpen ? (
             <div className="xmtp-state"><span className="spinner" /><strong>Checking your passkey account…</strong><p>Your existing DEVCITY wallet will be used if it is available on this device.</p></div>
-          ) : !xmtp.isWalletConnected && profileStatus !== 'ready' ? (
+          ) : !walletAlreadyOpen && profileStatus !== 'ready' ? (
             <div className="xmtp-state">
               <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
               <strong>{signedIn ? 'Finish setting up your wallet' : 'Sign in once'}</strong>
@@ -521,9 +535,13 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
           ) : xmtp.status === 'idle' || xmtp.status === 'error' ? (
             <div className="xmtp-state">
               <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
-              <strong>Open your encrypted inbox</strong>
-              <p>XMTP uses your connected wallet to create a private messaging identity. Your wallet signs a one-time connection request.</p>
-              <button className="outside-cta" onClick={() => void xmtp.connect()}>{xmtp.status === 'error' ? 'Retry XMTP' : 'Enable XMTP chat'}</button>
+              <strong>{walletAlreadyOpen ? 'Opening your messages' : 'Open your encrypted inbox'}</strong>
+              <p>{walletAlreadyOpen ? 'This wallet is already open. Messages use that same wallet.' : 'Messages use the wallet already open on this device.'}</p>
+              <button className="outside-cta" onClick={() => {
+                const unlocked = getUnlockedWallet();
+                if (unlocked) void connectWithLocalWallet(unlocked.privateKey, unlocked.address);
+                else void xmtp.connect();
+              }}>{xmtp.status === 'error' ? 'Try messages again' : 'Open messages'}</button>
               {xmtp.error && <p className="xmtp-error" role="alert">{xmtp.error}</p>}
             </div>
           ) : xmtp.status === 'connecting' ? (
