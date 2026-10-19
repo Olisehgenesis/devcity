@@ -19,10 +19,10 @@ interface ActivityItem {
 }
 
 const LABELS: Record<string, string> = {
-  tip_sent: 'Sent',
+  tip_sent: 'Tip',
   tip_received: 'Received',
-  claim: 'Claimed',
-  token_created: 'Token launched',
+  claim: 'Claim',
+  token_created: 'Profile token',
 };
 
 function formatWhen(iso: string) {
@@ -97,8 +97,7 @@ export function WalletActivity({
       })
       .catch((loadError: unknown) => {
         if (loadError instanceof DOMException && loadError.name === 'AbortError') return;
-        const message = loadError instanceof Error ? loadError.message : '';
-        setError(message && message !== 'Internal server error' ? message : 'Activity could not be loaded.');
+        setError('Activity could not be loaded.');
         setStatus((current) => current === 'ready' ? 'ready' : 'error');
       });
     return () => controller.abort();
@@ -177,17 +176,18 @@ export function WalletActivity({
       )}
       {status === 'loading' && (
         <ul className="wallet-activity-list" aria-hidden="true">
-          <li><span className="balance-skeleton balance-skeleton-lg" /></li>
-          <li><span className="balance-skeleton balance-skeleton-lg" /></li>
+          <li className="wact-skel" />
+          <li className="wact-skel" />
+          <li className="wact-skel" />
         </ul>
       )}
       {error && (
-        <p className="you-error" role="alert">
+        <p className="wact-empty" role="alert">
           {error}{' '}
           <button type="button" className="wallet-retry" onClick={() => setReloadKey((value) => value + 1)}>Retry</button>
         </p>
       )}
-      {status === 'empty' && <p className="wact-empty">No recorded activity yet. Sends, tips, and claims will show up here.</p>}
+      {status === 'empty' && <p className="wact-empty">No activity yet.</p>}
       {status === 'ready' && visible.length === 0 && (
         <p className="wact-empty">{symbol ? `No recorded activity for ${symbol}.` : 'Nothing in this filter.'}</p>
       )}
@@ -198,23 +198,18 @@ export function WalletActivity({
             const state = statusLabel(item.status, item.txHash);
             const inbound = item.type === 'tip_received' || item.type === 'claim';
             const Icon = item.type === 'token_created' ? Sparkles : inbound ? ArrowDownLeft : ArrowUpRight;
-            const detail = [
-              item.counterparty,
-              item.dropName,
-              item.tokenName && item.type === 'token_created' ? item.tokenName : '',
-              !compact ? chainLabel : '',
-              formatWhen(item.createdAt),
-            ].filter(Boolean).join(' · ');
+            const who = item.counterparty || item.dropName || (item.type === 'token_created' ? item.tokenName : '') || '';
             const body = (
               <>
                 <span className={`wact-icon${inbound ? ' is-in' : ''}`} aria-hidden="true"><Icon size={16} /></span>
                 <span className="wact-copy">
                   <strong>{label}{item.tokenSymbol ? ` ${item.tokenSymbol}` : ''}</strong>
-                  <small>{detail}</small>
+                  <small>{who || chainLabel || 'This wallet'}</small>
                 </span>
                 <span className="wact-side">
-                  <strong>{item.amount ? `${inbound ? '+' : '−'}${item.amount}` : ''}</strong>
-                  <small className={`wact-status ${statusTone(state)}`}>{state}</small>
+                  <strong>{item.amount ? `${inbound ? '+' : item.type === 'token_created' ? '' : '−'}${item.amount}` : ''}</strong>
+                  <small className={`wact-chip ${statusTone(state)}`}>{state}</small>
+                  <small className="wact-time">{formatWhen(item.createdAt)}</small>
                 </span>
               </>
             );

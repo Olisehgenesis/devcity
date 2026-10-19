@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpRight, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpRight, ChevronRight, Gift, MoreHorizontal, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface MoreItem {
@@ -17,13 +17,14 @@ interface WalletDashboardProps {
   nativeLoading: boolean;
   nativeError: boolean;
   onRetryNative?: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   onSend: () => void;
   onReceive: () => void;
   onSwap: () => void;
   moreItems: MoreItem[];
   onAddToken?: () => void;
-  onLaunchToken?: () => void;
-  launchLabel?: string;
+  onInitialise?: () => void;
   summary: ReactNode;
   table: ReactNode;
   activity: ReactNode;
@@ -36,13 +37,14 @@ export function WalletDashboard({
   nativeLoading,
   nativeError,
   onRetryNative,
+  onRefresh,
+  refreshing,
   onSend,
   onReceive,
   onSwap,
   moreItems,
   onAddToken,
-  onLaunchToken,
-  launchLabel = 'Launch token',
+  onInitialise,
   summary,
   table,
   activity,
@@ -72,7 +74,19 @@ export function WalletDashboard({
       <div className="wdash-top">
         <section className="wdash-card wdash-balance" aria-labelledby="wallet-balance-label">
           <div className="wdash-balance-figure">
-            <p id="wallet-balance-label">Total balance</p>
+            <div className="wdash-balance-head">
+              <p id="wallet-balance-label">Total balance</p>
+              {onRefresh && (
+                <button
+                  type="button"
+                  className={`wdash-refresh${refreshing ? ' is-spinning' : ''}`}
+                  onClick={onRefresh}
+                  aria-label="Refresh balance"
+                >
+                  <RefreshCw size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
             <strong>
               {balanceLoading ? <span className="balance-skeleton balance-skeleton-lg" /> : (usdBalance ?? 'Price unavailable')}
             </strong>
@@ -84,6 +98,11 @@ export function WalletDashboard({
                 </>
               ) : nativeBalance ? `${nativeBalance} CELO` : '—'}
             </em>
+            {onInitialise && (
+              <button type="button" className="wdash-init" onClick={onInitialise} aria-label="Initialise profile token">
+                <Gift size={14} aria-hidden="true" /> Initialise
+              </button>
+            )}
           </div>
           <div className="wdash-actions" aria-label="Wallet actions">
             <Button type="button" variant="outline" size="sm" onClick={onSend}>
@@ -144,10 +163,9 @@ export function WalletDashboard({
           <header>
             <h2 className="wdash-tokens-desktop">Tokens</h2>
             <h2 className="wdash-tokens-mobile">Holdings</h2>
-            {(onAddToken || onLaunchToken) && (
+            {onAddToken && (
               <div className="wdash-token-actions">
-                {onAddToken && <button type="button" onClick={onAddToken}>Add a token</button>}
-                {onLaunchToken && <button type="button" onClick={onLaunchToken}>{launchLabel}</button>}
+                <button type="button" onClick={onAddToken}>Add a token</button>
               </div>
             )}
           </header>

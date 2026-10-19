@@ -8,6 +8,7 @@ import type { SelfLegacyQrConfig } from './SelfLegacyQr';
 import { clearSelfCheck, rememberSelfCheck, selfCheckPending } from '../lib/self-check';
 import { DevTestAccountPanel } from './DevTestAccountPanel';
 import { Button } from '@/components/ui/button';
+import { BrandLoader } from './BrandLoader';
 import { useCityStore, timeAgo, type AvatarMode } from '../lib/city-store';
 import { dicebearAvatarUrl } from '../lib/avatars';
 import { normalizeUsername } from '@/lib/usernames';
@@ -298,7 +299,9 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
   return (
     <Sheet open={open} onClose={onClose} title="Profile" size="page">
       {sessionLoading ? (
-        <p className="you-note">Loading your profile…</p>
+        <div className="brand-loader-page">
+          <BrandLoader label="Loading your profile…" />
+        </div>
       ) : !sessionUser ? (
         <div className="profile-auth-gate">
           <img className="app-art" src="/assets/app/key.svg" alt="" width={104} height={78} />

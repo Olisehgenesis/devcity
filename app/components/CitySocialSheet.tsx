@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, Heart, MapPin, MessageCircle, Paperclip, Radio, Search, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { BrandLoader } from './BrandLoader';
 import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
@@ -503,7 +504,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               <img className="app-art" src="/assets/app/key.svg" alt="" width={88} height={66} />
               <strong>Open your encrypted inbox</strong>
               {inboxWalletLoading ? (
-                <p>Checking your passkey wallet on this device…</p>
+                <BrandLoader label="Checking your passkey wallet on this device…" />
               ) : inboxWallet ? (
                 <>
                   {inboxWalletUnlocked ? (
@@ -528,7 +529,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               {(chatActionError || xmtp.error) && <p className="xmtp-error" role="alert">{chatActionError || xmtp.error}</p>}
             </div>
           ) : profileStatus === 'checking' && !walletAlreadyOpen ? (
-            <div className="xmtp-state"><span className="spinner" /><strong>Checking your passkey account…</strong><p>Your existing DEVCITY wallet will be used if it is available on this device.</p></div>
+            <div className="xmtp-state"><BrandLoader /><strong>Checking your passkey account…</strong><p>Your existing DEVCITY wallet will be used if it is available on this device.</p></div>
           ) : !walletAlreadyOpen && profileStatus !== 'ready' ? (
             <div className="xmtp-state">
               <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
@@ -549,7 +550,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               {xmtp.error && <p className="xmtp-error" role="alert">{xmtp.error}</p>}
             </div>
           ) : xmtp.status === 'connecting' ? (
-            <div className="xmtp-state"><span className="spinner" /><strong>Connecting to XMTP…</strong><p>Syncing your encrypted conversations. Approve any wallet request if prompted.</p></div>
+            <div className="xmtp-state"><BrandLoader /><strong>Connecting to XMTP…</strong><p>Syncing your encrypted conversations. Approve any wallet request if prompted.</p></div>
           ) : thread ? (
             <>
               <Button type="button" variant="outline" onClick={() => { xmtp.setActiveThreadId(null); setDraft(''); }}><ArrowLeft size={15} /> All chats</Button>

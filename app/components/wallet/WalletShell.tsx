@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowLeftRight, ChevronDown, Copy, History, LogOut, Settings, Wallet, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ArrowLeft, ArrowLeftRight, ChevronDown, Copy, History, LogOut, Settings, Wallet } from 'lucide-react';
 
 export type WalletNav = 'home' | 'activity' | 'swap' | 'drops' | 'settings';
 
@@ -109,9 +108,9 @@ export function WalletShell({
           </button>
         </nav>
         {onClose && (
-          <Button type="button" variant="outline" className="wshell-close" onClick={onClose}>
-            <X size={16} /> Close
-          </Button>
+          <button type="button" className="wshell-homeback wshell-close" onClick={onClose} aria-label="Back to the map">
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
         )}
       </aside>
 
@@ -174,7 +173,7 @@ export function WalletShell({
                 </button>
                 {onClose && (
                   <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onClose(); }}>
-                    <X size={15} aria-hidden="true" /> Close wallet
+                    <ArrowLeft size={15} aria-hidden="true" /> Back to the map
                   </button>
                 )}
               </div>

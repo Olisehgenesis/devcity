@@ -31,6 +31,17 @@ export function WalletTokenDetail({ token, chainLabel, explorerBase, balanceLoad
       <p className="wtoken-usd">
         {balanceLoading ? <span className="balance-skeleton balance-skeleton-lg" /> : (usdLabel ?? 'Price unavailable')}
       </p>
+      <div className="wtoken-chart">
+        <p>Chart unavailable</p>
+      </div>
+      <div className="wtoken-actions">
+        <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" onClick={onSend}>
+          <ArrowUpRight size={16} /> Send
+        </Button>
+        <Button type="button" variant="outline" className="w-full" onClick={onReceive}>
+          <ArrowDownLeft size={16} /> Receive
+        </Button>
+      </div>
       <dl className="wtoken-balance">
         <div><dt>Your balance</dt><dd>{balanceLoading ? '…' : token.balance || '—'}</dd></div>
         <div><dt>Network</dt><dd>{chainLabel}</dd></div>
@@ -47,14 +58,6 @@ export function WalletTokenDetail({ token, chainLabel, explorerBase, balanceLoad
           Remove {token.symbol} from this list
         </Button>
       )}
-      <div className="wtoken-actions">
-        <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" onClick={onSend}>
-          <ArrowUpRight size={16} /> Send
-        </Button>
-        <Button type="button" variant="outline" className="w-full" onClick={onReceive}>
-          <ArrowDownLeft size={16} /> Receive
-        </Button>
-      </div>
     </section>
   );
 }

@@ -105,10 +105,16 @@ export function WalletCityTab({
           <h2 id="wallet-claims-title">Claims</h2>
           {claimState === 'ready' && <span>{claims.length} recorded</span>}
         </header>
-        <p className="wact-empty">Claims are recorded when you collect a drop on the map. This list does not start a new claim.</p>
-        {claimState === 'loading' && <p className="wact-empty" aria-busy="true">Loading claims…</p>}
-        {claimState === 'error' && <p className="you-error" role="alert">Could not load claims.</p>}
-        {claimState === 'ready' && claims.length === 0 && <p className="wact-empty">No claims recorded for this wallet.</p>}
+        {claimState === 'loading' && (
+          <ul className="wallet-activity-list" aria-busy="true" aria-hidden="true">
+            <li className="wact-skel" />
+            <li className="wact-skel" />
+          </ul>
+        )}
+        {claimState === 'error' && (
+          <p className="wact-empty" role="alert">Claims could not be loaded.</p>
+        )}
+        {claimState === 'ready' && claims.length === 0 && <p className="wact-empty">No claims yet.</p>}
         {claimState === 'ready' && claims.length > 0 && (
           <ul className="wallet-city-list">
             {claims.map((claim) => {
@@ -136,7 +142,7 @@ export function WalletCityTab({
       <section className="wdash-card" aria-labelledby="wallet-drops-title">
         <header><h2 id="wallet-drops-title">Drops you created</h2></header>
         {drops.length === 0 ? (
-          <p className="wact-empty">Drops you create show up here.</p>
+          <p className="wact-empty">No drops from this wallet yet.</p>
         ) : (
           <ul className="wallet-city-list">
             {drops.map((drop) => (

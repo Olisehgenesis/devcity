@@ -13,19 +13,25 @@ export function formatUsd(value: number) {
 
 export function useUsdPrices() {
   const [usd, setUsd] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let gone = false;
+    setLoading(true);
     fetch('/api/prices')
       .then((response) => response.json())
       .then((data: { usd?: Record<string, number> }) => {
         if (!gone && data.usd) setUsd(data.usd);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!gone) setLoading(false);
+      });
     return () => {
       gone = true;
     };
-  }, []);
+  }, [tick]);
 
-  return usd;
+  return { usd, loading, reload: () => setTick((value) => value + 1) };
 }

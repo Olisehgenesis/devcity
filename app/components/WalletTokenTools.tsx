@@ -881,31 +881,28 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
         <section className="wallet-profile-token">
           {!profileToken ? (
             focus === 'trade' ? (
-              <p className="you-note">No profile token yet. Open Profile token on the wallet home to launch one.</p>
+              <p className="you-note">No profile token yet. Initialise one from the wallet home.</p>
             ) : (
-            <>
-              <div className="wallet-token-empty wallet-profile-token-empty">
-                <span className="wallet-token-orbit">✳</span>
-                <strong>Your profile can have its own token.</strong>
-                <p>Launch a fixed-supply token tied to this wallet. Your tokens are created on Celo Sepolia and are not real-world money.</p>
-              </div>
-              <div className="wallet-launch-preview">
-                <span className="wallet-token-mark">{tokenSymbol.slice(0, 1) || 'T'}</span>
-                <div><strong>{tokenName || `${username || 'Your name'}.devcity.fun`}</strong><span>${tokenSymbol || normalizedUsername || 'TICKER'} · 1,000,000 supply</span></div>
-              </div>
-              <div className="wallet-token-contract-note"><strong>Fixed launch terms</strong><span>1,000,000 tokens · 18 decimals · 900,000 to you · 100,000 held in the factory treasury · one token per wallet</span></div>
+            <div className="winit">
+              <h3>Initialise profile token</h3>
+              <p>This mints a fixed supply on Celo Sepolia and ties it to this wallet. It is not real-world money. The name comes from your handle.</p>
+              <dl className="winit-terms">
+                <div><dt>Minted</dt><dd>1,000,000</dd></div>
+                <div><dt>To you</dt><dd>900,000</dd></div>
+                <div><dt>Treasury</dt><dd>100,000</dd></div>
+              </dl>
+              <p className="winit-note">After initialise, you can seed a Uniswap pool from this screen when the factory allows it. Seeding stays off while a new pool would open at a fixed 1:1 price.</p>
               {!signingKey && (
-                <div className="wallet-token-unlock">
-                  <label className="wallet-field-label" htmlFor="profile-token-pin">{wallet.pinProtected ? 'Wallet PIN' : 'Wallet passphrase'}</label>
+                <div className="wallet-unlock">
+                  <p>Unlock to initialise this profile token.</p>
                   <UnlockSecret id="profile-token-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                 </div>
               )}
-              <FeePreview quote={launchFee.quote} error={launchFee.error} loading={launchFee.loading} />
-              <Button disabled={operation === 'launch' || Boolean(launchFee.error)} onClick={() => void launchToken()}>
-                {operation === 'launch' ? 'Launching on Sepolia…' : `Launch ${tokenSymbol || normalizedUsername || 'your'} token`}
+              <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={operation === 'launch' || Boolean(launchFee.error)} onClick={() => void launchToken()}>
+                {operation === 'launch' ? 'Initialising…' : 'Initialise profile token'}
               </Button>
-              <p className="wallet-token-footnote">Launching requires a Celo Sepolia transaction and network fees. Your token is named from your handle and saved to your profile.</p>
-            </>
+              <FeePreview quote={launchFee.quote} error={launchFee.error} loading={launchFee.loading} />
+            </div>
             )
           ) : (
             <>
@@ -966,7 +963,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 </div>
               )}
               {focus === 'trade' && !profileToken.poolCreated && (
-                <p className="you-note">This profile token has no pool yet. Seed one from the token screen. DEV26 swap, below, signs with a browser wallet.</p>
+                <p className="you-note">This profile token has no pool yet. Seed one from the profile token screen when the factory allows it.</p>
               )}
 
               {focus !== 'trade' && (

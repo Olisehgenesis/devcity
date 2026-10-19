@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import { BrandLoader } from './BrandLoader';
 import { useBalance, useReadContract } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
 import { authClient } from '@/lib/auth-client';
@@ -45,6 +47,24 @@ import { useProfileToken } from '../hooks/useProfileToken';
 import { formatUsd, useUsdPrices } from '../hooks/useUsdPrices';
 
 type Phase = 'signed-out' | 'registering' | 'ready' | 'restore' | 'backup-required';
+
+function WalletFrameBack({ onClose }: { onClose?: () => void }) {
+  if (!onClose) return null;
+  return (
+    <button type="button" className="wshell-homeback" onClick={onClose} aria-label="Back to the map">
+      <ArrowLeft size={18} aria-hidden="true" />
+    </button>
+  );
+}
+
+function WalletBusyCard({ message, onClose }: { message: string; onClose?: () => void }) {
+  return (
+    <div className="wallet-auth-frame is-loading">
+      <WalletFrameBack onClose={onClose} />
+      <BrandLoader label={message} />
+    </div>
+  );
+}
 
 interface SessionUser {
   id: string;
@@ -193,7 +213,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
   };
 
   const { token: profileToken, loading: profileLoading } = useProfileToken(wallet?.address);
-  const usdPrices = useUsdPrices();
+  const { usd: usdPrices, loading: pricesLoading, reload: reloadPrices } = useUsdPrices();
   async function refreshSession() {
     try {
       const res = await authClient.getSession();
@@ -431,20 +451,17 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
   }
 
   if (sessionLoading) {
-    return (
-      <div className="wallet-auth-frame">
-        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
-        <p className="you-note">Loading your identity…</p>
-      </div>
-    );
+    return <WalletBusyCard message="Loading your identity…" onClose={onClose} />;
   }
 
   if (!user) {
     return (
-      <div className="you-connect wallet-auth-gate">
-        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
+      <div className="wallet-auth-gate">
+        <WalletFrameBack onClose={onClose} />
+        <section className="wallet-auth-card">
         {showSignup ? (
           <div className="profile-signup-form">
+            <h1>Create an account</h1>
             <p className="you-sheet-lede">Choose your DEVCITY handle. Create a passkey now, then set a PIN for this wallet.</p>
             <label className="profile-username-label" htmlFor="devcity-username">Username</label>
             <div className="profile-username-field">
@@ -473,6 +490,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
               {usernameStatus === 'error' && 'Could not check availability. Try again.'}
             </p>
             <Button
+              className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]"
               disabled={authAction !== null || usernameStatus !== 'available'}
               onClick={() => void handleRegister()}
             >
@@ -480,6 +498,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
             </Button>
             <Button
               variant="outline"
+              className="w-full"
               disabled={authAction !== null}
               onClick={() => {
                 setShowSignup(false);
@@ -493,8 +512,10 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
           </div>
         ) : (
           <>
+            <h1>Sign in</h1>
             <p className="you-sheet-lede">Sign in to unlock balances, transfers and wallet security.</p>
             <Button
+              className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]"
               disabled={authAction !== null}
               onClick={async () => {
                 setError('');
@@ -518,6 +539,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
             </Button>
             <Button
               variant="outline"
+              className="w-full"
               disabled={authAction !== null}
               onClick={() => {
                 setError('');
@@ -539,32 +561,38 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
             <Button type="button" variant="outline" onClick={browserWallet.onDisconnect}>Disconnect</Button>
           </section>
         )}
+        </section>
       </div>
     );
   }
 
   if (phase === 'registering') {
     return (
-      <div className="you-connect wallet-auth-gate">
-        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
+      <div className="wallet-auth-gate">
+        <WalletFrameBack onClose={onClose} />
+        <section className="wallet-auth-card">
+        <h1>Create wallet</h1>
         <p className="you-sheet-lede">
           Set a 6-digit PIN to encrypt your new wallet on this device.
         </p>
         <PinBoxes id="wallet-register-pin" value={pin} onChange={setPin} />
-        <Button disabled={pin.length !== 6} onClick={handleCreateWallet}>
+        <Button className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={pin.length !== 6} onClick={handleCreateWallet}>
           Create wallet
         </Button>
-        <Button type="button" variant="outline" onClick={() => { void leaveAccount(); }}>Sign out</Button>
+        <Button type="button" variant="outline" className="w-full" onClick={() => { void leaveAccount(); }}>Sign out</Button>
         {error && <p className="you-error">{error}</p>}
         <p className="you-note">The 6-digit PIN protects this device copy and is weaker if someone obtains its data. There’s no recovery phrase; if forgotten, this wallet can’t be unlocked.</p>
+        </section>
       </div>
     );
   }
 
   if (phase === 'restore') {
     return (
-      <div className="you-connect wallet-auth-gate">
-        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
+      <div className="wallet-auth-gate">
+        <WalletFrameBack onClose={onClose} />
+        <section className="wallet-auth-card">
+        <h1>Restore wallet</h1>
         <p className="you-sheet-lede">
           We found an encrypted backup for <strong>{restoreAddress?.slice(0, 8)}…{restoreAddress?.slice(-6)}</strong> on your account.
         </p>
@@ -572,26 +600,30 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
           Enter your 6-digit wallet PIN to decrypt the backup and restore this wallet to this device.
         </p>
         <PinBoxes id="wallet-restore-pin" value={pin} onChange={setPin} />
-        <Button disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
+        <Button className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
           {backupSaving ? 'Restoring…' : 'Restore wallet'}
         </Button>
-        <Button type="button" variant="outline" disabled={backupSaving} onClick={() => { void leaveAccount(); }}>Sign out</Button>
+        <Button type="button" variant="outline" className="w-full" disabled={backupSaving} onClick={() => { void leaveAccount(); }}>Sign out</Button>
         <Button
           variant="outline"
+          className="w-full"
           disabled={backupSaving}
           onClick={() => { setRestoreAddress(null); setPhase('registering'); setPin(''); setError(''); }}
         >
           Create a new wallet instead
         </Button>
         {error && <p className="you-error">{error}</p>}
+        </section>
       </div>
     );
   }
 
   if (phase === 'backup-required') {
     return (
-      <div className="you-connect wallet-auth-gate">
-        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
+      <div className="wallet-auth-gate">
+        <WalletFrameBack onClose={onClose} />
+        <section className="wallet-auth-card">
+        <h1>Back up wallet</h1>
         <p className="you-sheet-lede">
           Your wallet is ready. Back it up so you can restore it on another device.
         </p>
@@ -605,12 +637,14 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
         {backupSaving && <p className="you-note">Encrypting and uploading…</p>}
         {backupDone && <p className="you-note">Encrypted backup saved. You can now sign in on any device.</p>}
         <Button
+          className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]"
           disabled={backupSaving || !wallet?.backupConsent}
           onClick={() => { setPhase('ready'); }}
         >
           Continue to wallet
         </Button>
         {error && <p className="you-error">{error}</p>}
+        </section>
       </div>
     );
   }
@@ -648,7 +682,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
       ? [{ symbol: 'USDC', name: 'USD Coin', amount: stableBalances.USDC, status: holdingStatus.USDC, price: usdPrices.USDC ?? null }]
       : []),
   ];
-  const flow = screen.id === 'send' || screen.id === 'tip' || screen.id === 'receive' || screen.id === 'token' || screen.id === 'profile';
+  const flow = screen.id === 'send' || screen.id === 'tip' || screen.id === 'receive' || screen.id === 'swap' || screen.id === 'token' || screen.id === 'profile';
   const nav: WalletNav = screen.id === 'activity' || screen.id === 'swap' || screen.id === 'settings' || screen.id === 'drops' ? screen.id : 'home';
   const pageTitle = screen.id === 'token' ? screen.token.symbol
     : screen.id === 'send' || screen.id === 'tip' ? 'Send'
@@ -683,12 +717,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
   }
 
   if (!wallet) {
-    return (
-      <div className="wallet-auth-frame">
-        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
-        <p className="you-note">Preparing your wallet…</p>
-      </div>
-    );
+    return <WalletBusyCard message="Preparing your wallet…" onClose={onClose} />;
   }
 
   const holdings = (presentation: 'summary' | 'table') => (
@@ -755,6 +784,14 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
           nativeLoading={holdingStatus.CELO === 'loading'}
           nativeError={holdingStatus.CELO === 'error'}
           onRetryNative={() => retryHolding('CELO')}
+          onRefresh={() => {
+            retryHolding('CELO');
+            retryHolding('USDT');
+            retryHolding('USDC');
+            retryHolding('USDm');
+            reloadPrices();
+          }}
+          refreshing={pricesLoading || holdingStatus.CELO === 'loading' || holdingStatus.USDT === 'loading' || holdingStatus.USDC === 'loading' || holdingStatus.USDm === 'loading'}
           onSend={() => setScreen({ id: 'send' })}
           onReceive={() => setScreen({ id: 'receive' })}
           onSwap={() => setScreen({ id: 'swap' })}
@@ -765,8 +802,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
             { id: 'settings', label: 'Settings', onClick: () => setScreen({ id: 'settings' }) },
           ]}
           onAddToken={() => setImportSignal((value) => value + 1)}
-          onLaunchToken={() => setScreen({ id: 'profile' })}
-          launchLabel={profileToken ? 'Profile token' : 'Launch token'}
+          onInitialise={!profileLoading && !profileToken ? () => setScreen({ id: 'profile' }) : undefined}
           summary={holdings('summary')}
           table={holdings('table')}
           activity={(
@@ -821,7 +857,16 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
       )}
 
       {screen.id === 'swap' && (
-        <WalletSwap tokens={swapHoldings} chainLabel={chainLabel} />
+        <WalletSwap
+          tokens={swapHoldings}
+          chainLabel={chainLabel}
+          address={wallet.address}
+          pinProtected={wallet.pinProtected}
+          unlockedKey={unlockedKey}
+          feeSymbol={feeSymbol}
+          notify={onNotify}
+          onDone={() => setScreen({ id: 'home' })}
+        />
       )}
 
       {screen.id === 'profile' && (

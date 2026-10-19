@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Heart, KeyRound } from 'lucide-react';
+import { TokenMark } from './TokenMark';
 import { Button } from "@/components/ui/button";
 import { encodeFunctionData, getAddress, isAddress, createWalletClient, http, parseUnits, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -187,6 +188,8 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
               placeholder="0.00"
               inputMode="decimal"
             />
+            <span className="wtip-token">
+              <TokenMark symbol={tipToken.startsWith('CUSTOM:') ? (importedTokens.find((item) => `CUSTOM:${item.address}` === tipToken)?.symbol ?? 'T') : tipToken} />
             <select
               className="send-token-select"
               value={tipToken}
@@ -201,6 +204,7 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
                 </option>
               ))}
             </select>
+            </span>
           </div>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
           <p className="wallet-send-caution">

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { useAccount } from "wagmi";
 import * as maplibregl from "maplibre-gl";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
@@ -36,6 +35,7 @@ import { ScanSheet } from "./components/ScanSheet";
 import { SearchSheet } from "./components/SearchSheet";
 import { CreateDropSheet } from "./components/CreateDropSheet";
 import { OnboardingFlow } from "./components/OnboardingFlow";
+import { BrandLoader } from "./components/BrandLoader";
 import { useCityStore } from "./lib/city-store";
 import { dicebearAvatarUrl } from "./lib/avatars";
 import { GameIcon, NavIcon } from "./components/game/GameIcons";
@@ -1438,9 +1438,9 @@ export default function CityHome() {
         <div ref={mapContainer} className="real-city-map" aria-label="City map" />
         <div className="map-tint vignette" aria-hidden="true" />
         {showIntro && <div className={`city-intro${mapReady ? " is-leaving" : ""}`} aria-live="polite">
-          <Image className="city-loader-art" src="/assets/loading.svg" alt="DEVCITY26" width={104} height={104} priority unoptimized />
+          <BrandLoader />
           <strong>DEVCITY 26</strong>
-          <span className="intro-loading">{mapReady ? "CITY READY" : mapError ? "CITY MAP IS SLOW" : "LOADING CITY"}<i /><i /><i /></span>
+          <p className="intro-status">{mapReady ? "CITY READY" : mapError ? "CITY MAP IS SLOW" : "LOADING CITY"}</p>
         </div>}
         {showOnboarding && !hasCompletedOnboarding && (
           <OnboardingFlow onComplete={handleOnboardingComplete} onSkip={handleOnboardingSkip} />
