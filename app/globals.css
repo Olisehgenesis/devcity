@@ -141,11 +141,11 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .broadcast-composer { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 9px; margin-bottom: 12px; }
 .broadcast-composer-avatar { display: grid; place-items: center; width: 34px; height: 34px; overflow: hidden; border: 1px solid var(--line); border-radius: 50%; background: var(--lime); color: var(--ink); font-size: 11px; font-weight: 900; }
 .broadcast-composer-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.broadcast-composer textarea { width: 100%; min-height: 44px; resize: vertical; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 13px; }
+.broadcast-composer textarea { width: 100%; min-height: 72px; resize: vertical; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 13px; }
 .broadcast-composer textarea::placeholder { color: var(--muted); }
-.broadcast-composer-bottom { grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.broadcast-composer-bottom small { color: var(--muted); font-size: 9px; }
-.broadcast-composer-bottom button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 11px; border-radius: 10px; background: var(--ink); color: var(--paper); font-size: 11px; font-weight: 800; }
+.broadcast-composer-bottom { grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.broadcast-composer-bottom small { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.broadcast-composer-bottom button:not([data-slot="button"]) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 11px; border-radius: 10px; background: var(--ink); color: var(--paper); font-size: 11px; font-weight: 800; }
 .broadcast-composer-bottom button:disabled { opacity: .42; }
 .broadcast-card { margin-bottom: 10px; animation: card-in .22s cubic-bezier(.23, 1, .32, 1) both; }
 .broadcast-card > header { display: flex; align-items: center; gap: 8px; }
@@ -188,6 +188,16 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   width: 100%;
   overflow: hidden;
   background: var(--map-base);
+}
+
+@media (min-width: 760px) {
+  body { background: #eddde6; }
+  .app-shell {
+    width: 440px;
+    margin-inline: auto;
+    box-shadow: 0 0 0 1px rgba(26, 16, 40, 0.08);
+    transform: translateZ(0);
+  }
 }
 
 /* ================= Desktop side rail ================= */
@@ -2822,7 +2832,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .xmtp-state .xmtp-open-wallet:hover { background: #ffd638; }
 .xmtp-state .spinner { margin: 10px; }
 .xmtp-error { margin-top: 8px; color: #aa382d; font-size: 11px; line-height: 1.4; }
-.xmtp-passkey-state { align-items: stretch; }
+.xmtp-passkey-state { align-items: center; }
 .xmtp-passkey-state .xmtp-state-icon { align-self: center; }
 .xmtp-passkey-state > strong { text-align: center; }
 .xmtp-passkey-state > p { align-self: center; }
@@ -3102,7 +3112,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .secondary-action { border-radius: 13px; }
 .broadcast-composer,
 .broadcast-card { border-radius: 19px; }
-.broadcast-composer-bottom button { border-radius: 999px; background: var(--orange); color: var(--ink); }
+.broadcast-composer-bottom button:not([data-slot="button"]) { border-radius: 999px; background: var(--orange); color: var(--ink); }
 .broadcast-pulse { background: var(--orange); box-shadow: 0 0 0 4px color-mix(in srgb, var(--orange) 18%, transparent); }
 
 .mobile-nav {
@@ -3712,8 +3722,8 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .scan-again { background: transparent; color: var(--muted); }
 
 @media (min-width: 768px) {
-  .sheet-backdrop { align-items: center; padding: 24px; }
-  .sheet { border-bottom: 1px solid color-mix(in srgb, var(--ink) 9%, transparent); border-radius: 30px; }
+  .sheet-backdrop:not(.is-page) { align-items: center; padding: 24px; }
+  .sheet:not(.sheet-page) { border-bottom: 1px solid color-mix(in srgb, var(--ink) 9%, transparent); border-radius: 30px; }
 }
 
 @media (max-width: 900px) {
@@ -4694,8 +4704,7 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
 .event-card-cta:not(:has(.button_top)),
 .secondary-action,
 .tip-action,
-.self-qr-link,
-.broadcast-composer-bottom button {
+.self-qr-link {
   display: flex;
   box-sizing: border-box;
   align-items: center;
