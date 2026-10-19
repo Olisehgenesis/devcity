@@ -20,7 +20,7 @@ export function OnboardingFlow({ onComplete, onSkip }: OnboardingFlowProps) {
           <h2>The map is the city</h2>
           <p>Drops, people, and events are on this map. Your profile is in the corner when you want to sign in.</p>
         </div>
-        <Button type="button" className="w-full" onClick={onComplete}>Show the map</Button>
+        <Button type="button" onClick={onComplete}>Show the map</Button>
       </div>
     </div>
   );

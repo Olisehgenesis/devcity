@@ -171,7 +171,7 @@ export function TipSheet({ open, onClose, target, onNeedWallet, notify }: TipShe
               </div>
             ) : <p className="tip-note">No tip tokens are available in the city yet.</p>}
 
-            <Button type="button" className="w-full" disabled={sending || !finalAmount || !token || !target.address || tokensLoading || Boolean(tokensError)} onClick={send}>
+            <Button type="button" disabled={sending || !finalAmount || !token || !target.address || tokensLoading || Boolean(tokensError)} onClick={send}>
               {sending ? (
                 <><span className="spinner" /> Sending…</>
               ) : (

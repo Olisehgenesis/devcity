@@ -254,7 +254,6 @@ export function WalletTradeTab() {
         <Button
           onClick={handleApprove}
           disabled={approving || !amount || Boolean(networkFee.error)}
-          className="w-full"
         >
           {approving ? <Loader2 size={16} className="animate-spin" /> : 'Approve ' + inputToken}
         </Button>
@@ -262,7 +261,6 @@ export function WalletTradeTab() {
         <Button
           onClick={handleSwap}
           disabled={swapping || !amount || Boolean(networkFee.error)}
-          className="w-full"
         >
           {swapping ? <Loader2 size={16} className="animate-spin" /> : `Swap ${inputToken} → ${outputToken}`}
         </Button>

@@ -786,7 +786,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
           )}
           {tokens.length === 0 ? (
             focus === 'assets' ? (
-              !importOpen && <Button type="button" variant="outline" className="w-full" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</Button>
+              !importOpen && <Button type="button" variant="outline" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</Button>
             ) : (
             <div className="wallet-token-empty">
               <strong>Keep your tokens together.</strong>
@@ -857,16 +857,16 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 autoComplete="off"
               />
               <p className="wallet-send-caution">Only import contracts you trust. A token name or symbol does not prove that a token is legitimate.</p>
-              <Button className="w-full" disabled={operation === 'import' || !importAddress} onClick={() => void importToken()}>
+              <Button disabled={operation === 'import' || !importAddress} onClick={() => void importToken()}>
                 {operation === 'import' ? 'Checking contract…' : 'Add token'}
               </Button>
             </div>
           )}
           {focus === 'assets' && tokens.length > 0 && !importOpen && (
-            <Button type="button" variant="outline" className="w-full" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</Button>
+            <Button type="button" variant="outline" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</Button>
           )}
           {focus !== 'assets' && (
-            <Button variant="outline" className="w-full" onClick={() => void loadTokens()}><RefreshCw size={14} /> Refresh balances and prices</Button>
+            <Button variant="outline" onClick={() => void loadTokens()}><RefreshCw size={14} /> Refresh balances and prices</Button>
           )}
         </section>
       ) : showProfile ? (
@@ -893,7 +893,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 </div>
               )}
               <FeePreview quote={launchFee.quote} error={launchFee.error} loading={launchFee.loading} />
-              <Button className="w-full" disabled={operation === 'launch' || Boolean(launchFee.error)} onClick={() => void launchToken()}>
+              <Button disabled={operation === 'launch' || Boolean(launchFee.error)} onClick={() => void launchToken()}>
                 {operation === 'launch' ? 'Launching on Sepolia…' : `Launch ${tokenSymbol || normalizedUsername || 'your'} token`}
               </Button>
               <p className="wallet-token-footnote">Launching requires a Celo Sepolia transaction and network fees. Your token is named from your handle and saved to your profile.</p>
@@ -921,7 +921,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 <span>Price</span><strong>{profileToken.price == null ? 'Price unavailable' : `${profileToken.price.toPrecision(5)} USDT`}</strong>
                   {profileToken.priceSource && <small>{profileToken.priceSource} · indicative, not a sale quote</small>}
                 </div>
-                <Button variant="outline" className="w-full min-w-0" onClick={() => void copyAddress(profileToken.address)}><span className="min-w-0 truncate">{profileToken.address}</span><Copy size={15} />{copied ? 'Copied' : 'Copy'}</Button>
+                <Button variant="outline" className="min-w-0" onClick={() => void copyAddress(profileToken.address)}><span className="min-w-0 truncate">{profileToken.address}</span><Copy size={15} />{copied ? 'Copied' : 'Copy'}</Button>
                 <a className="wallet-token-explorer" href={`${window.location.origin}/api/token-icon?owner=${wallet.address}&chainId=${assetChainId}`} target="_blank" rel="noreferrer">Token profile image <ExternalLink size={13} /></a>
                 <a className="wallet-token-explorer" href={`${CELO_SEPOLIA.blockExplorer}/address/${profileToken.address}`} target="_blank" rel="noreferrer">View token on Blockscout <ExternalLink size={13} /></a>
               </div>
@@ -939,7 +939,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                     </div>
                   )}
                   <FeePreview quote={buyFee.quote} error={buyFee.error} loading={buyFee.loading} />
-                  <Button className="w-full" disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || Boolean(buyFee.error)} onClick={() => void buyProfileToken()}>
+                  <Button disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || Boolean(buyFee.error)} onClick={() => void buyProfileToken()}>
                     {operation === 'buy' ? 'Buying…' : `Buy ${profileToken.symbol}`}
                   </Button>
                   <label className="wallet-field-label" htmlFor="profile-token-sell-amount">Sell {profileToken.symbol}</label>
@@ -951,7 +951,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                     </div>
                   )}
                   <FeePreview quote={sellFee.quote} error={sellFee.error} loading={sellFee.loading} />
-                  <Button variant="outline" className="w-full" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || Boolean(sellFee.error)} onClick={() => void sellProfileToken()}>
+                  <Button variant="outline" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || Boolean(sellFee.error)} onClick={() => void sellProfileToken()}>
                     {operation === 'sell' ? 'Selling…' : `Sell ${profileToken.symbol} for USDT`}
                   </Button>
                   <p className="wallet-token-footnote">No protocol trade tax. Trades use a 5% minimum-receive tolerance against the displayed spot price; large price moves or price impact can make a trade revert.</p>
@@ -976,7 +976,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   </div>
                 )}
                 <FeePreview quote={tipFee.quote} error={tipFee.error} loading={tipFee.loading} />
-                <Button className="w-full" disabled={operation === 'tip' || !recipient || !tipAmount || Boolean(tipFee.error)} onClick={() => void tipProfileToken()}>
+                <Button disabled={operation === 'tip' || !recipient || !tipAmount || Boolean(tipFee.error)} onClick={() => void tipProfileToken()}>
                   {operation === 'tip' ? 'Sending…' : <><ArrowUpRight size={16} /> Send {profileToken.symbol}</>}
                 </Button>
               </div>
@@ -991,7 +991,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                     <UnlockSecret id="profile-token-manage-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                   </div>
                 )}
-                <Button variant="outline" className="w-full" disabled={operation === 'update-uri'} onClick={() => void updateTokenURI()}>{operation === 'update-uri' ? 'Saving…' : 'Update token details'}</Button>
+                <Button variant="outline" disabled={operation === 'update-uri'} onClick={() => void updateTokenURI()}>{operation === 'update-uri' ? 'Saving…' : 'Update token details'}</Button>
               </details>
 
               {profileToken.poolCreated || priceAwareFactory ? (
@@ -1002,7 +1002,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <label className="wallet-field-label" htmlFor="profile-token-liquidity-usdt">USDT amount</label>
                   <input id="profile-token-liquidity-usdt" className="you-passphrase" value={liquidityUsdtAmount} onChange={(event) => setLiquidityUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
                   {!profileToken.poolCreated && (
-                    <Button type="button" variant="outline" className="w-full whitespace-normal" onClick={() => { setLiquidityTokenAmount('1000'); setLiquidityUsdtAmount('10'); setError(''); }}>
+                    <Button type="button" variant="outline" className="whitespace-normal" onClick={() => { setLiquidityTokenAmount('1000'); setLiquidityUsdtAmount('10'); setError(''); }}>
                       ⚡ Use defaults (1,000 {profileToken.symbol} + 10 USDT · 0.01 USDT start)
                     </Button>
                   )}
@@ -1015,7 +1015,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   {!profileToken.poolCreated && Number.isFinite(initialPricePreview) && initialPricePreview > 0 && (
                     <p className="wallet-token-price-preview">Starting spot price · {initialPricePreview.toPrecision(5)} USDT per {profileToken.symbol}</p>
                   )}
-                  <Button className="w-full" disabled={operation === 'liquidity' || !liquidityTokenAmount || !liquidityUsdtAmount} onClick={() => void provideLiquidity()}>
+                  <Button disabled={operation === 'liquidity' || !liquidityTokenAmount || !liquidityUsdtAmount} onClick={() => void provideLiquidity()}>
                     {operation === 'liquidity' ? 'Approving and adding…' : profileToken.poolCreated ? 'Add liquidity' : 'Create pool and seed'}
                   </Button>
                   <p className="wallet-token-footnote">{profileToken.poolCreated

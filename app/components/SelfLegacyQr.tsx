@@ -55,7 +55,7 @@ export function SelfLegacyQr({ config, onVerified }: { config: SelfLegacyQrConfi
         onSuccess={onVerified}
         onError={() => setError('Self could not finish the check. Try again.')}
       />
-      <Button asChild className="w-full">
+      <Button asChild>
         <a href={link}>Open the Self app</a>
       </Button>
     </div>

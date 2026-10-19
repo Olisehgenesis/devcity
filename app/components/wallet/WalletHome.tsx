@@ -112,7 +112,7 @@ export function WalletHome({ celoBalance, stableBalances, holdingStatus, onRetry
       </div>
       {children}
       {!profileToken && !profileLoading && (
-        <Button type="button" className="w-full" onClick={onOpenProfile}>Launch token</Button>
+        <Button type="button" onClick={onOpenProfile}>Launch token</Button>
       )}
     </section>
   );

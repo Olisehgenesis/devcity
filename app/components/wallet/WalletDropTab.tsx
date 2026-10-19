@@ -115,7 +115,7 @@ export function WalletDropTab({ address, pinProtected, unlockedKey, fees, import
         <div className="wallet-unlock">
           <p>Unlock to create a drop.</p>
           <UnlockSecret id="wallet-drop-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-          <Button className="w-full" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+          <Button disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
           </Button>
         </div>
@@ -152,7 +152,7 @@ export function WalletDropTab({ address, pinProtected, unlockedKey, fees, import
             </div>
           </div>
           <p className="wallet-send-caution">Drops make tokens claimable near the city. Create your token first, then drop it.</p>
-          <Button className="w-full" disabled={creating || !name || !amount} onClick={() => void handleCreate()}>
+          <Button disabled={creating || !name || !amount} onClick={() => void handleCreate()}>
             <LandPlot size={16} /> {creating ? 'Creating…' : 'Create drop'}
           </Button>
         </>

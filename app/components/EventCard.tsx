@@ -125,7 +125,6 @@ export function EventCard({
         {event.summary && <p className="event-card-summary">{event.summary}</p>}
         <Button
           type="button"
-          className="w-full"
           onClick={onToggleGoing}
           disabled={!canRsvp || attendance === 'attended'}
           aria-pressed={Boolean(attendance)}
@@ -134,12 +133,12 @@ export function EventCard({
         </Button>
         <div className="event-card-links flex-col">
           {event.url && (
-            <Button asChild variant="outline" className="w-full">
+            <Button asChild variant="outline">
               <a href={event.url} target="_blank" rel="noopener noreferrer">Event page</a>
             </Button>
           )}
           {event.latitude !== null && event.longitude !== null && (
-            <Button type="button" variant="outline" className="w-full" onClick={onShowOnMap}>Show on map</Button>
+            <Button type="button" variant="outline" onClick={onShowOnMap}>Show on map</Button>
           )}
         </div>
 

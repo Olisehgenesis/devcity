@@ -21,8 +21,8 @@ export function WalletTokenDetail({ token, explorerBase, balanceLoading, onSend,
       <p className="wallet-token-detail-balance">{balanceLoading ? <span className="balance-skeleton balance-skeleton-lg" /> : token.balance}</p>
       <h3 id="wallet-token-detail-title">{token.name}</h3>
       <div className="wallet-token-detail-actions">
-        <Button type="button" className="w-full" onClick={onSend}><ArrowUpRight size={16} /> Send</Button>
-        <Button type="button" variant="outline" className="w-full" onClick={onReceive}><ArrowDownLeft size={16} /> Receive</Button>
+        <Button type="button" onClick={onSend}><ArrowUpRight size={16} /> Send</Button>
+        <Button type="button" variant="outline" onClick={onReceive}><ArrowDownLeft size={16} /> Receive</Button>
       </div>
       {token.contract && <p className="wallet-receive-address">{token.contract}</p>}
       {explorer && (
@@ -31,7 +31,7 @@ export function WalletTokenDetail({ token, explorerBase, balanceLoading, onSend,
         </a>
       )}
       {onRemove && (
-        <Button type="button" variant="outline" className="w-full" onClick={onRemove}>
+        <Button type="button" variant="outline" onClick={onRemove}>
           Remove {token.symbol} from this list
         </Button>
       )}

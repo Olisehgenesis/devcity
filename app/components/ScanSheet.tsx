@@ -138,14 +138,13 @@ export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) 
             <strong>{scannedDropId ? 'Drop found' : scannedAddress ? 'Wallet found' : link ? 'Link found' : 'QR code found'}</strong>
             <p>{scannedAddress ?? scannedValue}</p>
             {scannedDropId && (
-              <Button type="button" className="w-full" onClick={() => onOpenDrop?.(scannedDropId)}>
+              <Button type="button" onClick={() => onOpenDrop?.(scannedDropId)}>
                 Open this drop
               </Button>
             )}
             {scannedAddress && (
               <Button
                 type="button"
-                className="w-full"
                 onClick={() => onTip({
                   name: `Wallet ${scannedAddress.slice(0, 6)}…${scannedAddress.slice(-4)}`,
                   initials: '0X',
@@ -157,11 +156,11 @@ export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) 
               </Button>
             )}
             {link && (
-              <Button asChild className="w-full">
+              <Button asChild>
                 <a href={link} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Open link</a>
               </Button>
             )}
-            <Button type="button" variant="outline" className="w-full" onClick={() => setScannedValue('')}>Scan another code</Button>
+            <Button type="button" variant="outline" onClick={() => setScannedValue('')}>Scan another code</Button>
           </div>
         ) : (
           <>

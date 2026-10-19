@@ -154,7 +154,7 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
         <div className="wallet-unlock">
           <p>Unlock to review and send a transaction.</p>
           <UnlockSecret id="wallet-send-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-          <Button className="w-full" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+          <Button disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
           </Button>
         </div>
@@ -196,7 +196,7 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
           </div>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
           <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed. Gas is paid in CELO when you have it, otherwise USDT, then USDC, then another fee currency you hold.</p>
-          <Button className="w-full" disabled={sending || !sendTo || !sendAmount || Boolean(networkFee.error)} onClick={() => void handleSend()}>
+          <Button disabled={sending || !sendTo || !sendAmount || Boolean(networkFee.error)} onClick={() => void handleSend()}>
             {sending ? 'Sending…' : `Send ${sendTokenLabel}`}
           </Button>
         </>

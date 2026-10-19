@@ -160,7 +160,7 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
         <div className="wallet-unlock">
           <p>Unlock to review and send a tip.</p>
           <UnlockSecret id="wallet-tip-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-          <Button className="w-full" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+          <Button disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
           </Button>
         </div>
@@ -202,7 +202,7 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
           </div>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
           <p className="wallet-send-caution">A tip is a real transfer. Confirm the recipient address before sending. Gas is paid in CELO, then USDT, then USDC.</p>
-          <Button className="w-full" disabled={tipping || !tipTo || !tipAmount || Boolean(networkFee.error)} onClick={() => void handleTip()}>
+          <Button disabled={tipping || !tipTo || !tipAmount || Boolean(networkFee.error)} onClick={() => void handleTip()}>
             <Heart size={16} /> {tipping ? 'Tipping…' : 'Send tip'}
           </Button>
         </>

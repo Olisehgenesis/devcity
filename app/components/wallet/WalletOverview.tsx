@@ -63,7 +63,7 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, usdBala
 
       <div className="vault-actions" aria-label="Wallet actions">
         {ACTIONS.map((action) => (
-          <Button key={action.id} type="button" className="w-full h-auto flex-col whitespace-normal px-1" onClick={actions[action.id]}>
+          <Button key={action.id} type="button" className="h-auto flex-col whitespace-normal px-1" onClick={actions[action.id]}>
             <action.icon size={18} aria-hidden="true" />
             {action.label}
           </Button>

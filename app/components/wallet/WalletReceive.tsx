@@ -44,7 +44,7 @@ export function WalletReceive({ address, chainLabel, symbol, notify }: WalletRec
         </svg>
       </div>
       <p className="wallet-receive-address">{address}</p>
-      <Button type="button" className="w-full" onClick={() => void copyAddress()}>
+      <Button type="button" onClick={() => void copyAddress()}>
         {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? 'Copied' : 'Copy address'}
       </Button>
     </section>

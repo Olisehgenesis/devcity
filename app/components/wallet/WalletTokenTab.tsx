@@ -146,14 +146,14 @@ export function WalletTokenTab({ address, pinProtected, unlockedKey, handle, han
             <div className="wallet-unlock">
               <p>Unlock to launch your profile token.</p>
               <UnlockSecret id="wallet-token-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-              <Button className="w-full" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+              <Button disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
                 <KeyRound size={16} /> Unlock wallet
               </Button>
             </div>
           ) : (
             <>
               <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
-              <Button className="w-full" disabled={launching || Boolean(networkFee.error)} onClick={() => void handleLaunch()}>
+              <Button disabled={launching || Boolean(networkFee.error)} onClick={() => void handleLaunch()}>
                 {launching ? 'Launching…' : `Launch ${handleTicker} token`}
               </Button>
             </>

@@ -313,7 +313,7 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
               <Button type="button" variant="outline" onClick={() => setRetrySession((attempt) => attempt + 1)}>Try again</Button>
             </div>
           )}
-          <Button type="button" className="w-full" onClick={onOpenWallet}><Wallet size={17} /> Open wallet to sign in</Button>
+          <Button type="button" onClick={onOpenWallet}><Wallet size={17} /> Open wallet to sign in</Button>
           <DevTestAccountPanel onChanged={() => setRetrySession((attempt) => attempt + 1)} />
         </div>
       ) : (
@@ -335,7 +335,7 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
           </header>
           {verified && <p className="profile-verify-note">You verify once. This account keeps that check.</p>}
           {!verified && verifyConfigured && (
-            <Button type="button" className="w-full" onClick={() => void startVerification()} disabled={startingVerify}>
+            <Button type="button" onClick={() => void startVerification()} disabled={startingVerify}>
               {startingVerify ? 'Preparing Self…' : 'Get verified'}
             </Button>
           )}
@@ -446,7 +446,7 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
             </span>
             <span aria-hidden="true">→</span>
           </Button>
-          <Button type="button" variant="outline" className="w-full" disabled={signingOut} onClick={() => void signOut()}>
+          <Button type="button" variant="outline" disabled={signingOut} onClick={() => void signOut()}>
             {signingOut ? 'Signing out…' : 'Sign out'}
           </Button>
         </div>

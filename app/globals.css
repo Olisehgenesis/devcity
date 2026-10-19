@@ -4614,23 +4614,6 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   background: var(--surface);
 }
 .dev-test-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.dev-test-account button {
-  width: auto;
-  flex: 1;
-  height: 48px;
-  min-height: 48px;
-  margin: 0;
-  padding: 0 16px;
-  border: 1px solid #7a6580;
-  border-radius: 10px;
-  background: #d01265;
-  color: #fff;
-  box-shadow: none;
-  font-size: 16px;
-  font-weight: 800;
-}
-.dev-test-actions button:last-child { background: var(--paper); color: #1a1028; }
-.dev-test-account button:active:not(:disabled) { scale: 0.98; }
 .dev-test-account [role="alert"] { color: var(--danger); }
 
 /* One action size. The 4px slab sits in reserved space, so a press never leaves the button. */

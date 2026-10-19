@@ -513,7 +513,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
           <div className="drop-sheet-content create-drop-gate">
             <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
             <p className="drop-sheet-copy">Create a passkey wallet to publish drops to the city map.</p>
-            <Button type="button" className="w-full" onClick={() => { close(); onNeedWallet?.(); }}>Open wallet</Button>
+            <Button type="button" onClick={() => { close(); onNeedWallet?.(); }}>Open wallet</Button>
           </div>
         ) : (
           <>
@@ -548,7 +548,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 {location && <p className="create-drop-place"><MapPin size={14} /> {location.name}</p>}
                 {locationError && <p className="you-error" role="alert">{locationError}</p>}
                 <div className="create-drop-actions flex-col">
-                  <Button type="button" className="w-full" disabled={!canContinueLocation} onClick={() => setStep('token')}>
+                  <Button type="button" disabled={!canContinueLocation} onClick={() => setStep('token')}>
                     Continue <ArrowRight size={16} />
                   </Button>
                 </div>
@@ -564,7 +564,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                   <div className="create-drop-empty">
                     <strong>No tokens found on this wallet.</strong>
                     <p>Add Celo Sepolia funds or import an ERC-20 in your wallet, then come back to drop it.</p>
-                    <Button type="button" variant="outline" className="w-full" onClick={() => { close(); onNeedWallet?.(); }}>Open wallet</Button>
+                    <Button type="button" variant="outline" onClick={() => { close(); onNeedWallet?.(); }}>Open wallet</Button>
                   </div>
                 ) : (
                   <ul className="create-drop-token-list">
@@ -586,8 +586,8 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                   </ul>
                 )}
                 <div className="create-drop-actions flex-col">
-                  <Button type="button" variant="outline" className="w-full" onClick={() => setStep('location')}><ArrowLeft size={16} /> Back</Button>
-                  <Button type="button" className="w-full" disabled={!selectedToken} onClick={() => setStep('amount')}>Continue <ArrowRight size={16} /></Button>
+                  <Button type="button" variant="outline" onClick={() => setStep('location')}><ArrowLeft size={16} /> Back</Button>
+                  <Button type="button" disabled={!selectedToken} onClick={() => setStep('amount')}>Continue <ArrowRight size={16} /></Button>
                 </div>
               </div>
             )}
@@ -612,8 +612,8 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 {amountNum > 0 && <p className="create-drop-total">Total to allocate: <strong>{totalAllocated.toLocaleString(undefined, { maximumFractionDigits: 6 })} {selectedToken.symbol}</strong> · {chainLabel}</p>}
                 {amountError && <p className="you-error" role="alert">{amountError}</p>}
                 <div className="create-drop-actions flex-col">
-                  <Button type="button" variant="outline" className="w-full" onClick={() => setStep('token')}><ArrowLeft size={16} /> Back</Button>
-                  <Button type="button" className="w-full" disabled={!amountValid} onClick={() => setStep('review')}>Review <ArrowRight size={16} /></Button>
+                  <Button type="button" variant="outline" onClick={() => setStep('token')}><ArrowLeft size={16} /> Back</Button>
+                  <Button type="button" disabled={!amountValid} onClick={() => setStep('review')}>Review <ArrowRight size={16} /></Button>
                 </div>
               </div>
             )}
@@ -644,15 +644,15 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 {publishState === 'success' && (
                   <div className="create-drop-success">
                     <p>Your drop is live on the map.</p>
-                    <Button type="button" className="w-full" onClick={close}>Back to the city</Button>
+                    <Button type="button" onClick={close}>Back to the city</Button>
                   </div>
                 )}
                 {publishState === 'error' && <p className="you-error" role="alert">{publishError}</p>}
 
                 {publishState !== 'success' && (
                   <div className="create-drop-actions flex-col">
-                    <Button type="button" variant="outline" className="w-full" onClick={() => setStep('amount')}><ArrowLeft size={16} /> Back</Button>
-                    <Button type="button" className="w-full" disabled={publishing || publishState === 'pending' || Boolean(publishFee.error)} onClick={() => void publish()}>
+                    <Button type="button" variant="outline" onClick={() => setStep('amount')}><ArrowLeft size={16} /> Back</Button>
+                    <Button type="button" disabled={publishing || publishState === 'pending' || Boolean(publishFee.error)} onClick={() => void publish()}>
                       <Gift size={16} /> {publishing ? 'Publishing…' : 'Publish drop'}
                     </Button>
                   </div>

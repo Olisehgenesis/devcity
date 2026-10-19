@@ -101,7 +101,7 @@ export function LeaderboardSheet({ open, onClose }: LeaderboardSheetProps) {
           <Button
             type="button"
             variant={lbOptIn ? 'outline' : 'default'}
-            className="mt-2.5 w-full"
+            className="mt-2.5"
             onClick={async () => {
               const { listLocalWallets } = await import('@/lib/keystore');
               const address = (await listLocalWallets())[0]?.address;

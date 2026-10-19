@@ -153,7 +153,7 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
           <>
             <label className="wallet-field-label" htmlFor="wallet-keystore-passphrase">Passphrase for keystore file</label>
             <input id="wallet-keystore-passphrase" type="password" className="you-passphrase" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} placeholder="Choose a passphrase" autoComplete="new-password" />
-            <Button variant="outline" className="w-full" disabled={exporting || !passphrase} onClick={() => void handleExport()}>
+            <Button variant="outline" disabled={exporting || !passphrase} onClick={() => void handleExport()}>
               {exporting ? 'Writing…' : 'Download encrypted keystore file'}
             </Button>
           </>
@@ -175,10 +175,10 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
             <p className="you-note">Importing keystore for {keystoreFile.address.slice(0, 8)}…{keystoreFile.address.slice(-6)}.</p>
             <label className="wallet-field-label" htmlFor="wallet-keystore-import-passphrase">Passphrase for this keystore file</label>
             <input id="wallet-keystore-import-passphrase" type="password" className="you-passphrase" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} placeholder="Enter the passphrase" autoComplete="current-password" />
-            <Button className="w-full" disabled={importing || !passphrase} onClick={() => void confirmImport()}>
+            <Button disabled={importing || !passphrase} onClick={() => void confirmImport()}>
               {importing ? 'Importing…' : 'Import this wallet'}
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => { setKeystoreFile(null); setPassphrase(''); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setKeystoreFile(null); setPassphrase(''); }}>Cancel</Button>
           </div>
         )}
       </div>

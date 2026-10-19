@@ -454,7 +454,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               {usernameStatus === 'error' && 'Could not check availability. Try again.'}
             </p>
             <Button
-              className="w-full"
               disabled={authAction !== null || usernameStatus !== 'available'}
               onClick={() => void handleRegister()}
             >
@@ -462,7 +461,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             </Button>
             <Button
               variant="outline"
-              className="w-full"
               disabled={authAction !== null}
               onClick={() => {
                 setShowSignup(false);
@@ -478,7 +476,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           <>
             <p className="you-sheet-lede">Sign in to unlock balances, transfers and wallet security.</p>
             <Button
-              className="w-full"
               disabled={authAction !== null}
               onClick={async () => {
                 setError('');
@@ -502,7 +499,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
             </Button>
             <Button
               variant="outline"
-              className="w-full"
               disabled={authAction !== null}
               onClick={() => {
                 setError('');
@@ -535,10 +531,10 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           Set a 6-digit PIN to encrypt your new wallet on this device.
         </p>
         <PinBoxes id="wallet-register-pin" value={pin} onChange={setPin} />
-        <Button className="w-full" disabled={pin.length !== 6} onClick={handleCreateWallet}>
+        <Button disabled={pin.length !== 6} onClick={handleCreateWallet}>
           Create wallet
         </Button>
-        <Button type="button" variant="outline" className="w-full" onClick={() => { void leaveAccount(); }}>Sign out</Button>
+        <Button type="button" variant="outline" onClick={() => { void leaveAccount(); }}>Sign out</Button>
         {error && <p className="you-error">{error}</p>}
         <p className="you-note">The 6-digit PIN protects this device copy and is weaker if someone obtains its data. There’s no recovery phrase; if forgotten, this wallet can’t be unlocked.</p>
       </div>
@@ -555,13 +551,12 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           Enter your 6-digit wallet PIN to decrypt the backup and restore this wallet to this device.
         </p>
         <PinBoxes id="wallet-restore-pin" value={pin} onChange={setPin} />
-        <Button className="w-full" disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
+        <Button disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
           {backupSaving ? 'Restoring…' : 'Restore wallet'}
         </Button>
-        <Button type="button" variant="outline" className="w-full" disabled={backupSaving} onClick={() => { void leaveAccount(); }}>Sign out</Button>
+        <Button type="button" variant="outline" disabled={backupSaving} onClick={() => { void leaveAccount(); }}>Sign out</Button>
         <Button
           variant="outline"
-          className="w-full"
           disabled={backupSaving}
           onClick={() => { setRestoreAddress(null); setPhase('registering'); setPin(''); setError(''); }}
         >
@@ -588,7 +583,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         {backupSaving && <p className="you-note">Encrypting and uploading…</p>}
         {backupDone && <p className="you-note">Encrypted backup saved. You can now sign in on any device.</p>}
         <Button
-          className="w-full"
           disabled={backupSaving || !wallet?.backupConsent}
           onClick={() => { setPhase('ready'); }}
         >
@@ -835,7 +829,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           <section className="wallet-settings-block">
             <h3>Your data</h3>
             <p className="you-note">Download the profile, posts, tips, and claims stored for this wallet.</p>
-            <Button type="button" variant="outline" className="w-full" disabled={exporting} onClick={() => void downloadExport()}>
+            <Button type="button" variant="outline" disabled={exporting} onClick={() => void downloadExport()}>
               {exporting ? 'Preparing…' : 'Download my data'}
             </Button>
           </section>
