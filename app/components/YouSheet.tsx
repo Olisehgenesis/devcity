@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Bell, CalendarDays, Check, ImagePlus, KeyRound, Shuffle, Wallet, X } from 'lucide-react';
+import { Bell, CalendarDays, Check, ImagePlus, Shuffle, Wallet, X } from 'lucide-react';
 import { Sheet } from './Sheet';
 import type { SelfLegacyQrConfig } from './SelfLegacyQr';
 import { clearSelfCheck, rememberSelfCheck, selfCheckPending } from '../lib/self-check';
@@ -301,7 +301,7 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
         <p className="you-note">Loading your profile…</p>
       ) : !sessionUser ? (
         <div className="profile-auth-gate">
-          <div className="profile-gate-art"><KeyRound size={29} strokeWidth={2.5} /></div>
+          <img className="app-art" src="/assets/app/key.svg" alt="" width={104} height={78} />
           <div className="profile-gate-copy">
             <span className="profile-gate-kicker">YOUR DEVCITY ACCOUNT</span>
             <h3>Your profile starts here</h3>

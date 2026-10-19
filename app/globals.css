@@ -13,7 +13,7 @@
   --brand-accent: #e45700;
   --ink: #1a1028;
   --ink-2: #120a1c;
-  --muted: oklch(0.97 0 0);
+  --muted: #5c4a62;
   --danger: #9b1c3c;
   --ok: #0f6b4c;
   --map-base: #fff1f6;
@@ -41,8 +41,8 @@
   --shadow-chunky: 0 6px 0 rgba(26, 16, 40, .16);
   --radius-lg: 30px;
   --radius-md: 18px;
-  --font-display: var(--font-nunito), "Nunito", "Avenir Next", system-ui, sans-serif;
-  --font-body: var(--font-dm), "DM Sans", "Avenir Next", system-ui, sans-serif;
+  --font-display: var(--font-inter), -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Segoe UI", sans-serif;
+  --font-body: var(--font-inter), -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Segoe UI", sans-serif;
   color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -94,8 +94,8 @@
   --color-accent: #e45700;
   --radius-game: 30px;
   --radius-tile: 18px;
-  --font-display: var(--font-nunito), "Nunito", "Avenir Next", system-ui, sans-serif;
-  --font-body: var(--font-dm), "DM Sans", "Avenir Next", system-ui, sans-serif;
+  --font-display: var(--font-inter), -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Segoe UI", sans-serif;
+  --font-body: var(--font-inter), -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Segoe UI", sans-serif;
 }
 
 html, body { margin: 0; min-height: 100%; height: 100%; }
@@ -2467,6 +2467,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   pointer-events: none;
 }
 .outside-panel {
+  position: relative;
   pointer-events: auto;
   width: min(410px, 100%);
   padding: 30px 28px 24px;
@@ -2476,6 +2477,12 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   box-shadow: var(--shadow-card);
   text-align: center;
   animation: card-in .26s cubic-bezier(.23, 1, .32, 1) both;
+}
+.app-art {
+  display: block;
+  width: 88px;
+  height: auto;
+  margin: 0 auto 14px;
 }
 .outside-pin {
   display: grid;
@@ -2506,7 +2513,20 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 }
 .outside-cta:hover { transform: translateY(-1px); filter: brightness(1.08); }
 .outside-cta:active { transform: scale(.98); }
-.outside-dismiss { margin-top: 13px; padding: 7px 12px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.prompt-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #7a6580;
+  border-radius: 10px;
+  background: #fff;
+  color: #1a1028;
+}
+.outside-dismiss { margin-top: 13px; padding: 7px 12px; color: #5c4a62; font-size: 12px; font-weight: 700; }
 .outside-dismiss:hover { color: var(--ink); }
 .location-panel .outside-pin { background: var(--coral); }
 .location-panel .outside-cta:disabled { cursor: wait; opacity: .7; }
@@ -4739,7 +4759,7 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   border-radius: 999px;
   background: #00987f;
   color: #1a1028;
-  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-family: var(--font-body);
   font-weight: 800;
   letter-spacing: 0.02em;
 }

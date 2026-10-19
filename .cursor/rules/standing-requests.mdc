@@ -1,0 +1,23 @@
+---
+description: Standing product requests. Check this before starting a new task so earlier instructions are not dropped.
+alwaysApply: true
+---
+
+# Standing requests
+
+Finish the item the user just named before starting another. If a new message arrives mid-task, keep the unfinished items on this list and do them in the same turn when they are small.
+
+## Keep
+
+- Location prompt has a Close control that only dismisses it. Body text uses muted `#5C4A62`. Titles use ink `#1A1028`.
+- `--muted` stays `#5C4A62`. Do not let a component library replace it with a near-white token.
+- UI text uses Inter, with SF Pro and Roboto only as fallbacks. Do not load Geist, Nunito, or DM Sans back in.
+- Action buttons are the shared `Button`. They size to the label. They are 44px tall. They do not stretch across the page.
+- People map markers stay as they are. Events, drops, and places are the sticker drawings with a tail, not pins or badges.
+- Hero art (profile key, location compass, outside-Mumbai city) comes from `public/assets/app/`. Do not put those drawings back inside a circle or colored tile.
+
+## Always
+
+- Light UI. Brand pink `#D01265` with white text, teal `#00987F` and orange `#E45700` with ink text.
+- Verify a UI change in the running app before calling it done.
+- When a product change is finished, commit only that change, push `master`, and rebuild. Do not print the server address or any secret.

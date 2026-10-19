@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowLeft, Heart, KeyRound, MapPin, MessageCircle, Paperclip, Radio, Search, Send } from 'lucide-react';
+import { ArrowLeft, Heart, MapPin, MessageCircle, Paperclip, Radio, Search, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
@@ -500,7 +500,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
           <FriendDesk open={open} />
           {shouldConnectPasskeyInbox ? (
             <div className="xmtp-state xmtp-passkey-state">
-              <span className="xmtp-state-icon"><KeyRound size={21} /></span>
+              <img className="app-art" src="/assets/app/key.svg" alt="" width={88} height={66} />
               <strong>Open your encrypted inbox</strong>
               {inboxWalletLoading ? (
                 <p>Checking your passkey wallet on this device…</p>

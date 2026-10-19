@@ -1,0 +1,17 @@
+{
+  "author": "DEVCITY 26",
+  "style": "Chunky sticker. Hard ink shadow offset 6px, paper edge, brand fills. No pin, circle, badge, or label.",
+  "colors": {
+    "primary": "#D01265",
+    "secondary": "#00987F",
+    "accent": "#E45700",
+    "ink": "#1A1028",
+    "paper": "#FFF6FA"
+  },
+  "assets": [
+    { "file": "key.svg", "role": "Profile sign-in and inbox", "size": "104x78" },
+    { "file": "compass.svg", "role": "Location prompt", "size": "88x96" },
+    { "file": "city.svg", "role": "Outside Mumbai prompt", "size": "104x84" }
+  ],
+  "provenance": "Hand-drawn SVG in this repo. Not copied from an icon library."
+}

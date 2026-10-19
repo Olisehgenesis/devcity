@@ -62,7 +62,7 @@ export function eventMarkerSvg({ title, category, selected = false }: EventMarke
     `<g class="event-label" pointer-events="none">`,
     `<path d="M22 -6 L22 19" stroke="#1A1028" stroke-width="2" stroke-linecap="round"/>`,
     `<rect x="${labelX.toFixed(1)}" y="-30" width="${labelWidth.toFixed(1)}" height="24" rx="12" fill="#FFF6FA" stroke="#1A1028" stroke-width="1.5"/>`,
-    `<text x="22" y="-13.5" text-anchor="middle" font-family="Inter, 'DM Sans', system-ui, sans-serif" font-size="11" font-weight="800" fill="#1A1028" letter-spacing="-0.01em">${label}</text>`,
+    `<text x="22" y="-13.5" text-anchor="middle" font-family="Inter, -apple-system, Roboto, system-ui, sans-serif" font-size="11" font-weight="800" fill="#1A1028" letter-spacing="-0.01em">${label}</text>`,
     `</g>`,
     `<circle class="event-pin-ring" cx="22" cy="32" r="19.5" fill="none" stroke="#1A1028" stroke-width="2" opacity="0"/>`,
     `<path d="M22 58 C 15 47, 6 44, 6 32 A 16 16 0 1 1 38 32 C 38 44, 29 47, 22 58 Z" fill="#FFF6FA" stroke="#1A1028" stroke-width="2" stroke-linejoin="round"/>`,

@@ -1784,10 +1784,9 @@ export default function CityHome() {
       {outsidePromptOpen && locationState === "outside" && (
         <div className="outside-overlay" role="dialog" aria-modal="true" aria-labelledby="outside-title">
           <div className="outside-panel">
-            <span className="outside-pin"><MapPin size={20} /></span>
-            <p className="outside-kicker">DEVCITY 26</p>
+            <img className="app-art" src="/assets/app/city.svg" alt="" width={104} height={84} />
             <h2 id="outside-title">You’re outside Mumbai</h2>
-            <p>DEVCITY 26 is currently live in Mumbai. You can still look around the city and see what&apos;s happening.</p>
+            <p>The live map is Mumbai. You can still look around.</p>
             <Button type="button" onClick={exploreMumbai}>Show Mumbai</Button>
             <button className="outside-dismiss" onClick={() => setOutsidePromptOpen(false)}>Stay here</button>
           </div>
@@ -1796,14 +1795,16 @@ export default function CityHome() {
       {locationPromptOpen && locationSharing && (locationState === "denied" || locationState === "unavailable" || locationState === "timeout") && (
         <div className="outside-overlay location-overlay" role="dialog" aria-modal="true" aria-labelledby="location-title">
           <div className="outside-panel location-panel">
-            <span className="outside-pin"><LocateFixed size={20} /></span>
-            <p className="outside-kicker">YOUR LOCATION STAYS PRIVATE</p>
-            <h2 id="location-title">{locationState === "denied" ? "Location isn’t on" : locationState === "timeout" ? "Location timed out" : "No position yet"}</h2>
+            <button type="button" className="prompt-close" onClick={() => setLocationPromptOpen(false)} aria-label="Close">
+              <X size={18} />
+            </button>
+            <img className="app-art" src="/assets/app/compass.svg" alt="" width={88} height={96} />
+            <h2 id="location-title">{locationState === "denied" ? "Location is off" : locationState === "timeout" ? "That reading timed out" : "No position yet"}</h2>
             <p>{locationState === "denied"
-              ? "Allow location for this site in your browser settings, then try again. Your exact location stays on your device and is never shown to other people."
+              ? "Turn it on for this site, then try again."
               : locationState === "timeout"
-                ? "Location is already on. This reading timed out before a position arrived. Try again. Your exact location is never shown to other people."
-                : "This device could not find a position. Try again. Your exact location is never shown to other people."}</p>
+                ? "Location is on. Try the reading again."
+                : "This device didn’t return a position."}</p>
             <Button type="button" onClick={requestLocation} disabled={requestingLocation}>
               {requestingLocation ? "Checking location…" : "Try location again"}
             </Button>
@@ -1814,7 +1815,7 @@ export default function CityHome() {
       {dropSheetOpen && selected?.kind === "drop" && (
         <Sheet open={dropSheetOpen} onClose={() => { setDropSheetOpen(false); if (window.location.pathname.startsWith("/drop/")) window.history.back(); }} eyebrow={selectedIsTest ? "TEST" : "Live drop"} title={claimView.state === "success" ? "Claimed" : selected.name}>
           <div className="drop-sheet-content">
-            <div className="drop-sheet-art"><img src="/assets/original/drop-crate.svg" alt="" width={72} height={72} /><i /><i /><i /></div>
+            <img className="app-art" src="/assets/original/drop-crate.svg" alt="" width={88} height={88} />
             <p className="drop-sheet-amount">{selected.amount} <span>{tokenFor(selected)}</span></p>
             {selectedIsTest && <p className="prototype-note">TEST drop. This is not real data and nothing can be claimed.</p>}
             <p className={`claim-flow-status is-${claimView.state}`} role={claimView.state === "failed" ? "alert" : "status"}>{claimView.title}</p>
