@@ -651,6 +651,12 @@ export async function getAvatarSettings(userAddress: string) {
   };
 }
 
+function avatarMode(mode?: string) {
+  const value = (mode ?? 'DICEBEAR').toUpperCase();
+  if (value === 'UPLOAD' || value === 'INITIALS' || value === 'DICEBEAR') return value;
+  return 'DICEBEAR';
+}
+
 export async function setAvatarSettings(input: {
   userAddress: string;
   mode?: string;
@@ -662,12 +668,12 @@ export async function setAvatarSettings(input: {
     where: { userId: user.id },
     create: {
       userId: user.id,
-      mode: (input.mode ?? 'DICEBEAR') as any,
+      mode: avatarMode(input.mode) as 'DICEBEAR' | 'INITIALS' | 'UPLOAD',
       seed: input.seed ?? null,
       imageData: input.imageData ?? null,
     },
     update: {
-      mode: input.mode ? (input.mode as any) : undefined,
+      mode: input.mode ? avatarMode(input.mode) as 'DICEBEAR' | 'INITIALS' | 'UPLOAD' : undefined,
       seed: input.seed !== undefined ? input.seed : undefined,
       imageData: input.imageData !== undefined ? input.imageData : undefined,
     },

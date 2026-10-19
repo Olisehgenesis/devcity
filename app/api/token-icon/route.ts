@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createPublicClient, http, isAddress, getAddress, type Address } from 'viem';
 import { celo } from 'viem/chains';
 import { CELO_SEPOLIA, CHAIN } from '@/lib/chain';
+import { originalAvatarSvg } from '@/lib/original-avatar';
+import { prisma } from '@/lib/prisma';
 
 const CELO_SEPOLIA_ID = CELO_SEPOLIA.chainId;
 
@@ -10,7 +12,7 @@ const PROFILE_FACTORY_ABI = [
 ] as const;
 
 const ERC20_META_ABI = [
-  { type: 'function', name: 'symbol', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'name', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
 ] as const;
 
 function clientFor(chainId: number) {
@@ -20,15 +22,37 @@ function clientFor(chainId: number) {
   });
 }
 
-/** Deterministic profile icon SVG for a token. */
-function tokenIconSvg(symbol: string, address: string): string {
-  const colors = ['#111', '#E6FF3A', '#00E5FF', '#FF5CA8', '#9B5CFF', '#FFB020'];
-  const hash = address.slice(2, 8);
-  let sum = 0;
-  for (const ch of hash) sum += parseInt(ch, 16);
-  const bg = colors[sum % colors.length];
-  const letter = (symbol.replace(/[^A-Za-z0-9]/g, '') || 'T').slice(0, 1).toUpperCase();
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" rx="26" fill="${bg}"/><text x="60" y="78" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="#0B0B0B">${letter}</text></svg>`;
+function uploadedImage(data: string): { body: Uint8Array; type: string } | null {
+  const base64 = data.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/);
+  if (base64) {
+    return { body: Buffer.from(base64[2], 'base64'), type: base64[1] };
+  }
+  const svg = data.match(/^data:image\/svg\+xml(?:;charset=utf-8)?,(.+)$/);
+  if (!svg) return null;
+  return { body: Buffer.from(decodeURIComponent(svg[1]), 'utf8'), type: 'image/svg+xml' };
+}
+
+async function profileSeed(owner: Address, tokenName: string) {
+  try {
+    const user = await prisma.user.findFirst({
+      where: { walletAddress: { equals: owner, mode: 'insensitive' } },
+      include: { avatarSettings: true, profile: true },
+    });
+    const settings = user?.avatarSettings;
+    if (settings?.mode === 'UPLOAD' && settings.imageData) {
+      const image = uploadedImage(settings.imageData);
+      if (image) return image;
+    }
+    const seed = (settings?.mode !== 'UPLOAD' ? settings?.seed : null)
+      || user?.profile?.displayName
+      || user?.name
+      || user?.username
+      || tokenName
+      || owner;
+    return { body: Buffer.from(originalAvatarSvg(seed), 'utf8'), type: 'image/svg+xml' };
+  } catch {
+    return { body: Buffer.from(originalAvatarSvg(tokenName || owner), 'utf8'), type: 'image/svg+xml' };
+  }
 }
 
 export async function GET(request: Request) {
@@ -41,42 +65,45 @@ export async function GET(request: Request) {
   const addressParam = search.get('address');
   const ownerParam = search.get('owner');
 
-  let address: Address | null = null;
+  let token: Address | null = null;
+  let owner: Address | null = ownerParam && isAddress(ownerParam) ? getAddress(ownerParam) : null;
   if (addressParam && isAddress(addressParam)) {
-    address = getAddress(addressParam);
-  } else if (ownerParam && isAddress(ownerParam)) {
+    token = getAddress(addressParam);
+  } else if (owner) {
     const resolved = await client.readContract({
       address: CELO_SEPOLIA.profileTokenFactory as Address,
       abi: PROFILE_FACTORY_ABI,
       functionName: 'getUserToken',
-      args: [getAddress(ownerParam) as Address],
+      args: [owner],
     });
     if (resolved.toLowerCase() !== '0x0000000000000000000000000000000000000000') {
-      address = getAddress(resolved);
+      token = getAddress(resolved);
     }
   }
 
-  if (!address) {
+  if (!token && !owner) {
     return new NextResponse('Not found', { status: 404 });
   }
 
   try {
-    let symbol = '';
-    try {
-      symbol = (await client.readContract({
-        address,
-        abi: ERC20_META_ABI,
-        functionName: 'symbol',
-      })) as string;
-    } catch {
-      // Fall back to a letter derived from the address when symbol read fails.
+    let tokenName = '';
+    if (token) {
+      try {
+        tokenName = (await client.readContract({
+          address: token,
+          abi: ERC20_META_ABI,
+          functionName: 'name',
+        })) as string;
+      } catch {
+        tokenName = '';
+      }
     }
-    const svg = tokenIconSvg(symbol, address);
-    return new NextResponse(svg, {
+    const image = await profileSeed(owner ?? token!, tokenName);
+    return new NextResponse(Buffer.from(image.body), {
       status: 200,
       headers: {
-        'Content-Type': 'image/svg+xml',
-        'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400',
+        'Content-Type': image.type,
+        'Cache-Control': 'public, max-age=60',
         'Access-Control-Allow-Origin': '*',
       },
     });

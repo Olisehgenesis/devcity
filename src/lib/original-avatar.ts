@@ -12,7 +12,7 @@ function hashSeed(seed: string): number {
 }
 
 /** Original geometric avatar. It does not call Dicebear or any other avatar brand. */
-export function originalAvatarDataUri(seed: string): string {
+export function originalAvatarSvg(seed: string): string {
   const hash = hashSeed(seed || 'devcity');
   const ground = COLORS[hash % 3];
   const accent = COLORS[(hash >>> 3) % 3];
@@ -25,6 +25,9 @@ export function originalAvatarDataUri(seed: string): string {
   const mouth = (hash >>> 9) % 2 === 0
     ? `<path d="M32 50c4 5 12 5 16 0" fill="none" stroke="${INK}" stroke-width="2.5" stroke-linecap="round"/>`
     : `<path d="M33 52h14" stroke="${INK}" stroke-width="2.5" stroke-linecap="round"/>`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="28" fill="${ground}"/><circle cx="40" cy="42" r="22" fill="${PAPER}" stroke="${INK}" stroke-width="3"/>${eyes}${mouth}<circle cx="62" cy="18" r="8" fill="${accent}" stroke="${INK}" stroke-width="2.5"/></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><rect width="80" height="80" rx="28" fill="${ground}"/><circle cx="40" cy="42" r="22" fill="${PAPER}" stroke="${INK}" stroke-width="3"/>${eyes}${mouth}<circle cx="62" cy="18" r="8" fill="${accent}" stroke="${INK}" stroke-width="2.5"/></svg>`;
+}
+
+export function originalAvatarDataUri(seed: string): string {
+  return `data:image/svg+xml,${encodeURIComponent(originalAvatarSvg(seed))}`;
 }

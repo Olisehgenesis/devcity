@@ -22,18 +22,6 @@ function clientFor(chainId: number) {
   });
 }
 
-/** Deterministic, server-generated profile icon (SVG data URI) for a token. */
-function tokenIconDataUri(symbol: string, address: string): string {
-  const colors = ['#111', '#E6FF3A', '#00E5FF', '#FF5CA8', '#9B5CFF', '#FFB020'];
-  const hash = address.slice(2, 8);
-  let sum = 0;
-  for (const ch of hash) sum += parseInt(ch, 16);
-  const bg = colors[sum % colors.length];
-  const letter = (symbol.replace(/[^A-Za-z0-9]/g, '') || 'T').slice(0, 1).toUpperCase();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" rx="26" fill="${bg}"/><text x="60" y="78" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="52" font-weight="800" text-anchor="middle" fill="#0B0B0B">${letter}</text></svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
-}
-
 export async function GET(request: Request) {
   const search = new URL(request.url).searchParams;
   const addressParam = search.get('address');
@@ -74,7 +62,7 @@ export async function GET(request: Request) {
       decimals: dec,
       totalSupply: rawSupply.toString(),
       totalSupplyFormatted: formattedSupply,
-      icon: tokenIconDataUri(symbol as string, address),
+      icon: `/api/token-icon?address=${address}&chainId=${chainId}`,
       holderBalance: holder && balance != null ? (balance as bigint).toString() : null,
       holderBalanceFormatted: holder && balance != null ? Number(balance as bigint) / 10 ** dec : null,
       fetchedAt: new Date().toISOString(),

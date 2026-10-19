@@ -129,6 +129,21 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
     const allowed = saved === 'auto' || saved === 'CELO' || fees.some((fee) => fee.symbol === saved);
     setFeeSymbol(allowed ? saved : 'auto');
   }, [chainId, fees]);
+
+  useEffect(() => {
+    if (!addr) return;
+    const mode = avatarMode === 'upload' ? 'UPLOAD' : avatarMode === 'initials' ? 'INITIALS' : 'DICEBEAR';
+    void fetch('/api/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userAddress: addr,
+        avatarMode: mode,
+        avatarSeed,
+        avatarImageData: avatarMode === 'upload' ? avatarImageData : null,
+      }),
+    });
+  }, [addr, avatarImageData, avatarMode, avatarSeed]);
   const handle = normalizeUsername(username) ?? normalizeUsername(user?.name ?? '') ?? 'city-explorer';
 
   useEffect(() => {
