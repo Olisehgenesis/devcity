@@ -149,9 +149,11 @@ interface WalletTokenToolsProps {
   /** Limit this panel to one job. Omit it to keep the in-panel Assets / Profile token switch. */
   focus?: 'assets' | 'profile' | 'trade';
   onSelectImported?: (token: ImportedWalletToken, balanceLabel: string, valueLabel: string) => void;
+  /** Increments when the wallet asks this panel to open token import. */
+  importSignal?: number;
 }
 
-export function WalletTokenTools({ wallet, username, assetChainId, assetChainLabel, unlockedKey, onUnlockKey, onTokensChange, notify, focus, onSelectImported }: WalletTokenToolsProps) {
+export function WalletTokenTools({ wallet, username, assetChainId, assetChainLabel, unlockedKey, onUnlockKey, onTokensChange, notify, focus, onSelectImported, importSignal = 0 }: WalletTokenToolsProps) {
   const [tab, setTab] = useState<'assets' | 'profile-token'>('assets');
   const [tokens, setTokens] = useState<ImportedWalletToken[]>([]);
   const [balances, setBalances] = useState<Record<string, bigint>>({});
@@ -175,6 +177,10 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
   const [transactionHash, setTransactionHash] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (importSignal > 0) setImportOpen(true);
+  }, [importSignal]);
 
   const normalizedUsername = useMemo(
     () => username.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase() || 'CITY',

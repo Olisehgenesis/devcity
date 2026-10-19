@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { useBalance, useReadContract } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -27,8 +26,9 @@ import { ERC20_ABI } from '@/lib/chain';
 import type { Hex, Address } from 'viem';
 import { removeImportedWalletToken, type ImportedWalletToken } from '@/lib/wallet-assets';
 import { WalletTradeTab } from './wallet/WalletTradeTab';
-import { WalletOverview } from './wallet/WalletOverview';
 import { WalletHome } from './wallet/WalletHome';
+import { WalletShell, type WalletNav } from './wallet/WalletShell';
+import { WalletDashboard } from './wallet/WalletDashboard';
 import { WalletCityTab } from './wallet/WalletCityTab';
 import { WalletSendTab } from './wallet/WalletSendTab';
 import { WalletTipTab } from './wallet/WalletTipTab';
@@ -58,17 +58,19 @@ type WalletScreen =
   | { id: 'profile' }
   | { id: 'token'; token: HeldTokenView }
   | { id: 'settings' }
-  | { id: 'activity' };
+  | { id: 'activity' }
+  | { id: 'drops' };
 
 interface PasskeyWalletProps {
   onSessionChange?: (user: SessionUser | null) => void;
   onSessionReady?: () => void;
   onNotify?: (message: string) => void;
+  onClose?: () => void;
   onCreateDrop?: () => void;
   browserWallet?: { address: string; onDisconnect: () => void } | null;
 }
 
-export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCreateDrop, browserWallet }: PasskeyWalletProps) {
+export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClose, onCreateDrop, browserWallet }: PasskeyWalletProps) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>('signed-out');
@@ -83,7 +85,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupDone, setBackupDone] = useState(false);
   const [screen, setScreen] = useState<WalletScreen>({ id: 'home' });
-  const [homePane, setHomePane] = useState<'money' | 'city'>('money');
+  const [importSignal, setImportSignal] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [restoreAddress, setRestoreAddress] = useState<string | null>(null);
 
@@ -418,12 +420,18 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   }
 
   if (sessionLoading) {
-    return <p className="you-note">Loading your identity…</p>;
+    return (
+      <div className="wallet-auth-frame">
+        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
+        <p className="you-note">Loading your identity…</p>
+      </div>
+    );
   }
 
   if (!user) {
     return (
       <div className="you-connect wallet-auth-gate">
+        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
         {showSignup ? (
           <div className="profile-signup-form">
             <p className="you-sheet-lede">Choose your DEVCITY handle. Create a passkey now, then set a PIN for this wallet.</p>
@@ -527,6 +535,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   if (phase === 'registering') {
     return (
       <div className="you-connect wallet-auth-gate">
+        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
         <p className="you-sheet-lede">
           Set a 6-digit PIN to encrypt your new wallet on this device.
         </p>
@@ -544,6 +553,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   if (phase === 'restore') {
     return (
       <div className="you-connect wallet-auth-gate">
+        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
         <p className="you-sheet-lede">
           We found an encrypted backup for <strong>{restoreAddress?.slice(0, 8)}…{restoreAddress?.slice(-6)}</strong> on your account.
         </p>
@@ -570,6 +580,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   if (phase === 'backup-required') {
     return (
       <div className="you-connect wallet-auth-gate">
+        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
         <p className="you-sheet-lede">
           Your wallet is ready. Back it up so you can restore it on another device.
         </p>
@@ -596,24 +607,34 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   const celoKnown = celoBalance != null;
   const celoAmount = celoKnown ? Number(celoBalance.value) / 10 ** celoBalance.decimals : null;
   const celoLabel = celoAmount != null ? celoAmount.toFixed(4) : '';
-  const balanceLoading = holdingStatus.CELO === 'loading' && holdingStatus.USDT === 'loading' && holdingStatus.USDC === 'loading';
   const pricedHoldings = [
     celoAmount != null && usdPrices.CELO != null ? celoAmount * usdPrices.CELO : null,
     stableBalances.USDT != null && usdPrices.USDT != null ? stableBalances.USDT * usdPrices.USDT : null,
     stableBalances.USDC != null && usdPrices.USDC != null ? stableBalances.USDC * usdPrices.USDC : null,
     stableBalances.cUSD != null && usdPrices.cUSD != null ? stableBalances.cUSD * usdPrices.cUSD : null,
-  ].filter((value): value is number => value != null && value > 0);
+  ].filter((value): value is number => value != null);
   const usdBalance = pricedHoldings.length > 0 ? formatUsd(pricedHoldings.reduce((sum, value) => sum + value, 0)) : null;
+  const balanceLoading = usdBalance == null && holdingStatus.CELO === 'loading';
   const explorerBase = ACTIVE_CHAIN.blockExplorers?.default.url;
-  const backBar = (title: string) => (
-    <div className="wallet-backbar">
-      <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={() => { setScreen({ id: 'home' }); setError(''); }} aria-label="Back">
-        <ArrowLeft size={16} />
-      </Button>
-      <h2>{title}</h2>
-    </div>
-  );
-
+  const availableBySymbol: Record<string, string | null> = {
+    CELO: holdingStatus.CELO === 'ready' && celoLabel ? celoLabel : null,
+    USDT: stableBalances.USDT != null ? stableBalances.USDT.toFixed(2) : null,
+    USDC: stableBalances.USDC != null ? stableBalances.USDC.toFixed(2) : null,
+    cUSD: stableBalances.cUSD != null ? stableBalances.cUSD.toFixed(4) : null,
+  };
+  const accountName = wallet?.name || user?.name || 'Wallet';
+  const accountDetail = wallet ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}` : '';
+  const flow = screen.id === 'send' || screen.id === 'tip' || screen.id === 'receive' || screen.id === 'token' || screen.id === 'profile';
+  const nav: WalletNav = screen.id === 'activity' || screen.id === 'swap' || screen.id === 'settings' || screen.id === 'drops' ? screen.id : 'home';
+  const pageTitle = screen.id === 'token' ? screen.token.symbol
+    : screen.id === 'send' || screen.id === 'tip' ? 'Send'
+    : screen.id === 'receive' ? 'Receive'
+    : screen.id === 'swap' ? 'Swap'
+    : screen.id === 'profile' ? 'Profile token'
+    : screen.id === 'settings' ? 'Settings'
+    : screen.id === 'activity' ? 'Activity'
+    : screen.id === 'drops' ? 'Badges & drops'
+    : 'Wallet';
   async function downloadExport() {
     if (!wallet) return;
     setExporting(true);
@@ -637,71 +658,104 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
     }
   }
 
+  if (!wallet) {
+    return (
+      <div className="wallet-auth-frame">
+        {onClose && <Button type="button" variant="outline" onClick={onClose}>Close</Button>}
+        <p className="you-note">Preparing your wallet…</p>
+      </div>
+    );
+  }
+
+  const holdings = (presentation: 'summary' | 'table') => (
+    <WalletHome
+      presentation={presentation}
+      celoBalance={celoLabel}
+      stableBalances={stableBalances}
+      holdingStatus={holdingStatus}
+      onRetryHolding={retryHolding}
+      usdPrices={usdPrices}
+      profileToken={profileToken}
+      profileLoading={profileLoading}
+      onOpenToken={(token) => setScreen({ id: 'token', token })}
+      onOpenProfile={() => setScreen({ id: 'profile' })}
+    >
+      <WalletTokenTools
+        wallet={wallet}
+        username={user.name ?? ''}
+        assetChainId={chainId}
+        assetChainLabel={chainLabel}
+        unlockedKey={unlockedKey}
+        onUnlockKey={(key) => setUnlockedKey(key)}
+        onTokensChange={onImportedTokensChange}
+        notify={onNotify}
+        focus="assets"
+        importSignal={importSignal}
+        onSelectImported={(token, balanceLabel) => setScreen({
+          id: 'token',
+          token: {
+            kind: 'imported',
+            symbol: token.symbol,
+            name: token.name,
+            balance: balanceLabel,
+            contract: token.address,
+            sendToken: `CUSTOM:${token.address}`,
+          },
+        })}
+      />
+    </WalletHome>
+  );
+
   return (
-    <div className="wallet-screen">
-      {screen.id === 'home' && wallet && (
-        <>
-          <WalletOverview
-            chainLabel={chainLabel}
-            name={wallet.name}
-            address={wallet.address}
-            celoBalance={celoLabel}
-            usdBalance={usdBalance}
-            balanceLoading={balanceLoading && !usdBalance && !celoLabel}
-            onSend={() => setScreen({ id: 'send' })}
-            onReceive={() => setScreen({ id: 'receive' })}
-            onSwap={() => setScreen({ id: 'swap' })}
-            onDrop={() => onCreateDrop?.()}
-            onActivity={() => setScreen({ id: 'activity' })}
-            onSettings={() => setScreen({ id: 'settings' })}
-            onSignOut={() => { void leaveAccount(); }}
-          />
-          <div className="wallet-segment" role="tablist" aria-label="Wallet sections">
-            <button type="button" role="tab" aria-selected={homePane === 'money'} className={homePane === 'money' ? 'is-active' : ''} onClick={() => setHomePane('money')}>Money</button>
-            <button type="button" role="tab" aria-selected={homePane === 'city'} className={homePane === 'city' ? 'is-active' : ''} onClick={() => setHomePane('city')}>Badges & drops</button>
-          </div>
-          {homePane === 'city' ? <WalletCityTab address={wallet.address} /> : (
-          <WalletHome
-            celoBalance={celoLabel}
-            stableBalances={stableBalances}
-            holdingStatus={holdingStatus}
-            onRetryHolding={retryHolding}
-            usdPrices={usdPrices}
-            profileToken={profileToken}
-            profileLoading={profileLoading}
-            onOpenToken={(token) => setScreen({ id: 'token', token })}
-            onOpenProfile={() => setScreen({ id: 'profile' })}
-          >
-            <WalletTokenTools
-              wallet={wallet}
-              username={user.name ?? ''}
-              assetChainId={chainId}
-              assetChainLabel={chainLabel}
-              unlockedKey={unlockedKey}
-              onUnlockKey={(key) => setUnlockedKey(key)}
-              onTokensChange={onImportedTokensChange}
-              notify={onNotify}
-              focus="assets"
-              onSelectImported={(token, balanceLabel, valueLabel) => setScreen({
-                id: 'token',
-                token: {
-                  kind: 'imported',
-                  symbol: token.symbol,
-                  name: token.name,
-                  balance: `${balanceLabel} · ${valueLabel}`,
-                  contract: token.address,
-                  sendToken: `CUSTOM:${token.address}`,
-                },
-              })}
+    <WalletShell
+      nav={nav}
+      title={pageTitle}
+      subtitle={screen.id === 'home' ? 'Your tokens, your control.' : undefined}
+      flow={flow}
+      accountName={accountName}
+      accountDetail={accountDetail}
+      chainLabel={chainLabel}
+      address={wallet.address}
+      onNavigate={(next) => { setError(''); setScreen({ id: next }); }}
+      onBack={() => { setError(''); setScreen({ id: 'home' }); }}
+      onClose={onClose}
+      onSignOut={() => { void leaveAccount(); }}
+    >
+      {screen.id === 'home' && (
+        <WalletDashboard
+          usdBalance={usdBalance}
+          balanceLoading={balanceLoading}
+          nativeBalance={celoLabel}
+          nativeLoading={holdingStatus.CELO === 'loading'}
+          nativeError={holdingStatus.CELO === 'error'}
+          onRetryNative={() => retryHolding('CELO')}
+          onSend={() => setScreen({ id: 'send' })}
+          onReceive={() => setScreen({ id: 'receive' })}
+          onSwap={() => setScreen({ id: 'swap' })}
+          moreItems={[
+            { id: 'activity', label: 'Activity', onClick: () => setScreen({ id: 'activity' }) },
+            { id: 'drops', label: 'Badges & drops', onClick: () => setScreen({ id: 'drops' }) },
+            { id: 'add', label: 'Add token', onClick: () => setImportSignal((value) => value + 1) },
+            ...(onCreateDrop ? [{ id: 'create-drop', label: 'Create a drop', onClick: () => onCreateDrop() }] : []),
+            { id: 'settings', label: 'Settings', onClick: () => setScreen({ id: 'settings' }) },
+          ]}
+          summary={holdings('summary')}
+          table={holdings('table')}
+          activity={(
+            <WalletActivity
+              address={wallet.address}
+              chainLabel={chainLabel}
+              explorerBase={explorerBase}
+              compact
+              limit={4}
+              onViewAll={() => setScreen({ id: 'activity' })}
             />
-          </WalletHome>
           )}
-        </>
+        />
       )}
 
-      {(screen.id === 'send' || screen.id === 'tip') && wallet && (
+      {(screen.id === 'send' || screen.id === 'tip') && (
         <>
-          {backBar(screen.id === 'tip' ? 'Tip' : 'Send')}
           <div className="wallet-segment" role="tablist" aria-label="Send or tip">
             <button type="button" role="tab" aria-selected={screen.id === 'send'} className={screen.id === 'send' ? 'is-active' : ''} onClick={() => setScreen({ id: 'send', token: screen.id === 'send' ? screen.token : undefined })}>Send</button>
             <button type="button" role="tab" aria-selected={screen.id === 'tip'} className={screen.id === 'tip' ? 'is-active' : ''} onClick={() => setScreen({ id: 'tip' })}>Tip</button>
@@ -716,6 +770,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               feeSymbol={feeSymbol}
               setFeeSymbol={setFeeSymbol}
               initialToken={screen.token}
+              chainLabel={chainLabel}
+              availableBySymbol={availableBySymbol}
               notify={onNotify}
             />
           ) : (
@@ -731,16 +787,12 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         </>
       )}
 
-      {screen.id === 'receive' && wallet && (
-        <>
-          {backBar('Receive')}
-          <WalletReceive address={wallet.address} chainLabel={chainLabel} symbol={screen.symbol} notify={onNotify} />
-        </>
+      {screen.id === 'receive' && (
+        <WalletReceive address={wallet.address} chainLabel={chainLabel} symbol={screen.symbol} notify={onNotify} />
       )}
 
-      {screen.id === 'swap' && wallet && (
+      {screen.id === 'swap' && (
         <>
-          {backBar('Swap')}
           <section className="wallet-swap-block">
             <h3>Profile token</h3>
             <p className="you-note">Signs with this passkey wallet.</p>
@@ -764,9 +816,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         </>
       )}
 
-      {screen.id === 'profile' && wallet && (
+      {screen.id === 'profile' && (
         <>
-          {backBar('Profile token')}
           <WalletTokenTools
             wallet={wallet}
             username={user.name ?? ''}
@@ -781,11 +832,11 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         </>
       )}
 
-      {screen.id === 'token' && wallet && (
+      {screen.id === 'token' && (
         <>
-          {backBar(screen.token.symbol)}
           <WalletTokenDetail
             token={screen.token}
+            chainLabel={chainLabel}
             explorerBase={explorerBase}
             balanceLoading={
               (screen.token.symbol === 'CELO' && holdingStatus.CELO === 'loading')
@@ -801,20 +852,34 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               setScreen({ id: 'home' });
               onNotify?.(`${screen.token.symbol} removed from this list.`);
             } : undefined}
+            activity={(
+              <WalletActivity
+                address={wallet.address}
+                chainLabel={chainLabel}
+                explorerBase={explorerBase}
+                symbol={screen.token.symbol}
+              />
+            )}
           />
         </>
       )}
 
-      {screen.id === 'activity' && wallet && (
-        <>
-          {backBar('Activity')}
-          <WalletActivity address={wallet.address} />
-        </>
+      {screen.id === 'activity' && (
+        <WalletActivity address={wallet.address} chainLabel={chainLabel} explorerBase={explorerBase} />
       )}
 
-      {screen.id === 'settings' && wallet && (
+      {screen.id === 'drops' && (
+        <WalletCityTab address={wallet.address} explorerBase={explorerBase} onCreateDrop={onCreateDrop} />
+      )}
+
+      {screen.id === 'settings' && (
         <>
-          {backBar('Settings')}
+          <section className="wdash-card wset-account">
+            <h2>Connected account</h2>
+            <p>{accountName}</p>
+            <p>{chainLabel}</p>
+            <p className="wallet-receive-address">{wallet.address}</p>
+          </section>
           <WalletSecurityTab
             wallet={wallet}
             unlockedKey={unlockedKey}
@@ -846,6 +911,6 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
       )}
 
       {error && <p className="you-error" role="alert">{error}</p>}
-    </div>
+    </WalletShell>
   );
 }

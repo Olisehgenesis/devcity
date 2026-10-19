@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowLeft } from 'lucide-react';
 
 interface SheetProps {
@@ -10,17 +11,24 @@ interface SheetProps {
   eyebrow?: string;
   /** Page fills the screen and goes back from the header. Vault is a tall sheet. */
   size?: 'default' | 'vault' | 'page';
+  /** The child draws its own header and close control. */
+  bare?: boolean;
   children: ReactNode;
 }
 
-export function Sheet({ open, onClose, title, eyebrow, size = 'default', children }: SheetProps) {
+export function Sheet({ open, onClose, title, eyebrow, size = 'default', bare = false, children }: SheetProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -64,19 +72,20 @@ export function Sheet({ open, onClose, title, eyebrow, size = 'default', childre
 
   const page = size === 'page';
 
-  return (
+  const dialog = (
     <div className={page ? 'sheet-backdrop is-page' : 'sheet-backdrop'} onClick={page ? undefined : onClose}>
       <div
         ref={dialogRef}
-        className={page ? 'sheet sheet-page' : size === 'vault' ? 'sheet sheet-vault' : 'sheet'}
+        className={`${page ? 'sheet sheet-page' : size === 'vault' ? 'sheet sheet-vault' : 'sheet'}${bare ? ' sheet-bare' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
         tabIndex={-1}
       >
-        {page ? null : <div className="sheet-handle" />}
-        <div className="sheet-head">
+        {bare ? <h2 id={titleId} className="sheet-bare-title">{title}</h2> : null}
+        {page || bare ? null : <div className="sheet-handle" />}
+        {bare ? null : <div className="sheet-head">
           {page ? (
             <button className="sheet-back" onClick={onClose} aria-label="Back">
               <ArrowLeft size={20} />
@@ -93,9 +102,12 @@ export function Sheet({ open, onClose, title, eyebrow, size = 'default', childre
               </svg>
             </button>
           )}
-        </div>
+        </div>}
         <div className="sheet-body">{children}</div>
       </div>
     </div>
   );
+
+  if (bare && mounted) return createPortal(dialog, document.body);
+  return dialog;
 }

@@ -33,14 +33,19 @@ interface WalletSendTabProps {
   feeSymbol: string;
   setFeeSymbol: (symbol: string) => void;
   initialToken?: string;
+  chainLabel: string;
+  availableBySymbol?: Record<string, string | null>;
   notify?: (message: string) => void;
 }
 
-export function WalletSendTab({ address, pinProtected, unlockedKey, fees, importedTokens, initialToken, notify }: WalletSendTabProps) {
+export function WalletSendTab({ address, pinProtected, unlockedKey, fees, importedTokens, initialToken, chainLabel, availableBySymbol, notify }: WalletSendTabProps) {
   const [sendTo, setSendTo] = useState('');
   const [sendAmount, setSendAmount] = useState('');
   const [sendToken, setSendToken] = useState(initialToken || 'USDT');
   const [sending, setSending] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [resolvedTo, setResolvedTo] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [hash, setHash] = useState('');
@@ -145,22 +150,95 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
     }
   }
 
+  async function openReview() {
+    if (!sendTo.trim() || !sendAmount || Number(sendAmount) <= 0) {
+      setError('Enter a recipient and an amount greater than zero.');
+      return;
+    }
+    if (sendToken !== 'CELO' && !token) {
+      setError('Select a token supported on this network.');
+      return;
+    }
+    setResolving(true);
+    setError('');
+    try {
+      const entered = sendTo.trim();
+      if (isAddress(entered)) {
+        setResolvedTo(getAddress(entered));
+      } else {
+        const resolved = await resolveRecipient(entered);
+        if (!resolved) throw new Error('Could not find that DEVCITY username.');
+        setResolvedTo(resolved.address);
+      }
+      setReviewing(true);
+    } catch (reviewError: unknown) {
+      setError(reviewError instanceof Error ? reviewError.message : 'Check the recipient and try again.');
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  const available = availableBySymbol?.[sendToken] ?? null;
+
   return (
     <section className="wallet-action-panel" aria-labelledby="wallet-send-title">
       <div className="wallet-section-heading">
-        <h3 id="wallet-send-title">Send from this wallet</h3>
+        <h3 id="wallet-send-title" className="wact-sr">Send from this wallet</h3>
       </div>
       {!effectiveKey ? (
         <div className="wallet-unlock">
           <p>Unlock to review and send a transaction.</p>
           <UnlockSecret id="wallet-send-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-          <Button disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+          <Button className="border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
           </Button>
+          {error && <p className="you-error" role="alert">{error}</p>}
+        </div>
+      ) : hash ? (
+        <div className="wsend-review" role="status">
+          <h3>Submitted</h3>
+          <p>The network has the transaction. It is not confirmed until the explorer shows it in a block.</p>
+          <p className="wallet-transaction-status">
+            <a href={`${explorer}/tx/${hash}`} target="_blank" rel="noreferrer">{hash.slice(0, 10)}…{hash.slice(-6)}</a>
+          </p>
+          <Button type="button" variant="outline" onClick={() => { setHash(''); setReviewing(false); }}>Done</Button>
+        </div>
+      ) : reviewing ? (
+        <div className="wsend-review">
+          <h3>Review</h3>
+          <dl className="wact-facts">
+            <div><dt>To</dt><dd>{resolvedTo}</dd></div>
+            <div><dt>Amount</dt><dd>{sendAmount} {sendTokenLabel}</dd></div>
+            <div><dt>Network</dt><dd>{chainLabel}</dd></div>
+          </dl>
+          <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
+          <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed.</p>
+          <div className="wsend-review-actions">
+            <Button type="button" variant="outline" disabled={sending} onClick={() => setReviewing(false)}>Back</Button>
+            <Button type="button" className="border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={sending || Boolean(networkFee.error)} onClick={() => void handleSend()}>
+              {sending ? 'Sending…' : 'Confirm'}
+            </Button>
+          </div>
+          {error && <p className="you-error" role="alert">{error}</p>}
         </div>
       ) : (
         <>
-          <label className="wallet-field-label" htmlFor="wallet-send-recipient">Recipient address</label>
+          <label className="wallet-field-label" htmlFor="wallet-send-token">Token</label>
+          <select
+            id="wallet-send-token"
+            className="you-passphrase send-token-select"
+            value={sendToken}
+            onChange={(e) => setSendToken(e.target.value)}
+          >
+            <option value="CELO">CELO</option>
+            {fees.map((fee) => <option key={fee.symbol} value={fee.symbol}>{fee.symbol}</option>)}
+            {importedTokens.map((custom) => (
+              <option key={custom.address} value={`CUSTOM:${custom.address}`}>
+                {custom.symbol} · {custom.name}
+              </option>
+            ))}
+          </select>
+          <label className="wallet-field-label" htmlFor="wallet-send-recipient">To</label>
           <input
             id="wallet-send-recipient"
             className="you-passphrase"
@@ -168,6 +246,7 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
             onChange={(e) => setSendTo(e.target.value)}
             placeholder="0x… or username"
             autoComplete="off"
+            aria-invalid={Boolean(error && !sendTo)}
           />
           <label className="wallet-field-label" htmlFor="wallet-send-amount">Amount</label>
           <div className="wallet-send-amount-row">
@@ -178,31 +257,33 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
               onChange={(e) => setSendAmount(e.target.value)}
               placeholder="0.00"
               inputMode="decimal"
+              aria-invalid={Boolean(error && (!sendAmount || Number(sendAmount) <= 0))}
             />
-            <select
-              className="send-token-select"
-              value={sendToken}
-              onChange={(e) => setSendToken(e.target.value)}
-              aria-label="Token to send"
-            >
-              <option value="CELO">CELO</option>
-              {fees.map((fee) => <option key={fee.symbol} value={fee.symbol}>{fee.symbol}</option>)}
-              {importedTokens.map((customToken) => (
-                <option key={customToken.address} value={`CUSTOM:${customToken.address}`}>
-                  {customToken.symbol} · {customToken.name}
-                </option>
-              ))}
-            </select>
+            <span className="wsend-unit">{sendTokenLabel}</span>
           </div>
+          <p className="wsend-available">
+            {available ? <>Available {available} {sendTokenLabel}</> : 'Available balance still loading, or this token has no balance yet.'}
+            <button
+              type="button"
+              disabled={!available}
+              onClick={() => { if (available) setSendAmount(available); }}
+            >
+              Max
+            </button>
+          </p>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
-          <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed. Gas is paid in CELO when you have it, otherwise USDT, then USDC, then another fee currency you hold.</p>
-          <Button disabled={sending || !sendTo || !sendAmount || Boolean(networkFee.error)} onClick={() => void handleSend()}>
-            {sending ? 'Sending…' : `Send ${sendTokenLabel}`}
+          <p className="wallet-send-caution">Gas is paid in CELO when you have it, otherwise USDT, then USDC, then another fee currency you hold.</p>
+          <Button
+            type="button"
+            className="border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]"
+            disabled={resolving || !sendTo || !sendAmount}
+            onClick={() => void openReview()}
+          >
+            {resolving ? 'Checking…' : 'Continue'}
           </Button>
+          {error && <p className="you-error" role="alert">{error}</p>}
         </>
       )}
-      {hash && <p className="wallet-transaction-status" role="status">Transaction submitted: <a href={`${explorer}/tx/${hash}`} target="_blank" rel="noreferrer">{hash.slice(0, 10)}…</a></p>}
-      {error && <p className="you-error" role="alert">{error}</p>}
     </section>
   );
 }

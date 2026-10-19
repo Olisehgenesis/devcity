@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ArrowDownLeft, ArrowUpRight, ExternalLink, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ActivityItem {
   id: string;
@@ -8,26 +10,79 @@ interface ActivityItem {
   amount?: string;
   tokenSymbol?: string;
   counterparty?: string;
+  counterpartyAddress?: string;
   dropName?: string;
   tokenName?: string;
   status?: string;
   txHash?: string | null;
+  message?: string;
   createdAt: string;
 }
 
 const LABELS: Record<string, string> = {
-  tip_sent: 'Tip sent',
-  tip_received: 'Tip received',
-  claim: 'Drop claimed',
+  tip_sent: 'Sent',
+  tip_received: 'Received',
+  claim: 'Claimed',
   token_created: 'Token launched',
 };
 
-export function WalletActivity({ address }: { address: string }) {
+function formatWhen(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function statusLabel(status?: string, txHash?: string | null) {
+  if (!status) return txHash ? 'Submitted' : 'Recorded';
+  const key = status.toUpperCase();
+  if (key === 'CONFIRMED' || key === 'SUCCESS') return 'Confirmed';
+  if (key === 'PENDING') return 'Pending';
+  if (key === 'FAILED' || key === 'REVERTED') return 'Failed';
+  return status;
+}
+
+function statusTone(label: string) {
+  if (label === 'Failed') return 'is-failed';
+  if (label === 'Pending') return 'is-pending';
+  if (label === 'Confirmed') return 'is-ok';
+  return '';
+}
+
+function short(value?: string | null) {
+  if (!value) return '';
+  if (value.startsWith('0x') && value.length > 12) return `${value.slice(0, 6)}…${value.slice(-4)}`;
+  return value;
+}
+
+export function WalletActivity({
+  address,
+  chainLabel,
+  explorerBase,
+  compact = false,
+  limit,
+  onViewAll,
+  symbol,
+}: {
+  address: string;
+  chainLabel?: string;
+  explorerBase?: string;
+  compact?: boolean;
+  limit?: number;
+  onViewAll?: () => void;
+  symbol?: string;
+}) {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
   const [error, setError] = useState('');
-
   const [reloadKey, setReloadKey] = useState(0);
+  const [selected, setSelected] = useState<ActivityItem | null>(null);
+  const [filter, setFilter] = useState<'all' | 'sent' | 'received' | 'claims'>('all');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -49,43 +104,128 @@ export function WalletActivity({ address }: { address: string }) {
     return () => controller.abort();
   }, [address, reloadKey]);
 
+  const filtered = items.filter((item) => {
+    if (symbol && item.tokenSymbol?.toUpperCase() !== symbol.toUpperCase()) return false;
+    if (filter === 'sent') return item.type === 'tip_sent';
+    if (filter === 'received') return item.type === 'tip_received' || item.type === 'claim';
+    if (filter === 'claims') return item.type === 'claim';
+    return true;
+  });
+  const visible = limit ? filtered.slice(0, limit) : filtered;
+
+  if (selected && !compact) {
+    const label = LABELS[selected.type] ?? selected.type;
+    const state = statusLabel(selected.status, selected.txHash);
+    const explorer = selected.txHash && explorerBase ? `${explorerBase}/tx/${selected.txHash}` : null;
+    const outbound = selected.type === 'tip_sent';
+    return (
+      <section className="wallet-activity wact-detail" aria-labelledby="wallet-activity-detail-title">
+        <Button type="button" variant="outline" onClick={() => setSelected(null)}>Back to activity</Button>
+        <h3 id="wallet-activity-detail-title">{label}</h3>
+        <p className="wact-amount">
+          {selected.amount ? `${selected.amount} ` : ''}{selected.tokenSymbol ?? selected.tokenName ?? ''}
+        </p>
+        <dl className="wact-facts">
+          <div><dt>Status</dt><dd><span className={`wact-status ${statusTone(state)}`}>{state}</span></dd></div>
+          <div><dt>When</dt><dd>{formatWhen(selected.createdAt)}</dd></div>
+          {chainLabel && <div><dt>Network</dt><dd>{chainLabel}</dd></div>}
+          <div><dt>{outbound ? 'To' : 'From'}</dt><dd>{short(selected.counterpartyAddress) || selected.counterparty || selected.dropName || '—'}</dd></div>
+          <div><dt>{outbound ? 'From' : 'To'}</dt><dd>{short(address)}</dd></div>
+          {selected.txHash && <div><dt>Transaction</dt><dd>{short(selected.txHash)}</dd></div>}
+          {selected.message && <div><dt>Note</dt><dd>{selected.message}</dd></div>}
+          {state === 'Failed' && <div><dt>What happened</dt><dd>This claim did not confirm. It was not added to your balance.</dd></div>}
+        </dl>
+        {explorer && (
+          <a className="wallet-token-explorer" href={explorer} target="_blank" rel="noreferrer">
+            View on explorer <ExternalLink size={13} />
+          </a>
+        )}
+      </section>
+    );
+  }
+
   return (
-    <section className="wallet-activity" aria-labelledby="wallet-activity-title">
-      <h3 id="wallet-activity-title">Activity</h3>
-      <p className="you-note">Tips, claims, and tokens recorded for this wallet. Profile activity on your city profile stays separate.</p>
+    <section className="wallet-activity" aria-labelledby={compact ? undefined : 'wallet-activity-title'}>
+      {!compact && <h3 id="wallet-activity-title" className="wact-sr">Activity</h3>}
+      {!compact && (
+        <div className="wact-filters" role="tablist" aria-label="Activity filter">
+          {([
+            ['all', 'All'],
+            ['sent', 'Sent'],
+            ['received', 'Received'],
+            ['claims', 'Claims'],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={filter === id}
+              className={filter === id ? 'is-active' : ''}
+              onClick={() => setFilter(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {status === 'loading' && (
         <ul className="wallet-activity-list" aria-hidden="true">
           <li><span className="balance-skeleton balance-skeleton-lg" /></li>
           <li><span className="balance-skeleton balance-skeleton-lg" /></li>
-          <li><span className="balance-skeleton" /></li>
         </ul>
       )}
       {error && (
         <p className="you-error" role="alert">
-          {error} <button type="button" className="wallet-retry" onClick={() => setReloadKey((value) => value + 1)}>Retry</button>
+          {error}{' '}
+          <button type="button" className="wallet-retry" onClick={() => setReloadKey((value) => value + 1)}>Retry</button>
         </p>
       )}
-      {status === 'empty' && <p className="you-note">No recorded activity yet. Claims and tips will show up here.</p>}
-      {status === 'ready' && (
+      {status === 'empty' && <p className="wact-empty">No recorded activity yet. Sends, tips, and claims will show up here.</p>}
+      {status === 'ready' && visible.length === 0 && (
+        <p className="wact-empty">{symbol ? `No recorded activity for ${symbol}.` : 'Nothing in this filter.'}</p>
+      )}
+      {status === 'ready' && visible.length > 0 && (
         <ul className="wallet-activity-list">
-          {items.map((item) => (
-            <li key={`${item.type}-${item.id}`}>
-              <span>
-                <strong>{LABELS[item.type] ?? item.type}</strong>
-                <small>
-                  {item.counterparty ? `${item.counterparty} · ` : ''}
-                  {item.dropName ? `${item.dropName} · ` : ''}
-                  {item.tokenName ? `${item.tokenName} · ` : ''}
-                  {item.status ? `${item.status} · ` : ''}
-                  {new Date(item.createdAt).toLocaleString()}
-                </small>
-              </span>
-              <strong>
-                {item.amount ? `${item.amount} ` : ''}{item.tokenSymbol ?? ''}
-              </strong>
-            </li>
-          ))}
+          {visible.map((item) => {
+            const label = LABELS[item.type] ?? item.type;
+            const state = statusLabel(item.status, item.txHash);
+            const inbound = item.type === 'tip_received' || item.type === 'claim';
+            const Icon = item.type === 'token_created' ? Sparkles : inbound ? ArrowDownLeft : ArrowUpRight;
+            const detail = [
+              item.counterparty,
+              item.dropName,
+              item.tokenName && item.type === 'token_created' ? item.tokenName : '',
+              formatWhen(item.createdAt),
+            ].filter(Boolean).join(' · ');
+            const body = (
+              <>
+                <span className={`wact-icon${inbound ? ' is-in' : ''}`} aria-hidden="true"><Icon size={16} /></span>
+                <span className="wact-copy">
+                  <strong>{label}{item.tokenSymbol ? ` ${item.tokenSymbol}` : ''}</strong>
+                  <small>{detail}</small>
+                </span>
+                <span className="wact-side">
+                  <strong>{item.amount ? `${inbound ? '+' : '−'}${item.amount}` : ''}</strong>
+                  <small className={`wact-status ${statusTone(state)}`}>{state}</small>
+                </span>
+              </>
+            );
+            return (
+              <li key={`${item.type}-${item.id}`}>
+                {compact ? (
+                  <div className="wact-row">{body}</div>
+                ) : (
+                  <button type="button" className="wact-row" onClick={() => setSelected(item)}>
+                    {body}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
+      )}
+      {compact && onViewAll && (
+        <button type="button" className="wact-viewall" onClick={onViewAll}>View all</button>
       )}
     </section>
   );

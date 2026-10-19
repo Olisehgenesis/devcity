@@ -16,8 +16,9 @@ export function WalletSheet({ open, onClose, notify, onCreateDrop }: WalletSheet
   const { disconnect } = useDisconnect();
 
   return (
-    <Sheet open={open} onClose={onClose} title="Wallet" size="page">
+    <Sheet open={open} onClose={onClose} title="Wallet" size="page" bare>
       <PasskeyWallet
+        onClose={onClose}
         onNotify={notify}
         onCreateDrop={onCreateDrop}
         browserWallet={isConnected && address ? {
