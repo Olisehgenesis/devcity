@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { KeyRound } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import { createWalletClient, createPublicClient, encodeFunctionData, http, type Address, type Hex } from 'viem';
 import { writeContractWithFee, type TxRequest } from '@/lib/gas';
 import { useFeeQuote } from '../../hooks/useFeeQuote';
@@ -145,16 +146,16 @@ export function WalletTokenTab({ address, pinProtected, unlockedKey, handle, han
             <div className="wallet-unlock">
               <p>Unlock to launch your profile token.</p>
               <UnlockSecret id="wallet-token-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-              <button className="you-connect-primary" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+              <Button className="w-full" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
                 <KeyRound size={16} /> Unlock wallet
-              </button>
+              </Button>
             </div>
           ) : (
             <>
               <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
-              <button className="you-connect-primary" disabled={launching || Boolean(networkFee.error)} onClick={() => void handleLaunch()}>
+              <Button className="w-full" disabled={launching || Boolean(networkFee.error)} onClick={() => void handleLaunch()}>
                 {launching ? 'Launching…' : `Launch ${handleTicker} token`}
-              </button>
+              </Button>
             </>
           )}
         </>

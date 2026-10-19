@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import { useBalance, useReadContract } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
 import { authClient } from '@/lib/auth-client';
@@ -451,15 +453,16 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               {usernameStatus === 'invalid' && 'Use 3–24 letters, numbers, or hyphens. No spaces.'}
               {usernameStatus === 'error' && 'Could not check availability. Try again.'}
             </p>
-            <button
-              className="you-connect-primary"
+            <Button
+              className="w-full"
               disabled={authAction !== null || usernameStatus !== 'available'}
               onClick={() => void handleRegister()}
             >
               {authAction === 'register' ? 'Waiting for passkey…' : 'Continue with passkey'}
-            </button>
-            <button
-              className="you-connect-secondary"
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
               disabled={authAction !== null}
               onClick={() => {
                 setShowSignup(false);
@@ -469,13 +472,13 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               }}
             >
               Back to sign in
-            </button>
+            </Button>
           </div>
         ) : (
           <>
             <p className="you-sheet-lede">Sign in to unlock balances, transfers and wallet security.</p>
-            <button
-              className="you-connect-primary"
+            <Button
+              className="w-full"
               disabled={authAction !== null}
               onClick={async () => {
                 setError('');
@@ -496,9 +499,10 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               }}
             >
               {authAction === 'sign-in' ? 'Waiting for passkey…' : 'Sign in with passkey'}
-            </button>
-            <button
-              className="you-connect-secondary"
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
               disabled={authAction !== null}
               onClick={() => {
                 setError('');
@@ -506,7 +510,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               }}
             >
               Create an account
-            </button>
+            </Button>
           </>
         )}
         {error && <p className="you-error">{error}</p>}
@@ -517,7 +521,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
               <strong>Connected browser wallet</strong>
               <span>{browserWallet.address.slice(0, 8)}…{browserWallet.address.slice(-6)}</span>
             </div>
-            <button type="button" onClick={browserWallet.onDisconnect}>Disconnect</button>
+            <Button type="button" variant="outline" onClick={browserWallet.onDisconnect}>Disconnect</Button>
           </section>
         )}
       </div>
@@ -531,10 +535,10 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           Set a 6-digit PIN to encrypt your new wallet on this device.
         </p>
         <PinBoxes id="wallet-register-pin" value={pin} onChange={setPin} />
-        <button className="you-connect-primary" disabled={pin.length !== 6} onClick={handleCreateWallet}>
+        <Button className="w-full" disabled={pin.length !== 6} onClick={handleCreateWallet}>
           Create wallet
-        </button>
-        <button type="button" className="you-disconnect" onClick={() => { void leaveAccount(); }}>Sign out</button>
+        </Button>
+        <Button type="button" variant="outline" className="w-full" onClick={() => { void leaveAccount(); }}>Sign out</Button>
         {error && <p className="you-error">{error}</p>}
         <p className="you-note">The 6-digit PIN protects this device copy and is weaker if someone obtains its data. There’s no recovery phrase; if forgotten, this wallet can’t be unlocked.</p>
       </div>
@@ -551,17 +555,18 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           Enter your 6-digit wallet PIN to decrypt the backup and restore this wallet to this device.
         </p>
         <PinBoxes id="wallet-restore-pin" value={pin} onChange={setPin} />
-        <button className="you-connect-primary" disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
+        <Button className="w-full" disabled={pin.length !== 6 || backupSaving} onClick={handleRestoreFromBackup}>
           {backupSaving ? 'Restoring…' : 'Restore wallet'}
-        </button>
-        <button type="button" className="you-disconnect" disabled={backupSaving} onClick={() => { void leaveAccount(); }}>Sign out</button>
-        <button
-          className="you-connect-secondary"
+        </Button>
+        <Button type="button" variant="outline" className="w-full" disabled={backupSaving} onClick={() => { void leaveAccount(); }}>Sign out</Button>
+        <Button
+          variant="outline"
+          className="w-full"
           disabled={backupSaving}
           onClick={() => { setRestoreAddress(null); setPhase('registering'); setPin(''); setError(''); }}
         >
           Create a new wallet instead
-        </button>
+        </Button>
         {error && <p className="you-error">{error}</p>}
       </div>
     );
@@ -582,13 +587,13 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
         </label>
         {backupSaving && <p className="you-note">Encrypting and uploading…</p>}
         {backupDone && <p className="you-note">Encrypted backup saved. You can now sign in on any device.</p>}
-        <button
-          className="you-connect-primary"
+        <Button
+          className="w-full"
           disabled={backupSaving || !wallet?.backupConsent}
           onClick={() => { setPhase('ready'); }}
         >
           Continue to wallet
-        </button>
+        </Button>
         {error && <p className="you-error">{error}</p>}
       </div>
     );
@@ -608,7 +613,9 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
   const explorerBase = ACTIVE_CHAIN.blockExplorers?.default.url;
   const backBar = (title: string) => (
     <div className="wallet-backbar">
-      <button type="button" onClick={() => { setScreen({ id: 'home' }); setError(''); }}>Back</button>
+      <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={() => { setScreen({ id: 'home' }); setError(''); }} aria-label="Back">
+        <ArrowLeft size={16} />
+      </Button>
       <h2>{title}</h2>
     </div>
   );
@@ -828,9 +835,9 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
           <section className="wallet-settings-block">
             <h3>Your data</h3>
             <p className="you-note">Download the profile, posts, tips, and claims stored for this wallet.</p>
-            <button type="button" className="you-connect-secondary" disabled={exporting} onClick={() => void downloadExport()}>
+            <Button type="button" variant="outline" className="w-full" disabled={exporting} onClick={() => void downloadExport()}>
               {exporting ? 'Preparing…' : 'Download my data'}
-            </button>
+            </Button>
           </section>
           {browserWallet && (
             <section className="external-wallet-section">
@@ -838,7 +845,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onCre
                 <strong>Connected browser wallet</strong>
                 <span>{browserWallet.address.slice(0, 8)}…{browserWallet.address.slice(-6)}</span>
               </div>
-              <button type="button" onClick={browserWallet.onDisconnect}>Disconnect</button>
+              <Button type="button" variant="outline" onClick={browserWallet.onDisconnect}>Disconnect</Button>
             </section>
           )}
         </>

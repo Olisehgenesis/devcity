@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import {
   exportEncryptedKeystore,
   downloadEncryptedKeystore,
@@ -152,9 +153,9 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
           <>
             <label className="wallet-field-label" htmlFor="wallet-keystore-passphrase">Passphrase for keystore file</label>
             <input id="wallet-keystore-passphrase" type="password" className="you-passphrase" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} placeholder="Choose a passphrase" autoComplete="new-password" />
-            <button className="you-connect-secondary" disabled={exporting || !passphrase} onClick={() => void handleExport()}>
+            <Button variant="outline" className="w-full" disabled={exporting || !passphrase} onClick={() => void handleExport()}>
               {exporting ? 'Writing…' : 'Download encrypted keystore file'}
-            </button>
+            </Button>
           </>
         )}
         <div className="wallet-keystore-import">
@@ -174,10 +175,10 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
             <p className="you-note">Importing keystore for {keystoreFile.address.slice(0, 8)}…{keystoreFile.address.slice(-6)}.</p>
             <label className="wallet-field-label" htmlFor="wallet-keystore-import-passphrase">Passphrase for this keystore file</label>
             <input id="wallet-keystore-import-passphrase" type="password" className="you-passphrase" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} placeholder="Enter the passphrase" autoComplete="current-password" />
-            <button className="you-connect-primary" disabled={importing || !passphrase} onClick={() => void confirmImport()}>
+            <Button className="w-full" disabled={importing || !passphrase} onClick={() => void confirmImport()}>
               {importing ? 'Importing…' : 'Import this wallet'}
-            </button>
-            <button className="you-connect-secondary" onClick={() => { setKeystoreFile(null); setPassphrase(''); }}>Cancel</button>
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => { setKeystoreFile(null); setPassphrase(''); }}>Cancel</Button>
           </div>
         )}
       </div>

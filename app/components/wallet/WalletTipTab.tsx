@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Heart, KeyRound } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import { encodeFunctionData, getAddress, isAddress, createWalletClient, http, parseUnits, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ERC20_ABI } from '@/lib/chain';
@@ -159,9 +160,9 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
         <div className="wallet-unlock">
           <p>Unlock to review and send a tip.</p>
           <UnlockSecret id="wallet-tip-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-          <button className="you-connect-primary" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+          <Button className="w-full" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -201,9 +202,9 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
           </div>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
           <p className="wallet-send-caution">A tip is a real transfer. Confirm the recipient address before sending. Gas is paid in CELO, then USDT, then USDC.</p>
-          <button className="you-connect-primary" disabled={tipping || !tipTo || !tipAmount || Boolean(networkFee.error)} onClick={() => void handleTip()}>
+          <Button className="w-full" disabled={tipping || !tipTo || !tipAmount || Boolean(networkFee.error)} onClick={() => void handleTip()}>
             <Heart size={16} /> {tipping ? 'Tipping…' : 'Send tip'}
-          </button>
+          </Button>
         </>
       )}
       {hash && <p className="wallet-transaction-status" role="status">Transaction submitted: <a href={`${explorer}/tx/${hash}`} target="_blank" rel="noreferrer">{hash.slice(0, 10)}…</a></p>}

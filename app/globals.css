@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 /* DEVCITY 26 — three brand colors, plus neutrals and semantic status.
    White on primary #D01265 is 5.31:1. Ink #1A1028 on secondary #00987F is 5.05:1.
@@ -9,7 +13,7 @@
   --brand-accent: #e45700;
   --ink: #1a1028;
   --ink-2: #120a1c;
-  --muted: #5c4a62;
+  --muted: oklch(0.97 0 0);
   --danger: #9b1c3c;
   --ok: #0f6b4c;
   --map-base: #fff1f6;
@@ -23,9 +27,9 @@
   --snap: var(--brand-accent);
   --paper: #fff6fa;
   --line: rgba(26, 16, 40, .14);
-  --card: #ffffff;
+  --card: oklch(1 0 0);
   --surface: #ffe8f3;
-  --ring: rgba(26, 16, 40, .14);
+  --ring: oklch(0.708 0 0);
   --street: rgba(26, 16, 40, .08);
   --street-major: rgba(26, 16, 40, .13);
   --block: rgba(26, 16, 40, .05);
@@ -40,6 +44,36 @@
   --font-display: var(--font-nunito), "Nunito", "Avenir Next", system-ui, sans-serif;
   --font-body: var(--font-dm), "DM Sans", "Avenir Next", system-ui, sans-serif;
   color-scheme: light;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: #d01265;
+  --primary-foreground: #ffffff;
+  --border: #7a6580;
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 /* Tailwind v4 theme — expose the brand palette as utility tokens */
@@ -77,9 +111,10 @@ body {
   overscroll-behavior: none;
 }
 
-button, input, select, textarea { font: inherit; color: inherit; }
-button { background: none; border: none; cursor: pointer; padding: 0; }
-a { color: inherit; text-decoration: none; }
+button:not([data-slot="button"]), input, select, textarea { font: inherit; color: inherit; }
+button:not([data-slot="button"]) { background: none; border: none; cursor: pointer; padding: 0; }
+[data-slot="button"] { cursor: pointer; }
+a:not([data-slot="button"]) { color: inherit; text-decoration: none; }
 h1, h2, h3, p { margin: 0; }
 h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-display); letter-spacing: -0.02em; }
 
@@ -649,10 +684,10 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   height: 44px;
   border-radius: 50%;
   background: var(--paper);
-  border: 1px solid var(--line);
+  border: 1px solid #7a6580;
   color: var(--ink);
-  box-shadow: var(--shadow-pop);
-  transition: transform .16s ease;
+  box-shadow: none;
+  transition: scale .12s ease;
 }
 .round-action:active { scale: 0.97; }
 
@@ -679,11 +714,11 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   height: 44px;
   margin-left: auto;
   flex: 0 0 auto;
-  border: 1px solid var(--line);
+  border: 1px solid #7a6580;
   border-radius: 50%;
   background: var(--paper);
   color: var(--ink);
-  box-shadow: var(--shadow-pop);
+  box-shadow: none;
   transition: scale .16s ease-out, background .16s ease-out;
 }
 .top-profile-button.is-active { background: var(--lime); }
@@ -1508,7 +1543,6 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   accent-color: var(--ink);
   cursor: pointer;
 }
-
 
 /* ---------- You sheet: profile ---------- */
 
@@ -3019,7 +3053,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 }
 
 .activity-card {
-  border: 3px solid #171717;
+  border: 1px solid #7a6580;
   border-radius: 16px;
   background: var(--paper);
   box-shadow: 4px 4px 0 #171717;
@@ -3135,7 +3169,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   width: 68px;
   height: 68px;
   margin: 1px auto 18px;
-  border: 3px solid #171717;
+  border: 1px solid #7a6580;
   border-radius: 19px;
   background: #fbca1f;
   color: var(--ink);
@@ -3520,7 +3554,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   width: min(420px, calc(100% - 40px));
   max-height: min(70dvh, 720px);
   overflow-y: auto;
-  border: 3px solid #171717;
+  border: 1px solid #7a6580;
   border-radius: 16px;
   background: var(--paper);
   color: var(--ink);
@@ -3694,7 +3728,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .onboarding-card {
   width: min(420px, 100%);
   padding: 28px 22px 22px;
-  border: 3px solid #171717;
+  border: 1px solid #7a6580;
   border-radius: 16px;
   background: var(--paper);
   box-shadow: 4px 4px 0 #171717;
@@ -4539,7 +4573,10 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
 
 .maplibregl-marker.map-marker.city-pin,
 .map-marker.city-pin,
-.maplibregl-marker.map-marker.event-pin-marker.city-pin {
+.maplibregl-marker.map-marker.event-pin-marker.city-pin,
+.maplibregl-marker.map-marker.city-pin.marker-event,
+.maplibregl-marker.map-marker.city-pin.marker-place,
+.maplibregl-marker.map-marker.city-pin.marker-drop {
   width: auto;
   height: auto;
   min-width: 44px;
@@ -4550,6 +4587,7 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   border: none;
   border-radius: 0;
   box-shadow: none;
+  animation: marker-pop .34s cubic-bezier(.23, 1, .32, 1) both;
 }
 .city-pin svg { display: block; overflow: visible; }
 .city-pin .event-label { opacity: 0; }
@@ -4583,28 +4621,25 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   min-height: 48px;
   margin: 0;
   padding: 0 16px;
-  border: 3px solid #171717;
+  border: 1px solid #7a6580;
   border-radius: 10px;
-  background: #fbca1f;
-  color: #171717;
-  box-shadow: 0 4px 0 #171717;
+  background: #d01265;
+  color: #fff;
+  box-shadow: none;
   font-size: 16px;
   font-weight: 800;
 }
-.dev-test-actions button:last-child { background: var(--paper); }
-.dev-test-account button:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: 0 0 0 #171717;
-}
+.dev-test-actions button:last-child { background: var(--paper); color: #1a1028; }
+.dev-test-account button:active:not(:disabled) { scale: 0.98; }
 .dev-test-account [role="alert"] { color: var(--danger); }
 
 /* One action size. The 4px slab sits in reserved space, so a press never leaves the button. */
 .push-button {
   display: block;
   width: 100%;
-  height: 52px;
+  height: 44px;
   margin: 0;
-  padding: 0 0 4px;
+  padding: 0;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -4619,18 +4654,17 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   justify-content: center;
   gap: 8px;
   width: 100%;
-  height: 48px;
+  height: 44px;
   padding: 0 16px;
-  border: 3px solid #171717;
+  border: 1px solid transparent;
   border-radius: 10px;
-  background: #fbca1f;
-  color: #171717;
+  background: #d01265;
+  color: #fff;
   font-size: 16px;
   font-weight: 800;
   transform: none;
-  transition: transform .1s ease;
 }
-.push-button:active:not(:disabled) .button_top { transform: translateY(4px); }
+.push-button:active:not(:disabled) { scale: 0.98; }
 .push-button:disabled { cursor: not-allowed; }
 .push-button:disabled .button_top { transform: none; opacity: .72; }
 
@@ -4650,24 +4684,27 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
   justify-content: center;
   gap: 8px;
   width: 100%;
-  height: 48px;
-  min-height: 48px;
-  margin: 0 0 4px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
   padding: 0 16px;
-  border: 3px solid #171717;
+  border: 1px solid transparent;
   border-radius: 10px;
-  background: #fbca1f;
-  color: #171717;
-  box-shadow: 0 4px 0 #171717;
+  background: #d01265;
+  color: #fff;
+  box-shadow: none;
   font-size: 16px;
   font-weight: 800;
   text-decoration: none;
   transform: none;
-  transition: transform .1s ease, box-shadow .1s ease;
 }
 .secondary-action,
 .tip-action,
-.you-connect-secondary:not(:has(.button_top)) { background: var(--paper); }
+.you-connect-secondary:not(:has(.button_top)) {
+  border-color: #7a6580;
+  background: #fff;
+  color: #1a1028;
+}
 .claim-button.is-claimed:not(:has(.button_top)),
 .claim-button.is-claimed .button_top { background: var(--paper); color: #171717; }
 .claim-button:not(:has(.button_top)):active:not(:disabled),
@@ -4680,8 +4717,7 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
 .tip-action:active,
 .self-qr-link:active,
 .broadcast-composer-bottom button:active {
-  transform: translateY(4px);
-  box-shadow: 0 0 0 #171717;
+  scale: 0.98;
 }
 .claim-button:disabled:not(:has(.button_top)),
 .onboarding-button:disabled:not(:has(.button_top)),
@@ -4689,7 +4725,7 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
 .you-connect-primary:disabled:not(:has(.button_top)),
 .event-card-cta:disabled:not(:has(.button_top)) {
   transform: none;
-  box-shadow: 0 4px 0 #171717;
+  box-shadow: none;
   opacity: .72;
   cursor: not-allowed;
 }
@@ -4874,4 +4910,93 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
 }
 @media (min-width: 768px) {
   .sheet { border-radius: 32px; }
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }

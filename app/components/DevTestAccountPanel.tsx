@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
 
 type Session = { username: string | null; label: string | null; testAccount: boolean } | null;
 
@@ -60,7 +61,7 @@ export function DevTestAccountPanel({ onChanged }: { onChanged: () => void }) {
       {session?.testAccount ? (
         <>
           <p>Signed in as <strong>{session.username}</strong>. This is a test account.</p>
-          <button type="button" disabled={pending} onClick={() => void submit('sign-out')}>{pending ? 'Signing out…' : 'Sign out of test account'}</button>
+          <Button type="button" className="w-full" disabled={pending} onClick={() => void submit('sign-out')}>{pending ? 'Signing out…' : 'Sign out of test account'}</Button>
         </>
       ) : (
         <>
@@ -70,8 +71,8 @@ export function DevTestAccountPanel({ onChanged }: { onChanged: () => void }) {
           <label htmlFor="dev-test-password">Password</label>
           <input id="dev-test-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
           <div className="dev-test-actions">
-            <button type="button" disabled={pending} onClick={() => void submit('sign-in')}>{pending ? 'Working…' : 'Sign in'}</button>
-            <button type="button" disabled={pending} onClick={() => void submit('sign-up')}>Create test account</button>
+            <Button type="button" className="w-full" disabled={pending} onClick={() => void submit('sign-in')}>{pending ? 'Working…' : 'Sign in'}</Button>
+            <Button type="button" variant="outline" className="w-full" disabled={pending} onClick={() => void submit('sign-up')}>Create test account</Button>
           </div>
         </>
       )}

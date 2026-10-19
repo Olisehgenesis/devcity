@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ArrowUpDown, Info, Loader2 } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import { useAccount, useWriteContract, useReadContract } from 'wagmi';
 import { encodeFunctionData, parseUnits, formatUnits, parseAbi, type Address } from 'viem';
 import { CELO_SEPOLIA, DEVCITY26_TOKEN_ABI, ERC20_ABI } from '@/lib/chain';
@@ -171,13 +172,15 @@ export function WalletTradeTab() {
     <div className="wallet-trade-tab">
       <div className="trade-header">
         <h3>Trade</h3>
-        <button
+        <Button
           onClick={() => setFromToken(isBuy ? 'DEV26' : 'USDT')}
-          className="trade-swap-direction"
+          variant="outline"
+          size="icon"
+          className="rounded-full"
           aria-label="Swap direction"
         >
           <ArrowUpDown size={16} />
-        </button>
+        </Button>
       </div>
 
       <div className="trade-inputs">
@@ -248,21 +251,21 @@ export function WalletTradeTab() {
       <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
 
       {needsApproval ? (
-        <button
+        <Button
           onClick={handleApprove}
           disabled={approving || !amount || Boolean(networkFee.error)}
-          className="trade-button trade-button-approve"
+          className="w-full"
         >
           {approving ? <Loader2 size={16} className="animate-spin" /> : 'Approve ' + inputToken}
-        </button>
+        </Button>
       ) : (
-        <button
+        <Button
           onClick={handleSwap}
           disabled={swapping || !amount || Boolean(networkFee.error)}
-          className="trade-button trade-button-swap"
+          className="w-full"
         >
           {swapping ? <Loader2 size={16} className="animate-spin" /> : `Swap ${inputToken} → ${outputToken}`}
-        </button>
+        </Button>
       )}
     </div>
   );

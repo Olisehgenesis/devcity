@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useLeaderboards, type LeaderboardEntry } from '../hooks/useLeaderboards';
 import { Sheet } from './Sheet';
 import { Trophy, Gift, Heart, UsersRound, Radio } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
 import { AvatarBubble } from './game/AvatarBubble';
 import { useGameStore } from '../lib/game-store';
@@ -97,9 +98,10 @@ export function LeaderboardSheet({ open, onClose }: LeaderboardSheetProps) {
             Leaderboards are a friendly, non-financial game. Turn them on to let other
             people see your level and badges.
           </p>
-          <button
-            className="gsheet-action"
-            style={{ marginTop: 10 }}
+          <Button
+            type="button"
+            variant={lbOptIn ? 'outline' : 'default'}
+            className="mt-2.5 w-full"
             onClick={async () => {
               const { listLocalWallets } = await import('@/lib/keystore');
               const address = (await listLocalWallets())[0]?.address;
@@ -108,7 +110,7 @@ export function LeaderboardSheet({ open, onClose }: LeaderboardSheetProps) {
             }}
           >
             {lbOptIn ? 'Turn off' : 'Turn on'}
-          </button>
+          </Button>
         </div>
       </div>
     </Sheet>

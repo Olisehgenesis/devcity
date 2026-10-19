@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowDownLeft, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import type { HeldTokenView } from './types';
 
 interface WalletTokenDetailProps {
@@ -20,8 +21,8 @@ export function WalletTokenDetail({ token, explorerBase, balanceLoading, onSend,
       <p className="wallet-token-detail-balance">{balanceLoading ? <span className="balance-skeleton balance-skeleton-lg" /> : token.balance}</p>
       <h3 id="wallet-token-detail-title">{token.name}</h3>
       <div className="wallet-token-detail-actions">
-        <button type="button" className="you-connect-primary" onClick={onSend}><ArrowUpRight size={16} /> Send</button>
-        <button type="button" className="you-connect-secondary" onClick={onReceive}><ArrowDownLeft size={16} /> Receive</button>
+        <Button type="button" className="w-full" onClick={onSend}><ArrowUpRight size={16} /> Send</Button>
+        <Button type="button" variant="outline" className="w-full" onClick={onReceive}><ArrowDownLeft size={16} /> Receive</Button>
       </div>
       {token.contract && <p className="wallet-receive-address">{token.contract}</p>}
       {explorer && (
@@ -30,9 +31,9 @@ export function WalletTokenDetail({ token, explorerBase, balanceLoading, onSend,
         </a>
       )}
       {onRemove && (
-        <button type="button" className="you-connect-secondary" onClick={onRemove}>
+        <Button type="button" variant="outline" className="w-full" onClick={onRemove}>
           Remove {token.symbol} from this list
-        </button>
+        </Button>
       )}
     </section>
   );

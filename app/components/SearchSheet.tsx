@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Calendar, Hash, MessageCircle, Radio, Search, Users, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Sheet } from './Sheet';
 import { useSearch, type SearchResult } from '../hooks/useSearch';
 
@@ -108,13 +109,14 @@ export function SearchSheet({ open, onClose, onMessageUser }: SearchSheetProps) 
                           <span>{user.walletAddress ? `${user.walletAddress.slice(0, 8)}…` : 'No wallet linked'}</span>
                         </div>
                         {user.walletAddress && onMessageUser && (
-                          <button
-                            className="search-message-button"
+                          <Button
+                            type="button"
+                            variant="outline"
                             onClick={() => onMessageUser(user.walletAddress!, user.username || user.name || '')}
                             aria-label={`Message ${user.username || user.name}`}
                           >
                             <MessageCircle size={15} /> Message
-                          </button>
+                          </Button>
                         )}
                       </li>
                     ))}

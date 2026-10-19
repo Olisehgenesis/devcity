@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { eventPhase } from '@/lib/event-phase';
 import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export interface EventCardData {
   id: string;
@@ -104,9 +105,9 @@ export function EventCard({
 
   return (
     <article className="event-card">
-      <button className="event-card-close" onClick={onClose} aria-label="Close event card">
+      <Button type="button" variant="outline" size="icon" className="absolute top-[43px] right-2.5 z-[5] rounded-full" onClick={onClose} aria-label="Close event card">
         <X size={18} />
-      </button>
+      </Button>
       <div className="event-card-body">
         <span className="profile-gate-kicker">{event.category || 'Event'}</span>
         <p className={`event-status${isLive ? ' is-live' : ''}`}>
@@ -122,20 +123,23 @@ export function EventCard({
           </p>
         )}
         {event.summary && <p className="event-card-summary">{event.summary}</p>}
-        <button
-          className={`you-connect-primary event-attendance-button${attendance ? ' is-going' : ''}`}
+        <Button
+          type="button"
+          className="w-full"
           onClick={onToggleGoing}
           disabled={!canRsvp || attendance === 'attended'}
           aria-pressed={Boolean(attendance)}
         >
           {attendance === 'attended' ? 'Marked attended' : !canRsvp ? 'Not open' : attendance === 'going' ? "You're going" : "I'm going"}
-        </button>
-        <div className="event-card-links">
+        </Button>
+        <div className="event-card-links flex-col">
           {event.url && (
-            <a className="event-page-link" href={event.url} target="_blank" rel="noopener noreferrer">Event page</a>
+            <Button asChild variant="outline" className="w-full">
+              <a href={event.url} target="_blank" rel="noopener noreferrer">Event page</a>
+            </Button>
           )}
           {event.latitude !== null && event.longitude !== null && (
-            <button type="button" className="event-page-link" onClick={onShowOnMap}>Show on map</button>
+            <Button type="button" variant="outline" className="w-full" onClick={onShowOnMap}>Show on map</Button>
           )}
         </div>
 

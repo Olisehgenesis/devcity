@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { encode } from 'uqr';
+import { Button } from "@/components/ui/button";
 
 interface WalletReceiveProps {
   address: string;
@@ -43,9 +44,9 @@ export function WalletReceive({ address, chainLabel, symbol, notify }: WalletRec
         </svg>
       </div>
       <p className="wallet-receive-address">{address}</p>
-      <button type="button" className="you-connect-primary" onClick={() => void copyAddress()}>
+      <Button type="button" className="w-full" onClick={() => void copyAddress()}>
         {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? 'Copied' : 'Copy address'}
-      </button>
+      </Button>
     </section>
   );
 }

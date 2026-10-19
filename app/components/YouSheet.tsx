@@ -7,7 +7,7 @@ import { Sheet } from './Sheet';
 import type { SelfLegacyQrConfig } from './SelfLegacyQr';
 import { clearSelfCheck, rememberSelfCheck, selfCheckPending } from '../lib/self-check';
 import { DevTestAccountPanel } from './DevTestAccountPanel';
-import { PushButton } from './PushButton';
+import { Button } from '@/components/ui/button';
 import { useCityStore, timeAgo, type AvatarMode } from '../lib/city-store';
 import { dicebearAvatarUrl } from '../lib/avatars';
 import { normalizeUsername } from '@/lib/usernames';
@@ -98,7 +98,7 @@ function AvatarControls({
     <div className="you-section avatar-settings">
       <div className="avatar-settings-heading">
         <div><h3 className="you-section-title">Your look</h3><p>Choose how you show up in the city.</p></div>
-        {mode === 'dicebear' && <button className="avatar-shuffle" onClick={shuffle} aria-label="Shuffle avatar" title="Shuffle avatar"><Shuffle size={16} /></button>}
+        {mode === 'dicebear' && <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={shuffle} aria-label="Shuffle avatar" title="Shuffle avatar"><Shuffle size={16} /></Button>}
       </div>
       <div className="avatar-choice" role="group" aria-label="Avatar style">
         <button className={mode === 'dicebear' ? 'is-selected' : ''} onClick={() => { setMode('dicebear'); if (!seed) shuffle(); }}>
@@ -310,10 +310,10 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
           {sessionError && (
             <div className="profile-session-error" role="alert">
               <p>{sessionError}</p>
-              <button onClick={() => setRetrySession((attempt) => attempt + 1)}>Try again</button>
+              <Button type="button" variant="outline" onClick={() => setRetrySession((attempt) => attempt + 1)}>Try again</Button>
             </div>
           )}
-          <PushButton className="you-connect-primary" onClick={onOpenWallet}><Wallet size={17} /> Open wallet to sign in</PushButton>
+          <Button type="button" className="w-full" onClick={onOpenWallet}><Wallet size={17} /> Open wallet to sign in</Button>
           <DevTestAccountPanel onChanged={() => setRetrySession((attempt) => attempt + 1)} />
         </div>
       ) : (
@@ -331,13 +331,13 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
               <span className="profile-account-label">{sessionUser.email?.endsWith('@test.devcity.local') ? 'Test account' : 'Here for the city.'}</span>
               {verified && <span className="profile-verified"><Check size={14} /> Verified</span>}
             </div>
-            <button className="profile-edit-avatar" onClick={() => document.querySelector<HTMLDetailsElement>('.profile-appearance-disclosure')?.setAttribute('open', '')}>Edit look</button>
+            <Button type="button" variant="outline" onClick={() => document.querySelector<HTMLDetailsElement>('.profile-appearance-disclosure')?.setAttribute('open', '')}>Edit look</Button>
           </header>
           {verified && <p className="profile-verify-note">You verify once. This account keeps that check.</p>}
           {!verified && verifyConfigured && (
-            <PushButton className="profile-verify-button" onClick={() => void startVerification()} disabled={startingVerify}>
+            <Button type="button" className="w-full" onClick={() => void startVerification()} disabled={startingVerify}>
               {startingVerify ? 'Preparing Self…' : 'Get verified'}
-            </PushButton>
+            </Button>
           )}
           {!verified && !verifyConfigured && (
             <p className="profile-verify-note">Self sends the proof to {verifyCallback}. It needs the public address https://devcity.fun/api/webhooks/self.</p>
@@ -383,9 +383,13 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
                       <small>{event.attendance === 'attended' ? 'Attended' : 'Going'}</small>
                     </div>
                     <div className="profile-event-actions">
-                      {event.attendance === 'going' && <button onClick={() => markEventAttended(event.id)}>Attended</button>}
-                      {event.url && <a href={event.url} target="_blank" rel="noreferrer" aria-label={`Open ${event.name}`}>Open</a>}
-                      <button className="profile-event-remove" onClick={() => removeSavedEvent(event.id)} aria-label={`Remove ${event.name} from my events`}><X size={14} /></button>
+                      {event.attendance === 'going' && <Button type="button" onClick={() => markEventAttended(event.id)}>Attended</Button>}
+                      {event.url && (
+                        <Button asChild variant="outline">
+                          <a href={event.url} target="_blank" rel="noreferrer" aria-label={`Open ${event.name}`}>Open</a>
+                        </Button>
+                      )}
+                      <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={() => removeSavedEvent(event.id)} aria-label={`Remove ${event.name} from my events`}><X size={14} /></Button>
                     </div>
                   </article>
                 ))}
@@ -427,18 +431,24 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
             </div>
           </details>
 
-          <button className="profile-open-wallet" onClick={onOpenNotifications}>
-            <span className="profile-open-wallet-icon"><Bell size={18} /></span>
-            <span><strong>Notifications</strong><small>Replies, follows, and drops</small></span>
-          </button>
-          <button className="profile-open-wallet" onClick={onOpenWallet}>
-            <span className="profile-open-wallet-icon"><Wallet size={18} /></span>
-            <span><strong>Open wallet</strong><small>Balances, address and security</small></span>
+          <Button type="button" variant="outline" className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3 text-left" onClick={onOpenNotifications}>
+            <Bell size={18} />
+            <span className="flex min-w-0 flex-1 flex-col items-start">
+              <strong>Notifications</strong>
+              <small className="text-xs font-medium">Replies, follows, and drops</small>
+            </span>
+          </Button>
+          <Button type="button" variant="outline" className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3 text-left" onClick={onOpenWallet}>
+            <Wallet size={18} />
+            <span className="flex min-w-0 flex-1 flex-col items-start">
+              <strong>Open wallet</strong>
+              <small className="text-xs font-medium">Balances, address and security</small>
+            </span>
             <span aria-hidden="true">→</span>
-          </button>
-          <button type="button" className="you-disconnect profile-signout" disabled={signingOut} onClick={() => void signOut()}>
+          </Button>
+          <Button type="button" variant="outline" className="w-full" disabled={signingOut} onClick={() => void signOut()}>
             {signingOut ? 'Signing out…' : 'Sign out'}
-          </button>
+          </Button>
         </div>
       )}
     </Sheet>

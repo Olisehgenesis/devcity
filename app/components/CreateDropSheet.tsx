@@ -5,6 +5,7 @@ import * as maplibregl from 'maplibre-gl';
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { ArrowLeft, ArrowRight, Gift, LocateFixed, MapPin, Search, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
   createPublicClient,
   createWalletClient,
@@ -512,7 +513,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
           <div className="drop-sheet-content create-drop-gate">
             <div className="drop-sheet-art"><span><Gift size={30} strokeWidth={2.2} /></span><i /><i /><i /></div>
             <p className="drop-sheet-copy">Create a passkey wallet to publish drops to the city map.</p>
-            <button className="claim-button" onClick={() => { close(); onNeedWallet?.(); }}>Open wallet</button>
+            <Button type="button" className="w-full" onClick={() => { close(); onNeedWallet?.(); }}>Open wallet</Button>
           </div>
         ) : (
           <>
@@ -539,17 +540,17 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 )}
                 <div className="create-drop-map-wrap">
                   <div ref={mapContainer} className="create-drop-map" aria-label="Map to choose a drop location" />
-                  <button className="create-drop-locate" onClick={useMyLocation} disabled={locating} aria-label="Use my location">
+                  <Button type="button" className="absolute right-2.5 bottom-3" onClick={useMyLocation} disabled={locating} aria-label="Use my location">
                     <LocateFixed size={16} /> {locating ? 'Locating…' : 'Use my location'}
-                  </button>
+                  </Button>
                 </div>
                 <p className="create-drop-map-hint">Tap the map or drag the green pin to set the drop location.</p>
                 {location && <p className="create-drop-place"><MapPin size={14} /> {location.name}</p>}
                 {locationError && <p className="you-error" role="alert">{locationError}</p>}
-                <div className="create-drop-actions">
-                  <button className="you-connect-primary" disabled={!canContinueLocation} onClick={() => setStep('token')}>
+                <div className="create-drop-actions flex-col">
+                  <Button type="button" className="w-full" disabled={!canContinueLocation} onClick={() => setStep('token')}>
                     Continue <ArrowRight size={16} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -563,7 +564,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                   <div className="create-drop-empty">
                     <strong>No tokens found on this wallet.</strong>
                     <p>Add Celo Sepolia funds or import an ERC-20 in your wallet, then come back to drop it.</p>
-                    <button className="you-connect-secondary" onClick={() => { close(); onNeedWallet?.(); }}>Open wallet</button>
+                    <Button type="button" variant="outline" className="w-full" onClick={() => { close(); onNeedWallet?.(); }}>Open wallet</Button>
                   </div>
                 ) : (
                   <ul className="create-drop-token-list">
@@ -584,9 +585,9 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                     ))}
                   </ul>
                 )}
-                <div className="create-drop-actions">
-                  <button className="you-connect-secondary" onClick={() => setStep('location')}><ArrowLeft size={16} /> Back</button>
-                  <button className="you-connect-primary" disabled={!selectedToken} onClick={() => setStep('amount')}>Continue <ArrowRight size={16} /></button>
+                <div className="create-drop-actions flex-col">
+                  <Button type="button" variant="outline" className="w-full" onClick={() => setStep('location')}><ArrowLeft size={16} /> Back</Button>
+                  <Button type="button" className="w-full" disabled={!selectedToken} onClick={() => setStep('amount')}>Continue <ArrowRight size={16} /></Button>
                 </div>
               </div>
             )}
@@ -596,7 +597,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 <label className="wallet-field-label" htmlFor="create-drop-amount">Amount per person · available {selectedToken.balance.toLocaleString(undefined, { maximumFractionDigits: 6 })}</label>
                 <div className="wallet-send-amount-row">
                   <input id="create-drop-amount" className="you-passphrase" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
-                  <button className="create-drop-max" onClick={() => setAmount(String(selectedToken.balance))}>MAX</button>
+                  <Button type="button" variant="outline" onClick={() => setAmount(String(selectedToken.balance))}>MAX</Button>
                 </div>
                 <div className="wallet-send-amount-row">
                   <div style={{ flex: 1 }}>
@@ -610,9 +611,9 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 </div>
                 {amountNum > 0 && <p className="create-drop-total">Total to allocate: <strong>{totalAllocated.toLocaleString(undefined, { maximumFractionDigits: 6 })} {selectedToken.symbol}</strong> · {chainLabel}</p>}
                 {amountError && <p className="you-error" role="alert">{amountError}</p>}
-                <div className="create-drop-actions">
-                  <button className="you-connect-secondary" onClick={() => setStep('token')}><ArrowLeft size={16} /> Back</button>
-                  <button className="you-connect-primary" disabled={!amountValid} onClick={() => setStep('review')}>Review <ArrowRight size={16} /></button>
+                <div className="create-drop-actions flex-col">
+                  <Button type="button" variant="outline" className="w-full" onClick={() => setStep('token')}><ArrowLeft size={16} /> Back</Button>
+                  <Button type="button" className="w-full" disabled={!amountValid} onClick={() => setStep('review')}>Review <ArrowRight size={16} /></Button>
                 </div>
               </div>
             )}
@@ -643,17 +644,17 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
                 {publishState === 'success' && (
                   <div className="create-drop-success">
                     <p>Your drop is live on the map.</p>
-                    <button className="claim-button is-claimed" onClick={close}>Back to the city</button>
+                    <Button type="button" className="w-full" onClick={close}>Back to the city</Button>
                   </div>
                 )}
                 {publishState === 'error' && <p className="you-error" role="alert">{publishError}</p>}
 
                 {publishState !== 'success' && (
-                  <div className="create-drop-actions">
-                    <button className="you-connect-secondary" onClick={() => setStep('amount')}><ArrowLeft size={16} /> Back</button>
-                    <button className="claim-button" disabled={publishing || publishState === 'pending' || Boolean(publishFee.error)} onClick={() => void publish()}>
+                  <div className="create-drop-actions flex-col">
+                    <Button type="button" variant="outline" className="w-full" onClick={() => setStep('amount')}><ArrowLeft size={16} /> Back</Button>
+                    <Button type="button" className="w-full" disabled={publishing || publishState === 'pending' || Boolean(publishFee.error)} onClick={() => void publish()}>
                       <Gift size={16} /> {publishing ? 'Publishing…' : 'Publish drop'}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { KeyRound } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import { encodeFunctionData, getAddress, isAddress, createWalletClient, http, parseUnits, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ERC20_ABI } from '@/lib/chain';
@@ -153,9 +154,9 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
         <div className="wallet-unlock">
           <p>Unlock to review and send a transaction.</p>
           <UnlockSecret id="wallet-send-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-          <button className="you-connect-primary" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+          <Button className="w-full" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -195,9 +196,9 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
           </div>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
           <p className="wallet-send-caution">Check the recipient and network carefully. Transactions can’t be reversed. Gas is paid in CELO when you have it, otherwise USDT, then USDC, then another fee currency you hold.</p>
-          <button className="you-connect-primary" disabled={sending || !sendTo || !sendAmount || Boolean(networkFee.error)} onClick={() => void handleSend()}>
+          <Button className="w-full" disabled={sending || !sendTo || !sendAmount || Boolean(networkFee.error)} onClick={() => void handleSend()}>
             {sending ? 'Sending…' : `Send ${sendTokenLabel}`}
-          </button>
+          </Button>
         </>
       )}
       {hash && <p className="wallet-transaction-status" role="status">Transaction submitted: <a href={`${explorer}/tx/${hash}`} target="_blank" rel="noreferrer">{hash.slice(0, 10)}…</a></p>}

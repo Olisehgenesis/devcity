@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ExternalLink, Heart, QrCode } from 'lucide-react';
 import { Sheet } from './Sheet';
+import { Button } from '@/components/ui/button';
 import { resolveRecipient } from '../lib/resolve-user';
 import type { TipTarget } from './TipSheet';
 
@@ -137,13 +138,14 @@ export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) 
             <strong>{scannedDropId ? 'Drop found' : scannedAddress ? 'Wallet found' : link ? 'Link found' : 'QR code found'}</strong>
             <p>{scannedAddress ?? scannedValue}</p>
             {scannedDropId && (
-              <button className="claim-button" onClick={() => onOpenDrop?.(scannedDropId)}>
+              <Button type="button" className="w-full" onClick={() => onOpenDrop?.(scannedDropId)}>
                 Open this drop
-              </button>
+              </Button>
             )}
             {scannedAddress && (
-              <button
-                className="claim-button"
+              <Button
+                type="button"
+                className="w-full"
                 onClick={() => onTip({
                   name: `Wallet ${scannedAddress.slice(0, 6)}…${scannedAddress.slice(-4)}`,
                   initials: '0X',
@@ -152,10 +154,14 @@ export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) 
                 })}
               >
                 <Heart size={16} /> Tip this wallet
-              </button>
+              </Button>
             )}
-            {link && <a className="scan-open-link" href={link} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Open link</a>}
-            <button className="scan-again" onClick={() => setScannedValue('')}>Scan another code</button>
+            {link && (
+              <Button asChild className="w-full">
+                <a href={link} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Open link</a>
+              </Button>
+            )}
+            <Button type="button" variant="outline" className="w-full" onClick={() => setScannedValue('')}>Scan another code</Button>
           </div>
         ) : (
           <>
@@ -180,7 +186,7 @@ export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) 
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <button type="submit" disabled={!manualValue.trim()}>Continue</button>
+                <Button type="submit" disabled={!manualValue.trim()}>Continue</Button>
               </div>
             </form>
             {manualError && <p className="scan-camera-error" role="status">{manualError}</p>}

@@ -24,9 +24,9 @@ import {
 } from "lucide-react";
 import { cityPinSvg } from "@/lib/city-markers";
 import { eventPhase } from "@/lib/event-phase";
+import { Button } from "@/components/ui/button";
 import { EventCard } from "./components/EventCard";
 import { DevLocationGate } from "./components/DevLocationGate";
-import { PushButton } from "./components/PushButton";
 import { PinBoxes } from "./components/PinBoxes";
 import type { DevLocationApply } from "./components/DevLocationPanel";
 import { YouSheet } from "./components/YouSheet";
@@ -207,13 +207,6 @@ function geoFailure(error: GeolocationPositionError): "denied" | "timeout" | "un
   if (error.code === error.PERMISSION_DENIED) return "denied";
   if (error.code === error.TIMEOUT) return "timeout";
   return "unavailable";
-}
-
-function MarkerIcon({ kind, size = 16 }: { kind: MarkerKind; size?: number }) {
-  if (kind === "drop") return <Gift size={size} strokeWidth={2.4} />;
-  if (kind === "person") return <UsersRound size={size} strokeWidth={2.2} />;
-  if (kind === "event") return <CalendarDays size={size} strokeWidth={2.2} />;
-  return <MapPin size={size} strokeWidth={2.2} />;
 }
 
 const CLAIM_FEE_ABI = [{
@@ -1534,19 +1527,22 @@ export default function CityHome() {
 
         <header className="topbar">
           <div className="top-actions">
-            <button className="round-action" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">
+            <Button variant="outline" size="icon" className="rounded-full" type="button" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">
               <GameIcon name="spark" size={20} />
-            </button>
-            <button
-              className={`round-action${locationSharing ? '' : ' is-location-off'}`}
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              className={`rounded-full${locationSharing ? "" : " border-[#9b1c3c] text-[#9b1c3c]"}`}
               onClick={() => void toggleLocationSharing()}
               aria-pressed={locationSharing}
-              aria-label={locationSharing ? 'Turn location off' : 'Turn location on'}
-              title={locationSharing ? 'Location is on' : 'Location is off'}
-            >{locationSharing ? <MapPin size={18} /> : <MapPinOff size={18} />}</button>
-            <button className={`top-profile-button${youOpen ? " is-active" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
-              <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" />
-            </button>
+              aria-label={locationSharing ? "Turn location off" : "Turn location on"}
+              title={locationSharing ? "Location is on" : "Location is off"}
+            >{locationSharing ? <MapPin size={18} /> : <MapPinOff size={18} />}</Button>
+            <Button variant="outline" size="icon" type="button" className={`ml-auto rounded-full overflow-hidden p-0.5${youOpen ? " bg-[#ffe8f3]" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
+              <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" className="size-full rounded-full object-cover" />
+            </Button>
           </div>
         </header>
 
@@ -1613,7 +1609,6 @@ export default function CityHome() {
         ) : (
         <article className={`activity-card ${selected.kind === "drop" ? "drop-card" : ""}`} aria-live="polite">
           <div className="card-topline">
-            <span className={`card-icon tone-${selected.color}`}><MarkerIcon kind={selected.kind} size={17} /></span>
             <span className="card-kind">{selected.kind === "drop" ? "TOKEN DROP" : selected.kind.toUpperCase()}</span>
             <button className="card-more" onClick={() => {
               if (selected.kind === "drop") {
@@ -1630,38 +1625,47 @@ export default function CityHome() {
           </div>
           <h2>{selected.name}</h2>
           <p className="card-description">{selected.detail}</p>
-          <div className="card-meta"><span><MapPin size={13} /> {selected.kind === "drop" ? (claimView.distanceM != null ? claimDistanceSentence(claimView.distanceM) : claimView.title) : selected.distance}</span>{selected.kind === "drop" && typeof selectedClaimedCount === "number" && <span className="claim-count">{selectedClaimedCount} claimed</span>}</div>
+          <div className="card-meta"><span>{selected.kind === "drop" ? (claimView.distanceM != null ? claimDistanceSentence(claimView.distanceM) : claimView.title) : selected.distance}</span>{selected.kind === "drop" && typeof selectedClaimedCount === "number" && <span className="claim-count">{selectedClaimedCount} claimed</span>}</div>
           {selected.kind === "drop" ? (
-            <button
-              className={`claim-button ${isClaimed ? "is-claimed" : ""}`}
+            <Button
+              type="button"
+              className="w-full"
               onClick={() => { closeSheets("drop"); setClaimError(""); setClaimPin(""); setDropSheetOpen(true); rememberPath(`/drop/${selected.id.replace(/^drop-/, "")}`); }}
               disabled={isClaimed || claiming}
             >
               {isClaimed ? "Added to your tokens" : "Open drop"}
-            </button>
+            </Button>
           ) : selected.kind === "person" ? (
             <div className="card-actions">
-              <a className="secondary-action" href={directionsUrl(selected)} target="_blank" rel="noreferrer" aria-label={`Walking directions to the approximate ${selected.name} map area`}>
-                <MapPin size={15} /> Walk there
-              </a>
-              <button
-                className="tip-action"
+              <Button asChild variant="outline" className="min-w-0 flex-1 shrink px-2">
+                <a href={directionsUrl(selected)} target="_blank" rel="noreferrer" aria-label={`Walking directions to the approximate ${selected.name} map area`}>
+                  Walk there
+                </a>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-w-0 flex-1 shrink px-2"
                 onClick={() => setTipTarget({ name: selected.name, initials: selected.initials ?? selected.name[0], color: selected.color })}
               >
                 <Heart size={15} /> Tip
-              </button>
-              <button className="secondary-action" onClick={() => { closeSheets("social"); setActiveTab('chat'); setSocialView('chat'); }}>
+              </Button>
+              <Button type="button" variant="outline" className="min-w-0 flex-1 shrink px-2" onClick={() => { closeSheets("social"); setActiveTab('chat'); setSocialView('chat'); }}>
                 <MessageCircle size={15} /> Say hello
-              </button>
+              </Button>
             </div>
           ) : selected.kind === "event" && selected.url ? (
-            <a className="secondary-action" href={selected.url} target="_blank" rel="noreferrer">
-              View event
-            </a>
+            <Button asChild variant="outline" className="w-full">
+              <a href={selected.url} target="_blank" rel="noreferrer">
+                View event
+              </a>
+            </Button>
           ) : (
-            <a className="secondary-action" href={directionsUrl(selected)} target="_blank" rel="noreferrer">
-              Walking directions
-            </a>
+            <Button asChild variant="outline" className="w-full">
+              <a href={directionsUrl(selected)} target="_blank" rel="noreferrer">
+                Walking directions
+              </a>
+            </Button>
           )}
           <p className="prototype-note">{selected.kind === "drop" ? claimView.title : connected ? "Ready when you are" : "Join the city to claim and tip"}</p>
         </article>))}
@@ -1771,9 +1775,9 @@ export default function CityHome() {
                   ? "This event uses the spot you pressed on the map."
                   : "This uses the spot you pressed on the map."}
             </p>
-            <PushButton className="claim-button" disabled={creatingPlace || !createName.trim()} onClick={() => void handleCreatePlace()}>
+            <Button type="button" className="w-full" disabled={creatingPlace || !createName.trim()} onClick={() => void handleCreatePlace()}>
               {creatingPlace ? <><span className="spinner" /> Creating…</> : `Create ${createKind}`}
-            </PushButton>
+            </Button>
             {createError && <p className="you-error">{createError}</p>}
           </div>
         </Sheet>
@@ -1785,7 +1789,7 @@ export default function CityHome() {
             <p className="outside-kicker">DEVCITY 26</p>
             <h2 id="outside-title">You’re outside Mumbai</h2>
             <p>DEVCITY 26 is currently live in Mumbai. You can still look around the city and see what&apos;s happening.</p>
-            <PushButton className="outside-cta" onClick={exploreMumbai}>Show Mumbai</PushButton>
+            <Button type="button" className="w-full" onClick={exploreMumbai}>Show Mumbai</Button>
             <button className="outside-dismiss" onClick={() => setOutsidePromptOpen(false)}>Stay here</button>
           </div>
         </div>
@@ -1801,9 +1805,9 @@ export default function CityHome() {
               : locationState === "timeout"
                 ? "Location is already on. This reading timed out before a position arrived. Try again. Your exact location is never shown to other people."
                 : "This device could not find a position. Try again. Your exact location is never shown to other people."}</p>
-            <PushButton className="outside-cta" onClick={requestLocation} disabled={requestingLocation}>
+            <Button type="button" className="w-full" onClick={requestLocation} disabled={requestingLocation}>
               {requestingLocation ? "Checking location…" : "Try location again"}
-            </PushButton>
+            </Button>
             <button className="outside-dismiss" onClick={exploreMumbai}>Show the Mumbai map</button>
           </div>
         </div>
@@ -1816,18 +1820,18 @@ export default function CityHome() {
             {selectedIsTest && <p className="prototype-note">TEST drop. This is not real data and nothing can be claimed.</p>}
             <p className={`claim-flow-status is-${claimView.state}`} role={claimView.state === "failed" ? "alert" : "status"}>{claimView.title}</p>
             <p className="drop-sheet-copy">{claimView.detail}</p>
-            <div className="drop-sheet-meta"><span><MapPin size={14} /> {claimView.distanceM != null ? claimDistanceSentence(claimView.distanceM) : claimView.title}</span><span><UsersRound size={14} /> {selectedClaimedCount ?? 0} claimed</span></div>
+            <div className="drop-sheet-meta"><span>{claimView.distanceM != null ? claimDistanceSentence(claimView.distanceM) : claimView.title}</span><span>{selectedClaimedCount ?? 0} claimed</span></div>
             {claimView.state !== "success" ? (
               <>
                 {claimView.state === "location-off" && (
-                  <button className="secondary-action claim-location-retry" onClick={() => void toggleLocationSharing()}>
+                  <Button type="button" variant="outline" className="mb-3 w-full" onClick={() => void toggleLocationSharing()}>
                     <MapPin size={15} /> Turn location on
-                  </button>
+                  </Button>
                 )}
                 {(claimView.state === "permission-required" || claimView.state === "location-unavailable" || claimView.state === "location-timeout") && (
-                  <button className="secondary-action claim-location-retry" onClick={requestLocation} disabled={requestingLocation}>
+                  <Button type="button" variant="outline" className="mb-3 w-full" onClick={requestLocation} disabled={requestingLocation}>
                     <LocateFixed size={15} /> {requestingLocation ? "Checking location" : "Try location again"}
-                  </button>
+                  </Button>
                 )}
                 {claimAskPin && !claimUnlocked && (claimView.state === "ready" || claimView.state === "failed") && (
                   <>
@@ -1839,8 +1843,9 @@ export default function CityHome() {
                 {(claimView.state === "ready" || claimView.state === "failed") && (
                   <FeePreview quote={claimFee.quote} error={claimFee.error} loading={claimFee.loading} />
                 )}
-                <PushButton
-                  className={`claim-button${claimView.state === "awaiting-signature" ? " is-signing" : ""}`}
+                <Button
+                  type="button"
+                  className="w-full"
                   disabled={selectedIsTest || (feedUserAddress ? (!claimView.canPressClaim || claimSigning || claimLocating || Boolean(claimFee.error)) : claimView.state !== "ready")}
                   onClick={() => { if (selectedIsTest) return; if (!feedUserAddress) { openWallet(); return; } void handleClaim(); }}
                 >
@@ -1853,9 +1858,9 @@ export default function CityHome() {
                   {claimView.state === "awaiting-signature" && <><span className="spinner" /> Waiting for wallet signature</>}
                   {claimView.state === "failed" && "Claim"}
                   {claimView.state === "ready" && (selectedIsTest ? "TEST only" : feedUserAddress ? "Claim" : "Open wallet")}
-                </PushButton>
+                </Button>
               </>
-            ) : <PushButton className="claim-button is-claimed" onClick={() => setDropSheetOpen(false)}><Check size={15} /> Claimed. Back to the city</PushButton>}
+            ) : <Button type="button" className="w-full" onClick={() => setDropSheetOpen(false)}><Check size={15} /> Claimed. Back to the city</Button>}
             <p className="prototype-note">Community token · no market value implied</p>
           </div>
         </Sheet>

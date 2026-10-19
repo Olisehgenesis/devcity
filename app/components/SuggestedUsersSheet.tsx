@@ -3,6 +3,7 @@
 import { useSuggestedUsers, type SuggestedUser } from '../hooks/useSuggestedUsers';
 import { Sheet } from './Sheet';
 import { UserPlus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { AvatarBubble } from './game/AvatarBubble';
 
 interface SuggestedUsersSheetProps {
@@ -20,7 +21,7 @@ function SuggestedUserCard({ user, onFollow }: { user: SuggestedUser; onFollow: 
         <strong>@{user.username}</strong>
         <span>{user.broadcastCount} posts · {user.followerCount} followers</span>
       </div>
-      <button className="gsheet-action" onClick={() => onFollow(user.id)}><UserPlus size={14} /> Follow</button>
+      <Button type="button" onClick={() => onFollow(user.id)}><UserPlus size={14} /> Follow</Button>
     </div>
   );
 }

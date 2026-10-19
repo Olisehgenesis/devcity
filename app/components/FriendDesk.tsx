@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { PushButton } from './PushButton';
+import { Button } from '@/components/ui/button';
 
 type Incoming = { id: string; username: string; verified: boolean };
 type Outgoing = { id: string; username: string };
@@ -95,7 +95,7 @@ export function FriendDesk({ open }: { open: boolean }) {
             autoComplete="off"
             aria-label="Friend username"
           />
-          <PushButton type="submit" disabled={sending || username.trim().length < 3}>Send</PushButton>
+          <Button type="submit" disabled={sending || username.trim().length < 3}>Send</Button>
         </div>
       </form>
       {loading && <p className="social-empty" role="status">Loading friend requests…</p>}
@@ -110,8 +110,8 @@ export function FriendDesk({ open }: { open: boolean }) {
             <strong>{request.username}{request.verified ? ' · Verified' : ''}</strong>
             <span>Wants to be friends</span>
           </div>
-          <button type="button" onClick={() => void respond(request.id, 'accept')}>Accept</button>
-          <button type="button" onClick={() => void respond(request.id, 'decline')}>Decline</button>
+          <Button type="button" onClick={() => void respond(request.id, 'accept')}>Accept</Button>
+          <Button type="button" variant="outline" onClick={() => void respond(request.id, 'decline')}>Decline</Button>
         </article>
       ))}
       {outgoing.map((request) => (

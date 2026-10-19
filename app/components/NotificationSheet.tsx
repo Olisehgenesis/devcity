@@ -3,6 +3,7 @@
 import { useNotifications, type Notification } from '../hooks/useNotifications';
 import { Sheet } from './Sheet';
 import { Bell, CheckCheck, MessageCircle, Heart, UsersRound, Gift, Calendar } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { timeAgo } from '../lib/city-store';
 
 interface NotificationSheetProps {
@@ -48,7 +49,7 @@ export function NotificationSheet({ open, userAddress, onClose }: NotificationSh
         {unreadCount > 0 && (
           <div className="vault-room-head" style={{ padding: '2px 2px 6px' }}>
             <span className="gsheet-stat">{unreadCount} unread</span>
-            <button className="gsheet-action" onClick={markAllAsRead}><CheckCheck size={14} /> Mark all read</button>
+            <Button type="button" variant="outline" onClick={markAllAsRead}><CheckCheck size={14} /> Mark all read</Button>
           </div>
         )}
 

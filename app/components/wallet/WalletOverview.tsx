@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpRight, Gift, History, Power, Settings } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 
 interface WalletOverviewProps {
   chainLabel: string;
@@ -42,15 +43,15 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, usdBala
           <span>{chainLabel}{short ? ` · ${short}` : ''}</span>
         </span>
         <div className="vault-hero-tools">
-          <button type="button" className="vault-icon-button" onClick={onActivity} aria-label="Activity">
+          <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={onActivity} aria-label="Activity">
             <History size={16} />
-          </button>
-          <button type="button" className="vault-icon-button" onClick={onSettings} aria-label="Wallet settings">
+          </Button>
+          <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={onSettings} aria-label="Wallet settings">
             <Settings size={16} />
-          </button>
-          <button type="button" className="vault-icon-button" onClick={onSignOut} aria-label="Sign out">
+          </Button>
+          <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={onSignOut} aria-label="Sign out">
             <Power size={16} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -62,10 +63,10 @@ export function WalletOverview({ chainLabel, name, address, celoBalance, usdBala
 
       <div className="vault-actions" aria-label="Wallet actions">
         {ACTIONS.map((action) => (
-          <button key={action.id} type="button" className="vault-action" onClick={actions[action.id]}>
+          <Button key={action.id} type="button" className="w-full h-auto flex-col whitespace-normal px-1" onClick={actions[action.id]}>
             <action.icon size={18} aria-hidden="true" />
             {action.label}
-          </button>
+          </Button>
         ))}
       </div>
     </section>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, Heart, KeyRound, MapPin, MessageCircle, Paperclip, Radio, Search, Send } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
@@ -423,16 +424,16 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
             <form className="broadcast-composer" onSubmit={sendBroadcast}>
               <span className="broadcast-composer-avatar">{avatarSrc ? <img src={avatarSrc} alt="" /> : 'Y'}</span>
               <textarea value={broadcastDraft} onChange={(event) => setBroadcastDraft(event.target.value.slice(0, 240))} placeholder="What's happening around you?" rows={2} aria-label="Write a city broadcast" />
-              <div className="broadcast-composer-bottom"><small>{broadcastDraft.length}/240 · saved to the city feed</small><button type="submit" disabled={!broadcastDraft.trim() || broadcastSaving}><RadioIcon /> {broadcastSaving ? 'Saving…' : 'Broadcast'}</button></div>
+              <div className="broadcast-composer-bottom"><small>{broadcastDraft.length}/240 · saved to the city feed</small><Button type="submit" disabled={!broadcastDraft.trim() || broadcastSaving}><RadioIcon /> {broadcastSaving ? 'Saving…' : 'Broadcast'}</Button></div>
             </form>
           ) : (
             <div className="feed-profile-gate">
               <strong>{profileStatus === 'checking' ? 'Checking your profile…' : profileStatus === 'wallet-needed' ? 'Your account is signed in' : profileStatus === 'error' ? 'Profile check failed' : 'Sign in to join the conversation'}</strong>
               <p>{profileStatus === 'checking' ? 'Your account is needed to post, like, or comment.' : profileStatus === 'wallet-needed' ? 'A wallet on this device is needed before you can post.' : profileStatus === 'error' ? 'Open your profile to retry.' : 'Use the same sign-in as your profile.'}</p>
-              {profileStatus !== 'checking' && profileStatus !== 'wallet-needed' && <button className="you-connect-primary" onClick={onRequestProfile}>Open your profile</button>}
+              {profileStatus !== 'checking' && profileStatus !== 'wallet-needed' && <Button type="button" className="w-full" onClick={onRequestProfile}>Open your profile</Button>}
             </div>
           )}
-          {feedError && <p className="feed-error" role="alert">{feedError}{broadcasts.length === 0 && <button onClick={() => setFeedRetry((count) => count + 1)}>Try again</button>}</p>}
+          {feedError && <p className="feed-error" role="alert">{feedError}{broadcasts.length === 0 && <Button type="button" variant="outline" onClick={() => setFeedRetry((count) => count + 1)}>Try again</Button>}</p>}
           {feedLoading && broadcasts.length === 0 && <p className="social-empty" role="status">Loading the city feed…</p>}
           {broadcasts.map((broadcast) => {
             const isOwn = !!userAddress && broadcast.userId === `user_${userAddress.toLowerCase()}`;
@@ -458,7 +459,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
           {!feedLoading && !feedError && broadcasts.length === 0 && (
             <p className="social-empty">No broadcasts yet. Be the first to share what&apos;s happening.</p>
           )}
-          <button className="social-map-link" onClick={onClose}><MapPin size={15} /> Back to the map</button>
+          <Button type="button" variant="outline" className="w-full" onClick={onClose}><MapPin size={15} /> Back to the map</Button>
         </div>
       )}
 
@@ -472,18 +473,21 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               <article className="people-item" key={person.userId}>
                 <span className={`people-avatar tone-${tone}`}><img src={person.avatarUrl ?? dicebearAvatarUrl(person.username, avatarBackgroundForColor(tone))} alt={`${person.username}'s avatar`} /><i /></span>
                 <div className="people-copy"><strong>{person.username}</strong><span>{person.status}</span><small><MapPin size={11} /> {person.distance} km away</small></div>
-                <button className="people-follow" onClick={() => void toggleFollow(person)} aria-label={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`} title={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`}>
+                <Button type="button" onClick={() => void toggleFollow(person)} aria-label={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`} title={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`}>
                   {following.has(person.userId) ? 'Following' : '+ Follow'}
-                </button>
-                <button
-                  className="people-message"
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="rounded-full"
                   onClick={() => {
                     const address = person.userId.replace(/^user_/, '');
                     onTip(person.username, initialsFor(person.username), tone, /^0x[a-fA-F0-9]{40}$/.test(address) ? address : undefined);
                   }}
                   aria-label={`Tip ${person.username}`}
                   title={`Tip ${person.username}`}
-                ><Heart size={17} /></button>
+                ><Heart size={17} /></Button>
               </article>
             );
           })}
@@ -505,20 +509,20 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                   {inboxWalletUnlocked ? (
                     <>
                       <p>{inboxWallet.name || 'Your DEVCITY wallet'} is unlocked. Connect to XMTP to load your messages.</p>
-                      <button className="xmtp-wallet-connect" onClick={() => void connectPasskeyInbox()}>Retry inbox connection</button>
+                      <Button type="button" className="w-full" onClick={() => void connectPasskeyInbox()}>Retry inbox connection</Button>
                     </>
                   ) : (
                     <>
                       <p>Unlock your wallet once. Inbox, claims, and sends share that unlock.</p>
-                      <button className="outside-cta" onClick={onConnectWallet}>Open wallet</button>
+                      <Button type="button" className="w-full" onClick={onConnectWallet}>Open wallet</Button>
                     </>
                   )}
                 </>
               ) : (
                 <>
                   <p>{inboxWalletError || 'Your passkey wallet is not available on this device.'}</p>
-                  {inboxWalletError && <button className="xmtp-retry" onClick={() => setInboxWalletRetry((attempt) => attempt + 1)}>Try again</button>}
-                  {!inboxWalletError && <button className="outside-cta" onClick={onConnectWallet}>Open Wallet</button>}
+                  {inboxWalletError && <Button type="button" variant="outline" className="w-full" onClick={() => setInboxWalletRetry((attempt) => attempt + 1)}>Try again</Button>}
+                  {!inboxWalletError && <Button type="button" className="w-full" onClick={onConnectWallet}>Open Wallet</Button>}
                 </>
               )}
               {(chatActionError || xmtp.error) && <p className="xmtp-error" role="alert">{chatActionError || xmtp.error}</p>}
@@ -530,27 +534,27 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
               <strong>{signedIn ? 'Finish setting up your wallet' : 'Sign in once'}</strong>
               <p>Your encrypted messages are tied to your DEVCITY wallet. Sign in on this device to load your XMTP inbox.</p>
-              <button className="outside-cta xmtp-open-wallet" onClick={onConnectWallet}>{profileStatus === 'wallet-needed' ? 'Finish wallet setup' : 'Open Wallet to sign in'}</button>
+              <Button type="button" className="w-full" onClick={onConnectWallet}>{profileStatus === 'wallet-needed' ? 'Finish wallet setup' : 'Open Wallet to sign in'}</Button>
             </div>
           ) : xmtp.status === 'idle' || xmtp.status === 'error' ? (
             <div className="xmtp-state">
               <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
               <strong>{walletAlreadyOpen ? 'Opening your messages' : 'Open your encrypted inbox'}</strong>
               <p>{walletAlreadyOpen ? 'This wallet is already open. Messages use that same wallet.' : 'Messages use the wallet already open on this device.'}</p>
-              <button className="outside-cta" onClick={() => {
+              <Button type="button" className="w-full" onClick={() => {
                 const unlocked = getUnlockedWallet();
                 if (unlocked) void connectWithLocalWallet(unlocked.privateKey, unlocked.address);
                 else void xmtp.connect();
-              }}>{xmtp.status === 'error' ? 'Try messages again' : 'Open messages'}</button>
+              }}>{xmtp.status === 'error' ? 'Try messages again' : 'Open messages'}</Button>
               {xmtp.error && <p className="xmtp-error" role="alert">{xmtp.error}</p>}
             </div>
           ) : xmtp.status === 'connecting' ? (
             <div className="xmtp-state"><span className="spinner" /><strong>Connecting to XMTP…</strong><p>Syncing your encrypted conversations. Approve any wallet request if prompted.</p></div>
           ) : thread ? (
             <>
-              <button className="chat-back" onClick={() => { xmtp.setActiveThreadId(null); setDraft(''); }}><ArrowLeft size={15} /> All chats</button>
+              <Button type="button" variant="outline" className="w-full" onClick={() => { xmtp.setActiveThreadId(null); setDraft(''); }}><ArrowLeft size={15} /> All chats</Button>
               <div className="chat-thread-intro"><span className="people-avatar"><MessageCircle size={17} /></span><strong>{shortInbox(thread.peerInboxId)}</strong><small>End-to-end encrypted with XMTP</small></div>
-              {!notificationsEnabled && <button className="xmtp-notification-toggle" onClick={onEnableNotifications}>Enable message notifications</button>}
+              {!notificationsEnabled && <Button type="button" variant="outline" className="w-full" onClick={onEnableNotifications}>Enable message notifications</Button>}
               <div className="chat-messages">
                 {xmtp.messages.map((message) => <XmtpMessageView key={message.id} message={message} />)}
                 {xmtp.messages.length === 0 && <p className="chat-demo-note">This encrypted conversation is ready. Send the first message.</p>}
@@ -567,7 +571,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
           ) : (
             <>
               <div className="social-live-line"><span className="live-dot" /> XMTP · ENCRYPTED INBOX</div>
-              {!notificationsEnabled && <button className="xmtp-notification-toggle" onClick={onEnableNotifications}>Enable message notifications</button>}
+              {!notificationsEnabled && <Button type="button" variant="outline" className="w-full" onClick={onEnableNotifications}>Enable message notifications</Button>}
               <div className="inbox-friends">
                 <p className="social-section-label">YOUR FRIENDS <span>{friends.length}</span></p>
                 {friendsLoading && <p className="social-empty" role="status">Loading your friends…</p>}
@@ -577,8 +581,11 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                   <article className="people-item" key={friend.userId}>
                     <span className={`people-avatar tone-${toneForUsername(friend.username)}`}><img src={friend.avatarUrl ?? dicebearAvatarUrl(friend.username, avatarBackgroundForColor(toneForUsername(friend.username)))} alt={`${friend.username}'s avatar`} /><i className={friend.status === 'online' ? 'is-online' : ''} /></span>
                     <div className="people-copy"><strong>{friend.username}</strong><span>{friend.status === 'online' ? 'Online now' : 'Offline'}</span></div>
-                    <button
-                      className="people-message"
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="rounded-full"
                       onClick={() => {
                         const address = friend.userId.replace(/^user_/, '');
                         if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return;
@@ -587,7 +594,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                       }}
                       aria-label={`Message ${friend.username}`}
                       title={`Message ${friend.username}`}
-                    ><MessageCircle size={17} /></button>
+                    ><MessageCircle size={17} /></Button>
                   </article>
                 ))}
               </div>

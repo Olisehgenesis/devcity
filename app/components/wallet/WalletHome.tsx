@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { Button } from "@/components/ui/button";
 import { formatUsd } from '../../hooks/useUsdPrices';
 import type { ProfileTokenSummary } from '../../hooks/useProfileToken';
 import type { HeldTokenView } from './types';
@@ -111,7 +112,7 @@ export function WalletHome({ celoBalance, stableBalances, holdingStatus, onRetry
       </div>
       {children}
       {!profileToken && !profileLoading && (
-        <button type="button" className="wallet-quiet-link" onClick={onOpenProfile}>Launch token</button>
+        <Button type="button" className="w-full" onClick={onOpenProfile}>Launch token</Button>
       )}
     </section>
   );

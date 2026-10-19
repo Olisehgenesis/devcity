@@ -1,19 +1,18 @@
 'use client';
 
-import type { ButtonHTMLAttributes } from 'react';
+import type { ComponentProps } from 'react';
+import { Button } from '@/components/ui/button';
 
-/**
- * Game-styled claim/primary button: chunky border + hard shadow + pop on press.
- */
+/** Same themed button as the map actions. A finished claim uses the outline style. */
 export function ClaimButton({
   claimed = false,
-  className = '',
+  variant,
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { claimed?: boolean }) {
+}: ComponentProps<typeof Button> & { claimed?: boolean }) {
   return (
-    <button className={`claim-button game-cta${claimed ? ' is-claimed' : ''} ${className}`} {...rest}>
+    <Button variant={claimed ? 'outline' : variant} {...rest}>
       {children}
-    </button>
+    </Button>
   );
 }

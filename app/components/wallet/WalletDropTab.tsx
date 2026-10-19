@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { LandPlot, KeyRound } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import { getAddress, createWalletClient, http, parseUnits, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ERC20_ABI } from '@/lib/chain';
@@ -114,9 +115,9 @@ export function WalletDropTab({ address, pinProtected, unlockedKey, fees, import
         <div className="wallet-unlock">
           <p>Unlock to create a drop.</p>
           <UnlockSecret id="wallet-drop-pin" pinProtected={pinProtected} value={pin} onChange={setPin} />
-          <button className="you-connect-primary" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
+          <Button className="w-full" disabled={!pin || Boolean(pinProtected && pin.length !== 6)} onClick={handleUnlock}>
             <KeyRound size={16} /> Unlock wallet
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -151,9 +152,9 @@ export function WalletDropTab({ address, pinProtected, unlockedKey, fees, import
             </div>
           </div>
           <p className="wallet-send-caution">Drops make tokens claimable near the city. Create your token first, then drop it.</p>
-          <button className="you-connect-primary" disabled={creating || !name || !amount} onClick={() => void handleCreate()}>
+          <Button className="w-full" disabled={creating || !name || !amount} onClick={() => void handleCreate()}>
             <LandPlot size={16} /> {creating ? 'Creating…' : 'Create drop'}
-          </button>
+          </Button>
         </>
       )}
       {error && <p className="you-error" role="alert">{error}</p>}

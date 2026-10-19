@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Sheet } from './Sheet';
+import { Button } from '@/components/ui/button';
 import { useCityStore } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
 
@@ -170,13 +171,13 @@ export function TipSheet({ open, onClose, target, onNeedWallet, notify }: TipShe
               </div>
             ) : <p className="tip-note">No tip tokens are available in the city yet.</p>}
 
-            <button className="tip-send" disabled={sending || !finalAmount || !token || !target.address || tokensLoading || Boolean(tokensError)} onClick={send}>
+            <Button type="button" className="w-full" disabled={sending || !finalAmount || !token || !target.address || tokensLoading || Boolean(tokensError)} onClick={send}>
               {sending ? (
                 <><span className="spinner" /> Sending…</>
               ) : (
                 `Tip ${finalAmount} ${token}`
               )}
-            </button>
+            </Button>
             {!target.address && <p className="tip-note">This profile cannot receive a tip until a wallet is linked.</p>}
           </>
         )}

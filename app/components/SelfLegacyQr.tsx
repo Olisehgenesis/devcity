@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { SelfAppBuilder, SelfQRcodeWrapper, getUniversalLink, type SelfApp } from '@selfxyz/qrcode';
+import { Button } from '@/components/ui/button';
 
 export type SelfLegacyQrConfig = {
   appName: string;
@@ -54,7 +55,9 @@ export function SelfLegacyQr({ config, onVerified }: { config: SelfLegacyQrConfi
         onSuccess={onVerified}
         onError={() => setError('Self could not finish the check. Try again.')}
       />
-      <a className="self-qr-link" href={link}>Open the Self app</a>
+      <Button asChild className="w-full">
+        <a href={link}>Open the Self app</a>
+      </Button>
     </div>
   );
 }
