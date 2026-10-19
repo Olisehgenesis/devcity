@@ -654,7 +654,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   box-shadow: var(--shadow-pop);
   transition: transform .16s ease;
 }
-.round-action:hover { transform: translateY(-2px); }
+.round-action:active { scale: 0.97; }
 
 .invite-button {
   display: inline-flex;
@@ -670,7 +670,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   box-shadow: var(--shadow-pop);
   transition: transform .16s ease, filter .16s ease;
 }
-.invite-button:hover { transform: translateY(-2px); filter: brightness(1.04); }
+.invite-button:active { scale: 0.97; }
 
 .top-profile-button {
   display: grid;
@@ -686,9 +686,8 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   box-shadow: var(--shadow-pop);
   transition: scale .16s ease-out, background .16s ease-out;
 }
-.top-profile-button:hover { scale: 1.06; }
 .top-profile-button.is-active { background: var(--lime); }
-.top-profile-button:active { scale: .96; }
+.top-profile-button:active { scale: 0.97; }
 
 /* ---------- Map tools ---------- */
 
@@ -958,11 +957,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   transition: background .15s ease, color .15s ease, transform .15s ease;
 }
-.card-more:hover {
-  background: var(--ink);
-  color: var(--paper);
-  transform: rotate(8deg);
-}
+.card-more:active { scale: 0.97; }
 
 .card-close {
   display: grid;
@@ -974,11 +969,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   transition: background .15s ease, color .15s ease, transform .15s ease;
 }
-.card-close:hover {
-  background: var(--ink);
-  color: var(--paper);
-  transform: rotate(90deg);
-}
+.card-close:active { scale: 0.97; }
 
 .activity-card h2 {
   font-size: 23px;
@@ -1034,8 +1025,8 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   letter-spacing: -.01em;
   transition: transform .16s ease, filter .16s ease, background .2s ease, color .2s ease;
 }
-.claim-button:hover { transform: translateY(-2px); filter: brightness(1.08); }
-.claim-button:active { transform: translateY(0) scale(.98); }
+.claim-button:hover { filter: none; }
+.claim-button:active { transform: none; }
 .claim-button.is-claimed {
   background: var(--lime);
   color: var(--ink);
@@ -1058,10 +1049,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   font-weight: 700;
   transition: background .15s ease, transform .15s ease;
 }
-.secondary-action:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  transform: translateY(-1px);
-}
+.secondary-action:hover { background: var(--paper); }
 
 .prototype-note {
   margin-top: 10px;
@@ -3039,15 +3027,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .activity-card.drop-card { background: var(--paper); }
 .activity-card .claim-button,
 .activity-card .secondary-action,
-.activity-card .tip-action {
-  border: 3px solid #171717;
-  border-radius: 0.4em;
-  background: #fbca1f;
-  color: #171717;
-  box-shadow: 0.1em 0.1em 0 #171717;
-  font-weight: 900;
-}
-.activity-card .secondary-action { background: var(--paper); }
+.activity-card .tip-action { width: auto; }
 .card-icon { border-radius: 50%; box-shadow: none; }
 .claim-count { background: color-mix(in srgb, var(--lime) 65%, var(--paper)); }
 .secondary-action { border-radius: 13px; }
@@ -3213,36 +3193,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .profile-username-status.is-error { color: #a34035; }
 .profile-auth-gate .you-connect-primary,
 .profile-auth-gate .you-connect-secondary {
-  min-height: 52px;
-  height: auto;
-  padding: .6em 1.3em;
-  border: 3px solid #171717;
-  border-radius: .4em;
-  box-shadow: .1em .1em 0 #171717;
-  cursor: pointer;
-  font: inherit;
-  font-size: 18px;
-  font-weight: 900;
-  transition: transform .14s ease, box-shadow .14s ease, background-color .14s ease;
-}
-.profile-auth-gate .you-connect-primary {
-  background: #fbca1f;
-  color: #171717;
-}
-.profile-auth-gate .you-connect-secondary {
-  background: var(--paper);
-  color: #171717;
-}
-.profile-auth-gate .you-connect-primary:hover,
-.profile-auth-gate .you-connect-secondary:hover {
-  filter: none;
-  transform: translate(-.05em, -.05em);
-  box-shadow: .15em .15em 0 #171717;
-}
-.profile-auth-gate .you-connect-primary:active,
-.profile-auth-gate .you-connect-secondary:active {
-  transform: translate(.05em, .05em);
-  box-shadow: .05em .05em 0 #171717;
+  width: 100%;
 }
 .profile-auth-gate .you-connect-primary:focus-visible,
 .profile-auth-gate .you-connect-secondary:focus-visible {
@@ -3586,7 +3537,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .event-banner-initials { color: var(--paper); font: 800 42px/1 var(--font-display); }
 .event-card-body { padding: 14px 16px 16px; }
 .event-card-title { font-size: 22px; font-weight: 800; }
-.event-attendance-button { display: flex; width: 100%; align-items: center; justify-content: center; min-height: 52px; margin-top: 14px; border: 3px solid #171717; border-radius: 0.4em; background: #fbca1f; color: #171717; box-shadow: 0.1em 0.1em 0 #171717; font-size: 18px; font-weight: 900; }
+.event-attendance-button { width: 100%; margin-top: 14px; }
 .event-card-facts { margin: 8px 0 0; color: var(--ink); font-size: 14px; line-height: 1.4; }
 .event-card-links { display: flex; gap: 8px; }
 .event-page-link { display: flex; flex: 1; align-items: center; justify-content: center; min-height: 44px; margin-top: 4px; border: 0; background: transparent; color: var(--ink); font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
@@ -3750,17 +3701,7 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   position: relative;
 }
 .onboarding-card h2 { font: 800 28px/1.15 var(--font-display); color: var(--ink); }
-.onboarding-card .you-connect-primary {
-  width: 100%;
-  min-height: 52px;
-  border: 3px solid #171717;
-  border-radius: 0.4em;
-  background: #fbca1f;
-  color: #171717;
-  box-shadow: 0.1em 0.1em 0 #171717;
-  font-size: 18px;
-  font-weight: 900;
-}
+.onboarding-card .you-connect-primary { width: 100%; }
 
 .onboarding-skip {
   position: absolute;
@@ -4636,172 +4577,137 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
 }
 .dev-test-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .dev-test-account button {
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: var(--brand-primary);
-  color: var(--paper);
+  width: auto;
+  flex: 1;
+  height: 48px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 16px;
+  border: 3px solid #171717;
+  border-radius: 10px;
+  background: #fbca1f;
+  color: #171717;
+  box-shadow: 0 4px 0 #171717;
+  font-size: 16px;
   font-weight: 800;
 }
-.dev-test-actions button:last-child { background: var(--ink); }
+.dev-test-actions button:last-child { background: var(--paper); }
+.dev-test-account button:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #171717;
+}
 .dev-test-account [role="alert"] { color: var(--danger); }
 
-/* Raised press button. The outline is the slab; the face lifts and presses. */
-.push-button,
-.claim-button,
-.onboarding-button,
-.outside-cta,
-.you-connect-primary,
-.event-card-cta {
-  --button_radius: 0.75em;
-  --button_color: var(--brand-primary);
-  --button_outline_color: #1a1028;
-  font-size: 17px;
-  font-weight: 800;
-  border: none;
+/* One action size. The 4px slab sits in reserved space, so a press never leaves the button. */
+.push-button {
+  display: block;
+  width: 100%;
+  height: 52px;
+  margin: 0;
+  padding: 0 0 4px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
   cursor: pointer;
-  border-radius: var(--button_radius);
-  background: var(--button_outline_color);
 }
-
-.push-button .button_top,
-.claim-button .button_top,
-.onboarding-button .button_top,
-.outside-cta .button_top,
-.you-connect-primary .button_top,
-.event-card-cta .button_top {
+.push-button .button_top {
   display: flex;
   box-sizing: border-box;
   align-items: center;
   justify-content: center;
   gap: 8px;
   width: 100%;
-  min-height: 44px;
-  border: 2px solid var(--button_outline_color);
-  border-radius: var(--button_radius);
-  padding: 0.75em 1.5em;
-  background: var(--button_color);
-  color: #fff;
-  transform: translateY(-0.2em);
-  transition: transform 0.1s ease;
+  height: 48px;
+  padding: 0 16px;
+  border: 3px solid #171717;
+  border-radius: 10px;
+  background: #fbca1f;
+  color: #171717;
+  font-size: 16px;
+  font-weight: 800;
+  transform: none;
+  transition: transform .1s ease;
 }
-
-.push-button:hover:not(:disabled) .button_top,
-.claim-button:hover:not(:disabled) .button_top,
-.onboarding-button:hover:not(:disabled) .button_top,
-.outside-cta:hover:not(:disabled) .button_top,
-.you-connect-primary:hover:not(:disabled) .button_top,
-.event-card-cta:hover:not(:disabled) .button_top {
-  transform: translateY(-0.33em);
-}
-
-.push-button:active:not(:disabled) .button_top,
-.claim-button:active:not(:disabled) .button_top,
-.onboarding-button:active:not(:disabled) .button_top,
-.outside-cta:active:not(:disabled) .button_top,
-.you-connect-primary:active:not(:disabled) .button_top,
-.event-card-cta:active:not(:disabled) .button_top {
-  transform: translateY(0);
-}
+.push-button:active:not(:disabled) .button_top { transform: translateY(4px); }
+.push-button:disabled { cursor: not-allowed; }
+.push-button:disabled .button_top { transform: none; opacity: .72; }
 
 .claim-button:not(:has(.button_top)),
 .onboarding-button:not(:has(.button_top)),
 .outside-cta:not(:has(.button_top)),
 .you-connect-primary:not(:has(.button_top)),
-.event-card-cta:not(:has(.button_top)) {
+.you-connect-secondary:not(:has(.button_top)),
+.event-card-cta:not(:has(.button_top)),
+.secondary-action,
+.tip-action,
+.self-qr-link,
+.broadcast-composer-bottom button {
   display: flex;
+  box-sizing: border-box;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-sizing: border-box;
-  min-height: 44px;
-  border: 2px solid var(--button_outline_color);
-  padding: 0.75em 1.5em;
-  background: var(--button_color);
-  color: #fff;
-  box-shadow: 0 0.2em 0 var(--button_outline_color);
-  transform: translateY(-0.2em);
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  margin: 0 0 4px;
+  padding: 0 16px;
+  border: 3px solid #171717;
+  border-radius: 10px;
+  background: #fbca1f;
+  color: #171717;
+  box-shadow: 0 4px 0 #171717;
+  font-size: 16px;
+  font-weight: 800;
+  text-decoration: none;
+  transform: none;
+  transition: transform .1s ease, box-shadow .1s ease;
 }
-
-.claim-button:not(:has(.button_top)):hover:not(:disabled),
-.onboarding-button:not(:has(.button_top)):hover:not(:disabled),
-.outside-cta:not(:has(.button_top)):hover:not(:disabled),
-.you-connect-primary:not(:has(.button_top)):hover:not(:disabled),
-.event-card-cta:not(:has(.button_top)):hover:not(:disabled) {
-  transform: translateY(-0.33em);
-  box-shadow: 0 0.33em 0 var(--button_outline_color);
-}
-
+.secondary-action,
+.tip-action,
+.you-connect-secondary:not(:has(.button_top)) { background: var(--paper); }
+.claim-button.is-claimed:not(:has(.button_top)),
+.claim-button.is-claimed .button_top { background: var(--paper); color: #171717; }
 .claim-button:not(:has(.button_top)):active:not(:disabled),
 .onboarding-button:not(:has(.button_top)):active:not(:disabled),
 .outside-cta:not(:has(.button_top)):active:not(:disabled),
 .you-connect-primary:not(:has(.button_top)):active:not(:disabled),
-.event-card-cta:not(:has(.button_top)):active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: none;
+.you-connect-secondary:not(:has(.button_top)):active:not(:disabled),
+.event-card-cta:not(:has(.button_top)):active:not(:disabled),
+.secondary-action:active,
+.tip-action:active,
+.self-qr-link:active,
+.broadcast-composer-bottom button:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #171717;
 }
-
-.claim-button.is-claimed,
-.event-card-cta.devcon-gold-button,
-.wallet-auth-gate .you-connect-primary {
-  --button_color: var(--brand-secondary);
-}
-
-.event-card-cta.devcon-gold-button,
-.wallet-auth-gate .you-connect-primary {
-  --button_color: var(--brand-accent);
-}
-
-.claim-button.is-claimed .button_top,
-.claim-button.is-claimed:not(:has(.button_top)),
-.event-card-cta.devcon-gold-button .button_top,
-.event-card-cta.devcon-gold-button:not(:has(.button_top)),
-.wallet-auth-gate .you-connect-primary .button_top,
-.wallet-auth-gate .you-connect-primary:not(:has(.button_top)) {
-  color: var(--ink);
-}
-
-.push-button:disabled,
-.claim-button:disabled,
-.onboarding-button:disabled,
-.outside-cta:disabled,
-.you-connect-primary:disabled,
-.event-card-cta:disabled {
-  cursor: not-allowed;
-}
-
-.push-button:disabled .button_top,
-.claim-button:disabled .button_top,
-.onboarding-button:disabled .button_top,
-.outside-cta:disabled .button_top,
-.you-connect-primary:disabled .button_top,
-.event-card-cta:disabled .button_top,
 .claim-button:disabled:not(:has(.button_top)),
 .onboarding-button:disabled:not(:has(.button_top)),
 .outside-cta:disabled:not(:has(.button_top)),
 .you-connect-primary:disabled:not(:has(.button_top)),
 .event-card-cta:disabled:not(:has(.button_top)) {
   transform: none;
-  box-shadow: none;
-  opacity: 0.72;
+  box-shadow: 0 4px 0 #171717;
+  opacity: .72;
+  cursor: not-allowed;
 }
+.card-actions { align-items: stretch; }
+.card-actions .secondary-action,
+.card-actions .tip-action { width: auto; flex: 1; margin-bottom: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   .push-button .button_top,
-  .claim-button .button_top,
-  .onboarding-button .button_top,
-  .outside-cta .button_top,
-  .you-connect-primary .button_top,
-  .event-card-cta .button_top,
   .claim-button:not(:has(.button_top)),
-  .onboarding-button:not(:has(.button_top)),
   .outside-cta:not(:has(.button_top)),
   .you-connect-primary:not(:has(.button_top)),
-  .event-card-cta:not(:has(.button_top)) {
-    transition: none;
-    transform: none;
-  }
+  .secondary-action,
+  .tip-action,
+  .round-action,
+  .card-close,
+  .card-more,
+  .top-profile-button { transition: none; transform: none; }
 }
 
 .profile-verified {
@@ -4968,23 +4874,4 @@ button.wallet-token-row { width: 100%; color: inherit; font: inherit; text-align
 }
 @media (min-width: 768px) {
   .sheet { border-radius: 32px; }
-}
-.onboarding-card .you-connect-primary:not(:has(.button_top)),
-.event-card .you-connect-primary:not(:has(.button_top)),
-.activity-card .claim-button:not(:has(.button_top)),
-.activity-card .tip-action:not(:has(.button_top)) {
-  border: 3px solid #171717;
-  border-radius: 0.4em;
-  background: #fbca1f;
-  color: #171717;
-  box-shadow: 0.1em 0.1em 0 #171717;
-  font-weight: 900;
-}
-.activity-card .secondary-action:not(:has(.button_top)) {
-  border: 3px solid #171717;
-  border-radius: 0.4em;
-  background: var(--paper);
-  color: #171717;
-  box-shadow: 0.1em 0.1em 0 #171717;
-  font-weight: 900;
 }
