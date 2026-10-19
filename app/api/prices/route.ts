@@ -85,6 +85,7 @@ export async function GET() {
   if (usd.USDT == null) usd.USDT = 1;
   if (usd.USDC == null) usd.USDC = 1;
   if (usd.cUSD == null) usd.cUSD = 1;
+  if (usd.USDm == null) usd.USDm = usd.cUSD;
 
   return NextResponse.json({
     usd,

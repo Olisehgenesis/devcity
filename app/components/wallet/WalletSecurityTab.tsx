@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { ShieldCheck } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import {
   exportEncryptedKeystore,
@@ -17,24 +16,15 @@ import {
 import type { Hex } from 'viem';
 import { useUnlockedKey } from '../../hooks/useUnlockedKey';
 
-interface Fee {
-  symbol: string;
-  name: string;
-}
-
 interface WalletSecurityTabProps {
   wallet: LocalWallet;
   unlockedKey: Hex | null;
-  fees: Fee[];
-  feeSymbol: string;
-  setFeeSymbol: (symbol: string) => void;
   onWalletChange: (wallet: LocalWallet) => void;
   onUnlockKey?: (key: Hex) => void;
-  onSignOut?: () => void;
   notify?: (message: string) => void;
 }
 
-export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFeeSymbol, onWalletChange, onUnlockKey, notify }: WalletSecurityTabProps) {
+export function WalletSecurityTab({ wallet, unlockedKey, onWalletChange, notify }: WalletSecurityTabProps) {
   const [backupSaving, setBackupSaving] = useState(false);
   const [backupDone, setBackupDone] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -129,15 +119,7 @@ export function WalletSecurityTab({ wallet, unlockedKey, fees, feeSymbol, setFee
   return (
     <section className="wallet-security-details wallet-security-tab" aria-label="Wallet security">
       <div className="wallet-security-content">
-        <h3 className="you-section-title">Pay network fees with</h3>
-        <div className="fee-currency-row">
-          {fees.map((f) => (
-            <button key={f.symbol} className={`fee-currency-chip${feeSymbol === f.symbol ? ' is-selected' : ''}`} onClick={() => setFeeSymbol(f.symbol)}>
-              {f.symbol}
-            </button>
-          ))}
-        </div>
-        <h3 className="you-section-title wallet-backup-title">Encrypted backup</h3>
+        <h3 className="you-section-title">Encrypted backup</h3>
         <p className="profile-control-hint">Your signing key stays encrypted with your PIN. Back up so you can restore on another device.</p>
         <label className="you-checkbox">
           <input type="checkbox" checked={wallet.backupConsent} disabled={backupSaving} onChange={(e) => void handleBackup(e.target.checked)} />

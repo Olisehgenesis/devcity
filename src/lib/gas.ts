@@ -65,6 +65,8 @@ export type FeeQuote = {
   fee: bigint;
   display: string;
   checked: FeeCheck[];
+  /** Set when the caller asked for a specific fee currency. Absent means automatic order. */
+  requestedSymbol?: string;
 };
 
 export class FeeUnpayableError extends Error {
@@ -88,6 +90,18 @@ export function feePreference(symbol: string): number {
 
 export function sortFeeSymbols(symbols: string[]): string[] {
   return [...symbols].sort((a, b) => feePreference(a) - feePreference(b) || a.localeCompare(b));
+}
+
+/** Puts a requested fee currency first. Unknown symbols keep the automatic order. */
+export function orderFeeCandidates<T extends { symbol: string }>(candidates: T[], preferSymbol?: string | null): T[] {
+  const requested = preferSymbol?.trim();
+  if (!requested || requested.toLowerCase() === 'auto') return candidates;
+  const index = candidates.findIndex((item) => item.symbol.toUpperCase() === requested.toUpperCase());
+  if (index <= 0) return candidates;
+  const next = candidates.slice();
+  const [picked] = next.splice(index, 1);
+  next.unshift(picked);
+  return next;
 }
 
 export function formatFeeAmount(fee: bigint): string {
@@ -197,12 +211,16 @@ export async function quoteCeloFee(
   account: Address,
   request: TxRequest,
   client: PublicClient = feeClient(),
+  preferSymbol?: string | null,
 ): Promise<FeeQuote> {
   const listed = await loadFeeCurrencies(client);
-  const candidates: Array<{ symbol: string; feeCurrency?: Address }> = [
+  const automatic: Array<{ symbol: string; feeCurrency?: Address }> = [
     { symbol: 'CELO' },
     ...listed.map((item) => ({ symbol: item.symbol, feeCurrency: item.feeCurrency })),
   ];
+  const requested = preferSymbol?.trim();
+  const requestedSymbol = requested && requested.toLowerCase() !== 'auto' ? requested : undefined;
+  const candidates = orderFeeCandidates(automatic, requestedSymbol);
   const checked: FeeCheck[] = [];
 
   for (const candidate of candidates) {
@@ -226,6 +244,7 @@ export async function quoteCeloFee(
       fee,
       display: `${formatFeeAmount(fee)} ${candidate.symbol}`,
       checked,
+      ...(requestedSymbol ? { requestedSymbol } : {}),
     };
   }
 
@@ -270,6 +289,7 @@ type LooseWallet = {
 export async function writeContractWithFee(
   walletClient: Pick<LooseWallet, 'writeContract' | 'account'>,
   parameters: WriteArgs,
+  options?: { preferSymbol?: string | null },
 ): Promise<Hex> {
   const account = accountAddress(parameters.account, walletClient.account);
   const encode = encodeFunctionData as (args: {
@@ -282,7 +302,7 @@ export async function writeContractWithFee(
     functionName: parameters.functionName,
     args: parameters.args,
   });
-  const quote = await quoteCeloFee(account, { to: parameters.address, data, value: parameters.value });
+  const quote = await quoteCeloFee(account, { to: parameters.address, data, value: parameters.value }, undefined, options?.preferSymbol);
   const write = walletClient.writeContract as (args: WriteArgs & ReturnType<typeof feeTransactionFields>) => Promise<Hex>;
   return write({ ...parameters, ...feeTransactionFields(quote) });
 }
@@ -290,9 +310,10 @@ export async function writeContractWithFee(
 export async function sendTransactionWithFee(
   walletClient: Pick<LooseWallet, 'sendTransaction' | 'account'>,
   parameters: { account?: { address: Address } | Address; to: Address; value?: bigint; data?: Hex },
+  options?: { preferSymbol?: string | null },
 ): Promise<Hex> {
   const account = accountAddress(parameters.account, walletClient.account);
-  const quote = await quoteCeloFee(account, { to: parameters.to, data: parameters.data, value: parameters.value });
+  const quote = await quoteCeloFee(account, { to: parameters.to, data: parameters.data, value: parameters.value }, undefined, options?.preferSymbol);
   const send = walletClient.sendTransaction as (args: {
     account?: { address: Address } | Address;
     to: Address;

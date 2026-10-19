@@ -21,6 +21,9 @@ interface WalletDashboardProps {
   onReceive: () => void;
   onSwap: () => void;
   moreItems: MoreItem[];
+  onAddToken?: () => void;
+  onLaunchToken?: () => void;
+  launchLabel?: string;
   summary: ReactNode;
   table: ReactNode;
   activity: ReactNode;
@@ -37,6 +40,9 @@ export function WalletDashboard({
   onReceive,
   onSwap,
   moreItems,
+  onAddToken,
+  onLaunchToken,
+  launchLabel = 'Launch token',
   summary,
   table,
   activity,
@@ -138,6 +144,12 @@ export function WalletDashboard({
           <header>
             <h2 className="wdash-tokens-desktop">Tokens</h2>
             <h2 className="wdash-tokens-mobile">Holdings</h2>
+            {(onAddToken || onLaunchToken) && (
+              <div className="wdash-token-actions">
+                {onAddToken && <button type="button" onClick={onAddToken}>Add a token</button>}
+                {onLaunchToken && <button type="button" onClick={onLaunchToken}>{launchLabel}</button>}
+              </div>
+            )}
           </header>
           <div className="wdash-table-head" aria-hidden="true">
             <span>Asset</span>

@@ -151,9 +151,11 @@ interface WalletTokenToolsProps {
   onSelectImported?: (token: ImportedWalletToken, balanceLabel: string, valueLabel: string) => void;
   /** Increments when the wallet asks this panel to open token import. */
   importSignal?: number;
+  /** The holdings header already offers Add a token. */
+  addExternal?: boolean;
 }
 
-export function WalletTokenTools({ wallet, username, assetChainId, assetChainLabel, unlockedKey, onUnlockKey, onTokensChange, notify, focus, onSelectImported, importSignal = 0 }: WalletTokenToolsProps) {
+export function WalletTokenTools({ wallet, username, assetChainId, assetChainLabel, unlockedKey, onUnlockKey, onTokensChange, notify, focus, onSelectImported, importSignal = 0, addExternal = false }: WalletTokenToolsProps) {
   const [tab, setTab] = useState<'assets' | 'profile-token'>('assets');
   const [tokens, setTokens] = useState<ImportedWalletToken[]>([]);
   const [balances, setBalances] = useState<Record<string, bigint>>({});
@@ -792,7 +794,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
           )}
           {tokens.length === 0 ? (
             focus === 'assets' ? (
-              !importOpen && <Button type="button" variant="outline" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</Button>
+              !importOpen && !addExternal && <Button type="button" variant="outline" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</Button>
             ) : (
             <div className="wallet-token-empty">
               <strong>Keep your tokens together.</strong>
@@ -868,7 +870,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
               </Button>
             </div>
           )}
-          {focus === 'assets' && tokens.length > 0 && !importOpen && (
+          {focus === 'assets' && tokens.length > 0 && !importOpen && !addExternal && (
             <Button type="button" variant="outline" onClick={() => { setImportOpen(true); setError(''); }}>Add a token</Button>
           )}
           {focus !== 'assets' && (

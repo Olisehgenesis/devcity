@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, ExternalLink, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 interface ActivityItem {
   id: string;
@@ -98,13 +97,15 @@ export function WalletActivity({
       })
       .catch((loadError: unknown) => {
         if (loadError instanceof DOMException && loadError.name === 'AbortError') return;
-        setError(loadError instanceof Error ? loadError.message : 'Could not load activity.');
+        const message = loadError instanceof Error ? loadError.message : '';
+        setError(message && message !== 'Internal server error' ? message : 'Activity could not be loaded.');
         setStatus((current) => current === 'ready' ? 'ready' : 'error');
       });
     return () => controller.abort();
   }, [address, reloadKey]);
 
-  const filtered = items.filter((item) => {
+  const ordered = [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const filtered = ordered.filter((item) => {
     if (symbol && item.tokenSymbol?.toUpperCase() !== symbol.toUpperCase()) return false;
     if (filter === 'sent') return item.type === 'tip_sent';
     if (filter === 'received') return item.type === 'tip_received' || item.type === 'claim';
@@ -118,26 +119,32 @@ export function WalletActivity({
     const state = statusLabel(selected.status, selected.txHash);
     const explorer = selected.txHash && explorerBase ? `${explorerBase}/tx/${selected.txHash}` : null;
     const outbound = selected.type === 'tip_sent';
+    const Icon = selected.type === 'token_created' ? Sparkles : outbound ? ArrowUpRight : ArrowDownLeft;
     return (
-      <section className="wallet-activity wact-detail" aria-labelledby="wallet-activity-detail-title">
-        <Button type="button" variant="outline" onClick={() => setSelected(null)}>Back to activity</Button>
+      <section className="wallet-activity wtx" aria-labelledby="wallet-activity-detail-title">
+        <button type="button" className="wtx-back" onClick={() => setSelected(null)}>Activity</button>
+        <span className={`wtx-icon${outbound ? '' : ' is-in'}${state === 'Failed' ? ' is-failed' : ''}`} aria-hidden="true">
+          <Icon size={22} />
+        </span>
         <h3 id="wallet-activity-detail-title">{label}</h3>
-        <p className="wact-amount">
-          {selected.amount ? `${selected.amount} ` : ''}{selected.tokenSymbol ?? selected.tokenName ?? ''}
+        <p className="wtx-sub">{selected.tokenSymbol || selected.tokenName || selected.dropName || chainLabel}</p>
+        <p className="wtx-amount">
+          {selected.amount ? `${outbound ? '−' : '+'}${selected.amount}` : '—'}
+          {selected.tokenSymbol ? <small> {selected.tokenSymbol}</small> : null}
         </p>
         <dl className="wact-facts">
-          <div><dt>Status</dt><dd><span className={`wact-status ${statusTone(state)}`}>{state}</span></dd></div>
-          <div><dt>When</dt><dd>{formatWhen(selected.createdAt)}</dd></div>
+          <div><dt>From</dt><dd>{outbound ? short(address) : (short(selected.counterpartyAddress) || selected.counterparty || selected.dropName || '—')}</dd></div>
+          <div><dt>To</dt><dd>{outbound ? (short(selected.counterpartyAddress) || selected.counterparty || '—') : short(address)}</dd></div>
           {chainLabel && <div><dt>Network</dt><dd>{chainLabel}</dd></div>}
-          <div><dt>{outbound ? 'To' : 'From'}</dt><dd>{short(selected.counterpartyAddress) || selected.counterparty || selected.dropName || '—'}</dd></div>
-          <div><dt>{outbound ? 'From' : 'To'}</dt><dd>{short(address)}</dd></div>
+          <div><dt>Date</dt><dd>{formatWhen(selected.createdAt)}</dd></div>
+          <div><dt>Status</dt><dd><span className={`wtx-pill ${statusTone(state)}`}>{state}</span></dd></div>
           {selected.txHash && <div><dt>Transaction</dt><dd>{short(selected.txHash)}</dd></div>}
           {selected.message && <div><dt>Note</dt><dd>{selected.message}</dd></div>}
-          {state === 'Failed' && <div><dt>What happened</dt><dd>This claim did not confirm. It was not added to your balance.</dd></div>}
+          {state === 'Failed' && <div><dt>What happened</dt><dd>This did not confirm. It was not added to your balance.</dd></div>}
         </dl>
         {explorer && (
-          <a className="wallet-token-explorer" href={explorer} target="_blank" rel="noreferrer">
-            View on explorer <ExternalLink size={13} />
+          <a className="wtx-explorer" href={explorer} target="_blank" rel="noreferrer">
+            View on explorer <ExternalLink size={14} />
           </a>
         )}
       </section>
@@ -195,6 +202,7 @@ export function WalletActivity({
               item.counterparty,
               item.dropName,
               item.tokenName && item.type === 'token_created' ? item.tokenName : '',
+              !compact ? chainLabel : '',
               formatWhen(item.createdAt),
             ].filter(Boolean).join(' · ');
             const body = (

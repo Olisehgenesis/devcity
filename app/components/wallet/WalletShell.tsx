@@ -13,6 +13,7 @@ interface WalletShellProps {
   /** Send, receive, and token screens keep the sidebar but hide the phone tab bar. */
   flow?: boolean;
   accountName: string;
+  avatarSrc: string;
   accountDetail: string;
   chainLabel: string;
   address: string;
@@ -36,6 +37,7 @@ export function WalletShell({
   subtitle,
   flow,
   accountName,
+  avatarSrc,
   accountDetail,
   chainLabel,
   address,
@@ -70,6 +72,8 @@ export function WalletShell({
   }
 
   const home = nav === 'home' && !flow;
+  const backToWallet = !home && Boolean(onBack);
+  const backAction = backToWallet ? onBack : onClose;
 
   return (
     <div className={`wallet-app${home ? ' is-home' : ''}${flow ? ' is-flow' : ''}`}>
@@ -113,26 +117,27 @@ export function WalletShell({
 
       <div className="wallet-main">
         <header className="wshell-head">
-          <div className="wshell-brand">
-            {flow && onBack ? (
-              <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={onBack} aria-label="Back">
-                <ArrowLeft size={16} />
-              </Button>
-            ) : (
+          {backAction && (
+            <button
+              type="button"
+              className="wshell-homeback"
+              onClick={backAction}
+              aria-label={backToWallet ? 'Back' : 'Back to the map'}
+            >
+              <ArrowLeft size={18} aria-hidden="true" />
+            </button>
+          )}
+          {!flow && (
+            <div className="wshell-brand">
               <img src="/devcity-mark.svg" alt="" width={28} height={28} />
-            )}
-            <div className="wshell-brand-copy">
-              <strong>devcity</strong>
-              <span>{accountName}</span>
-              <small>{chainLabel}</small>
+              <div className="wshell-brand-copy">
+                <strong>devcity</strong>
+                <span>{accountName}</span>
+                <small>{chainLabel}</small>
+              </div>
             </div>
-          </div>
+          )}
           <div className="wshell-heading">
-            {flow && onBack && (
-              <Button type="button" variant="outline" size="icon" className="wshell-back rounded-full" onClick={onBack} aria-label="Back">
-                <ArrowLeft size={16} />
-              </Button>
-            )}
             <div>
               <h1>{title}</h1>
               {subtitle && <p>{subtitle}</p>}
@@ -142,12 +147,13 @@ export function WalletShell({
             <button
               type="button"
               className="wshell-account-btn"
+              aria-label={`${accountName} account`}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-controls={menuId}
               onClick={() => setMenuOpen((open) => !open)}
             >
-              <span className="wshell-avatar" aria-hidden="true">{(accountName || 'W').slice(0, 1).toUpperCase()}</span>
+              <img className="wshell-avatar" src={avatarSrc} alt="" />
               <span className="wshell-account-copy">
                 <strong>{accountName}</strong>
                 <span>{chainLabel} · {accountDetail}</span>

@@ -29,10 +29,11 @@ interface WalletTipTabProps {
   unlockedKey: Hex | null;
   fees: Fee[];
   importedTokens: ImportedWalletToken[];
+  feeSymbol?: string;
   notify?: (message: string) => void;
 }
 
-export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importedTokens, notify }: WalletTipTabProps) {
+export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importedTokens, feeSymbol = 'auto', notify }: WalletTipTabProps) {
   const [tipTo, setTipTo] = useState('');
   const [tipAmount, setTipAmount] = useState('');
   const [tipToken, setTipToken] = useState('USDT');
@@ -60,7 +61,8 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
     }
     return { to: getAddress(tipTo), value: parseUnits(tipAmount, 18) };
   }, [tipAmount, tipTo, token]);
-  const networkFee = useFeeQuote(address, feeRequest);
+  const feePrefer = feeSymbol === 'auto' ? undefined : feeSymbol;
+  const networkFee = useFeeQuote(address, feeRequest, feePrefer);
 
   async function handleUnlock() {
     if (!pin) {
@@ -115,14 +117,14 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
           abi: ERC20_ABI,
           functionName: 'transfer',
           args: [getAddress(tipTo), amount],
-        });
+        }, { preferSymbol: feePrefer });
       } else {
         const amount = parseUnits(tipAmount, 18);
         txHash = await sendTransactionWithFee(client, {
           account,
           to: getAddress(tipTo),
           value: amount,
-        });
+        }, { preferSymbol: feePrefer });
       }
       try {
         await fetch('/api/tips', {
@@ -201,7 +203,13 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
             </select>
           </div>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
-          <p className="wallet-send-caution">A tip is a real transfer. Confirm the recipient address before sending. Gas is paid in CELO, then USDT, then USDC.</p>
+          <p className="wallet-send-caution">
+            A tip is a real transfer. Confirm the recipient address before sending.
+            {' '}
+            {feeSymbol === 'auto'
+              ? 'The network fee is paid in CELO when you have it, otherwise USDT, then USDC.'
+              : `The network fee tries ${feeSymbol} first, then falls back if that balance cannot cover it.`}
+          </p>
           <Button disabled={tipping || !tipTo || !tipAmount || Boolean(networkFee.error)} onClick={() => void handleTip()}>
             <Heart size={16} /> {tipping ? 'Tipping…' : 'Send tip'}
           </Button>

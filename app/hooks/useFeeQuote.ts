@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import type { Address } from 'viem';
 import { FeeUnpayableError, quoteCeloFee, type FeeQuote, type TxRequest } from '@/lib/gas';
 
-export function useFeeQuote(account: string | null | undefined, request: TxRequest | null) {
+export function useFeeQuote(account: string | null | undefined, request: TxRequest | null, preferSymbol?: string | null) {
   const [quote, setQuote] = useState<FeeQuote | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const key = request ? `${request.to}:${request.data ?? ''}:${request.value?.toString() ?? ''}` : '';
+  const prefer = preferSymbol && preferSymbol !== 'auto' ? preferSymbol : undefined;
 
   useEffect(() => {
     if (!account || !request) {
@@ -22,7 +23,7 @@ export function useFeeQuote(account: string | null | undefined, request: TxReque
     setLoading(true);
     setError('');
     const timer = window.setTimeout(() => {
-      void quoteCeloFee(account as Address, request)
+      void quoteCeloFee(account as Address, request, undefined, prefer)
         .then((next) => {
           if (cancelled) return;
           setQuote(next);
@@ -41,7 +42,7 @@ export function useFeeQuote(account: string | null | undefined, request: TxReque
     };
     // `key` is the serialized request, so the object identity is not a dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account, key]);
+  }, [account, key, prefer]);
 
   return { quote, error, loading };
 }

@@ -1,18 +1,18 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
 import { formatUsd } from '../../hooks/useUsdPrices';
 import type { ProfileTokenSummary } from '../../hooks/useProfileToken';
 import type { HeldTokenView } from './types';
+import { TokenMark } from './TokenMark';
 
 type HoldingStatus = 'loading' | 'ready' | 'error';
 
 interface WalletHomeProps {
   celoBalance: string;
   stableBalances: Record<string, number | null>;
-  holdingStatus?: Partial<Record<'CELO' | 'USDT' | 'USDC' | 'cUSD', HoldingStatus>>;
-  onRetryHolding?: (symbol: 'CELO' | 'USDT' | 'USDC' | 'cUSD') => void;
+  holdingStatus?: Partial<Record<'CELO' | 'USDT' | 'USDC' | 'USDm', HoldingStatus>>;
+  onRetryHolding?: (symbol: 'CELO' | 'USDT' | 'USDC' | 'USDm') => void;
   usdPrices: Record<string, number>;
   profileToken?: ProfileTokenSummary | null;
   profileLoading?: boolean;
@@ -25,7 +25,7 @@ interface WalletHomeProps {
 const STABLES = [
   { symbol: 'USDT', name: 'Tether USD', digits: 2 },
   { symbol: 'USDC', name: 'USD Coin', digits: 2 },
-  { symbol: 'cUSD', name: 'Celo Dollar', digits: 4 },
+  { symbol: 'USDm', name: 'Mento Dollar', digits: 4 },
 ] as const;
 
 function usdFor(prices: Record<string, number>, symbol: string, amount: number) {
@@ -51,7 +51,7 @@ export function WalletHome({
   const celoAmount = celoStatus === 'ready' ? Number(celoBalance) : null;
   const celoUsd = celoAmount != null ? usdFor(usdPrices, 'CELO', celoAmount) : null;
   const heldStables = STABLES.filter((token) => {
-    if (token.symbol === 'cUSD') return true;
+    if (token.symbol === 'USDm') return true;
     const status = holdingStatus?.[token.symbol] ?? 'ready';
     if (status !== 'ready') return true;
     return (stableBalances[token.symbol] ?? 0) > 0;
@@ -102,7 +102,7 @@ export function WalletHome({
       })}
       {profileLoading && (
         <div className="wh-row" aria-busy="true">
-          <span className="wh-mark" aria-hidden="true">…</span>
+          <span className="wh-mark" aria-hidden="true" />
           <span className="wh-copy"><strong>Profile token</strong><small>Loading balance</small></span>
           <span className="wh-usd"><span className="balance-skeleton" /></span>
         </div>
@@ -111,6 +111,7 @@ export function WalletHome({
         <HoldingRow
           symbol={profileToken.symbol}
           name={profileToken.name}
+          icon={profileToken.tokenURI.startsWith('http') || profileToken.tokenURI.startsWith('data:') || profileToken.tokenURI.startsWith('/') ? profileToken.tokenURI : null}
           status="ready"
           amountLabel={profileBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })}
           usdLabel={profileUsd != null ? formatUsd(profileUsd) : null}
@@ -118,9 +119,6 @@ export function WalletHome({
         />
       )}
       {presentation === 'table' && children}
-      {presentation === 'table' && !profileToken && !profileLoading && (
-        <Button type="button" variant="outline" onClick={onOpenProfile}>Launch token</Button>
-      )}
     </div>
   );
 }
@@ -128,6 +126,7 @@ export function WalletHome({
 function HoldingRow({
   symbol,
   name,
+  icon,
   status,
   amountLabel,
   usdLabel,
@@ -136,6 +135,7 @@ function HoldingRow({
 }: {
   symbol: string;
   name: string;
+  icon?: string | null;
   status: HoldingStatus;
   amountLabel: string;
   usdLabel: string | null;
@@ -146,7 +146,7 @@ function HoldingRow({
   return (
     <div className="wh-row">
       <button type="button" className="wh-open" onClick={onOpen}>
-        <span className="wh-mark" aria-hidden="true">{symbol.slice(0, 1)}</span>
+        <TokenMark symbol={symbol} src={icon} />
         <span className="wh-copy">
           <strong>{symbol}</strong>
           <small className="wh-sub">{name}</small>

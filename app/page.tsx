@@ -26,9 +26,7 @@ import { cityPinSvg, markerScaleForZoom } from "@/lib/city-markers";
 import { eventPhase } from "@/lib/event-phase";
 import { Button } from "@/components/ui/button";
 import { EventCard } from "./components/EventCard";
-import { DevLocationGate } from "./components/DevLocationGate";
 import { PinBoxes } from "./components/PinBoxes";
-import type { DevLocationApply } from "./components/DevLocationPanel";
 import { YouSheet } from "./components/YouSheet";
 import { WalletSheet } from "./components/WalletSheet";
 import { TipSheet, type TipTarget } from "./components/TipSheet";
@@ -277,11 +275,9 @@ export default function CityHome() {
   const [dropMarkers, setDropMarkers] = useState<CityMarker[]>([]);
   const [personMarkers, setPersonMarkers] = useState<CityMarker[]>([]);
   const [placeMarkers, setPlaceMarkers] = useState<CityMarker[]>([]);
-  const [devLocationMode, setDevLocationMode] = useState<'off' | 'near' | 'far' | 'denied'>('off');
   const [locationSharing, setLocationSharing] = useState(true);
   const [locationPreferenceReady, setLocationPreferenceReady] = useState(false);
   const [friendMarkers, setFriendMarkers] = useState<Array<{ userId: string; username: string; latitude: number; longitude: number; verified: boolean }>>([]);
-  const [testMarkers, setTestMarkers] = useState<CityMarker[]>([]);
   const [eventStatus, setEventStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [offline, setOffline] = useState(false);
   const locationStateRef = useRef(locationState);
@@ -405,8 +401,8 @@ export default function CityHome() {
   }, [avatarSeed, shuffleAvatar]);
 
   const allMarkers = useMemo(
-    () => [...dropMarkers, ...eventMarkers, ...personMarkers, ...placeMarkers, ...testMarkers],
-    [dropMarkers, eventMarkers, personMarkers, placeMarkers, testMarkers],
+    () => [...dropMarkers, ...eventMarkers, ...personMarkers, ...placeMarkers],
+    [dropMarkers, eventMarkers, personMarkers, placeMarkers],
   );
   const kindById = useMemo(() => new globalThis.Map(allMarkers.map((item) => [item.id, item.kind] as const)), [allMarkers]);
 
@@ -852,39 +848,6 @@ export default function CityHome() {
   }, [filter, friendMarkers, mapReady]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!mapReady || !map) return;
-    const registry = mapMarkersRef.current;
-    for (const [id, marker] of registry) {
-      if (id.startsWith('test-')) {
-        marker.remove();
-        registry.delete(id);
-      }
-    }
-    for (const marker of testMarkers) {
-      const element = document.createElement('button');
-      element.type = 'button';
-      const pin = cityPinSvg({
-        kind: marker.kind === 'person' ? 'person' : marker.kind,
-        title: marker.name,
-      });
-      element.className = `map-marker city-pin marker-test${marker.kind === 'person' ? ' marker-person' : ''}`;
-      element.setAttribute('aria-label', `TEST. ${marker.name}. ${marker.detail}`);
-      element.innerHTML = pin.svg;
-      element.addEventListener('click', (event) => {
-        event.stopPropagation();
-        setSelectedId(marker.id);
-        setCardClosed(false);
-        if (marker.kind === 'drop') setDropSheetOpen(true);
-      });
-      const mapMarker = new maplibregl.Marker({ element, anchor: pin.anchor })
-        .setLngLat([marker.longitude, marker.latitude])
-        .addTo(map);
-      registry.set(marker.id, mapMarker);
-    }
-  }, [mapReady, testMarkers]);
-
-  useEffect(() => {
     const sync = () => setOffline(typeof navigator !== 'undefined' && navigator.onLine === false);
     sync();
     window.addEventListener('online', sync);
@@ -978,7 +941,6 @@ export default function CityHome() {
       setMyPosition(null);
       return;
     }
-    if (process.env.NODE_ENV !== 'production' && devLocationMode !== 'off') return;
     if (!navigator.geolocation) {
       setLocationState("unavailable");
       setLocationPromptOpen(true);
@@ -1018,7 +980,7 @@ export default function CityHome() {
       { enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 },
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [devLocationMode, locationPreferenceReady, locationSharing]);
+  }, [locationPreferenceReady, locationSharing]);
 
   useEffect(() => {
     mapMarkersRef.current.forEach((marker, id) => {
@@ -1062,15 +1024,6 @@ export default function CityHome() {
   }
 
   function readFreshClaimPosition(): Promise<{ lat: number; lng: number }> {
-    if (process.env.NODE_ENV !== 'production' && devLocationMode !== 'off') {
-      return new Promise((resolve, reject) => {
-        if (devLocationMode === 'denied' || !myPosition) {
-          reject(Object.assign(new Error('Location permission is required.'), { claimLocation: 'denied' as const }));
-          return;
-        }
-        resolve({ lat: myPosition[1], lng: myPosition[0] });
-      });
-    }
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(Object.assign(new Error("Location is unavailable."), { claimLocation: "unavailable" as const }));
@@ -1290,43 +1243,6 @@ export default function CityHome() {
     mapRef.current?.flyTo({ center: MUMBAI_CENTER, zoom: 14.1, duration: 1100 });
   }
 
-  function applyDevLocation(next: DevLocationApply) {
-    if (process.env.NODE_ENV === 'production') return;
-    setDevLocationMode(next.mode);
-    const places = next.places.filter((place) => place.id.startsWith('test-') && place.name.startsWith('TEST '));
-    setTestMarkers(next.mode === 'off' ? [] : places.map((place) => ({
-      id: place.id,
-      kind: place.kind,
-      name: place.name,
-      detail: place.detail,
-      distance: 'TEST',
-      latitude: place.latitude,
-      longitude: place.longitude,
-      color: 'coral',
-      amount: place.kind === 'drop' ? 'TEST' : undefined,
-      tokenSymbol: place.kind === 'drop' ? 'TEST' : undefined,
-    })));
-    if (next.mode === 'off') {
-      setMyPosition(null);
-      setLocationState('checking');
-      return;
-    }
-    if (next.mode === 'denied' || !next.position) {
-      setMyPosition(null);
-      setLocationState('denied');
-      setLocationPromptOpen(true);
-      setOutsidePromptOpen(false);
-      return;
-    }
-    const position: [number, number] = [next.position.longitude, next.position.latitude];
-    setMyPosition(position);
-    const inside = isInsideMumbai(position[0], position[1]);
-    setLocationState(inside ? 'inside' : 'outside');
-    setLocationPromptOpen(false);
-    setOutsidePromptOpen(!inside);
-    mapRef.current?.flyTo({ center: position, zoom: 16, duration: 800 });
-  }
-
   async function toggleLocationSharing() {
     const next = !locationSharing;
     setLocationSharing(next);
@@ -1353,14 +1269,6 @@ export default function CityHome() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sharing: true }),
       });
-    }
-    if (process.env.NODE_ENV !== 'production' && devLocationMode !== 'off') {
-      if (devLocationMode === 'denied') {
-        setLocationState('denied');
-        setLocationPromptOpen(true);
-      }
-      setRequestingLocation(false);
-      return;
     }
     if (!navigator.geolocation) {
       setLocationState("unavailable");
@@ -1546,11 +1454,8 @@ export default function CityHome() {
         {!dropLoading && dropError && (
           <div className="map-drops-status is-error" role="status">Couldn&apos;t load drops. <button onClick={() => void refreshDrops()}>Retry</button></div>
         )}
-        {!dropLoading && !dropError && dropMarkers.length === 0 && devLocationMode === 'off' && (
+        {!dropLoading && !dropError && dropMarkers.length === 0 && (
           <div className="map-drops-status" role="status">No live drops yet. Press and hold, or double-press, the map to create one.</div>
-        )}
-        {devLocationMode !== 'off' && (
-          <div className="map-drops-status" role="status">TEST location is on. These places and events are not real.</div>
         )}
         {locationPreferenceReady && !locationSharing && (
           <div className="map-drops-status" role="status">Location is off. Friends cannot see you on the map.</div>
@@ -1558,8 +1463,6 @@ export default function CityHome() {
 
         {offline && <div className="map-drops-status is-error" role="status">You are offline. The map will catch up when the connection returns.</div>}
         {eventStatus === 'error' && <div className="map-drops-status is-error" role="status">Couldn&apos;t load events. <button onClick={() => window.location.reload()}>Retry</button></div>}
-        <DevLocationGate onChange={applyDevLocation} />
-
         <header className="topbar">
           <div className="top-actions">
             <Button variant="outline" size="icon" className="rounded-full" type="button" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">

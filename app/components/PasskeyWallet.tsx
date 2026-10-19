@@ -21,22 +21,25 @@ import {
   type LocalWallet,
 } from '@/lib/keystore';
 import { ACTIVE_CHAIN, CELO_MAINNET_ID, CELO_SEPOLIA_ID, IS_MAINNET, feeCurrenciesFor } from '@/lib/celo';
+import { readFeePreference } from '@/lib/fee-preference';
 import { PinBoxes } from './PinBoxes';
 import { ERC20_ABI } from '@/lib/chain';
 import type { Hex, Address } from 'viem';
 import { removeImportedWalletToken, type ImportedWalletToken } from '@/lib/wallet-assets';
-import { WalletTradeTab } from './wallet/WalletTradeTab';
+import { WalletSwap, type SwapHolding } from './wallet/WalletSwap';
 import { WalletHome } from './wallet/WalletHome';
 import { WalletShell, type WalletNav } from './wallet/WalletShell';
 import { WalletDashboard } from './wallet/WalletDashboard';
 import { WalletCityTab } from './wallet/WalletCityTab';
 import { WalletSendTab } from './wallet/WalletSendTab';
 import { WalletTipTab } from './wallet/WalletTipTab';
-import { WalletSecurityTab } from './wallet/WalletSecurityTab';
+import { WalletSettings } from './wallet/WalletSettings';
 import { WalletReceive } from './wallet/WalletReceive';
 import { WalletActivity } from './wallet/WalletActivity';
 import { WalletTokenDetail } from './wallet/WalletTokenDetail';
 import { WalletTokenTools } from './WalletTokenTools';
+import { useCityStore } from '../lib/city-store';
+import { dicebearAvatarUrl } from '../lib/avatars';
 import type { HeldTokenView } from './wallet/types';
 import { useProfileToken } from '../hooks/useProfileToken';
 import { formatUsd, useUsdPrices } from '../hooks/useUsdPrices';
@@ -89,15 +92,23 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
   const [exporting, setExporting] = useState(false);
   const [restoreAddress, setRestoreAddress] = useState<string | null>(null);
 
-  // Fee currency selection (default USDT, then USDC, cUSD, ...)
-  const [feeSymbol, setFeeSymbol] = useState('USDT');
+  const [feeSymbol, setFeeSymbol] = useState('auto');
   const [importedTokens, setImportedTokens] = useState<ImportedWalletToken[]>([]);
   const onImportedTokensChange = useCallback((tokens: ImportedWalletToken[]) => setImportedTokens(tokens), []);
 
+  const avatarMode = useCityStore((state) => state.avatarMode);
+  const avatarSeed = useCityStore((state) => state.avatarSeed);
+  const avatarImageData = useCityStore((state) => state.avatarImageData);
   const chainId = IS_MAINNET ? CELO_MAINNET_ID : CELO_SEPOLIA_ID;
   const chainLabel = IS_MAINNET ? 'Celo' : 'Celo Sepolia';
   const addr = wallet?.address;
   const fees = feeCurrenciesFor(chainId);
+
+  useEffect(() => {
+    const saved = readFeePreference();
+    const allowed = saved === 'auto' || saved === 'CELO' || fees.some((fee) => fee.symbol === saved);
+    setFeeSymbol(allowed ? saved : 'auto');
+  }, [chainId, fees]);
   const handle = normalizeUsername(username) ?? normalizeUsername(user?.name ?? '') ?? 'city-explorer';
 
   useEffect(() => {
@@ -152,8 +163,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
     args: addr ? [addr as Address] : undefined,
     query: { enabled: !!addr, placeholderData: (previous) => previous },
   });
-  const cusdBal = useReadContract({
-    address: fees.find((f) => f.symbol === 'cUSD')?.address as Address,
+  const usdmBal = useReadContract({
+    address: fees.find((f) => f.symbol === 'USDm')?.address as Address,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: addr ? [addr as Address] : undefined,
@@ -165,20 +176,20 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
     return {
       USDT: fmt(usdtBal.data, 6),
       USDC: fmt(usdcBal.data, 6),
-      cUSD: fmt(cusdBal.data, 18),
+      USDm: fmt(usdmBal.data, 18),
     };
-  }, [usdtBal.data, usdcBal.data, cusdBal.data]);
+  }, [usdtBal.data, usdcBal.data, usdmBal.data]);
   const holdingStatus = {
     CELO: celoBalance ? 'ready' as const : celoError ? 'error' as const : 'loading' as const,
     USDT: usdtBal.data != null ? 'ready' as const : usdtBal.isError ? 'error' as const : 'loading' as const,
     USDC: usdcBal.data != null ? 'ready' as const : usdcBal.isError ? 'error' as const : 'loading' as const,
-    cUSD: cusdBal.data != null ? 'ready' as const : cusdBal.isError ? 'error' as const : 'loading' as const,
+    USDm: usdmBal.data != null ? 'ready' as const : usdmBal.isError ? 'error' as const : 'loading' as const,
   };
-  const retryHolding = (symbol: 'CELO' | 'USDT' | 'USDC' | 'cUSD') => {
+  const retryHolding = (symbol: 'CELO' | 'USDT' | 'USDC' | 'USDm') => {
     if (symbol === 'CELO') void refetchCelo();
     if (symbol === 'USDT') void usdtBal.refetch();
     if (symbol === 'USDC') void usdcBal.refetch();
-    if (symbol === 'cUSD') void cusdBal.refetch();
+    if (symbol === 'USDm') void usdmBal.refetch();
   };
 
   const { token: profileToken, loading: profileLoading } = useProfileToken(wallet?.address);
@@ -611,7 +622,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
     celoAmount != null && usdPrices.CELO != null ? celoAmount * usdPrices.CELO : null,
     stableBalances.USDT != null && usdPrices.USDT != null ? stableBalances.USDT * usdPrices.USDT : null,
     stableBalances.USDC != null && usdPrices.USDC != null ? stableBalances.USDC * usdPrices.USDC : null,
-    stableBalances.cUSD != null && usdPrices.cUSD != null ? stableBalances.cUSD * usdPrices.cUSD : null,
+    stableBalances.USDm != null && (usdPrices.USDm ?? usdPrices.cUSD) != null ? stableBalances.USDm * (usdPrices.USDm ?? usdPrices.cUSD) : null,
   ].filter((value): value is number => value != null);
   const usdBalance = pricedHoldings.length > 0 ? formatUsd(pricedHoldings.reduce((sum, value) => sum + value, 0)) : null;
   const balanceLoading = usdBalance == null && holdingStatus.CELO === 'loading';
@@ -620,10 +631,23 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
     CELO: holdingStatus.CELO === 'ready' && celoLabel ? celoLabel : null,
     USDT: stableBalances.USDT != null ? stableBalances.USDT.toFixed(2) : null,
     USDC: stableBalances.USDC != null ? stableBalances.USDC.toFixed(2) : null,
-    cUSD: stableBalances.cUSD != null ? stableBalances.cUSD.toFixed(4) : null,
+    USDm: stableBalances.USDm != null ? stableBalances.USDm.toFixed(4) : null,
   };
   const accountName = wallet?.name || user?.name || 'Wallet';
+  const avatarSrc = avatarMode === 'upload' && avatarImageData
+    ? avatarImageData
+    : dicebearAvatarUrl(avatarSeed || accountName);
   const accountDetail = wallet ? `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}` : '';
+  const swapHoldings: SwapHolding[] = [
+    { symbol: 'CELO', name: 'CELO', amount: celoAmount, status: holdingStatus.CELO, price: usdPrices.CELO ?? null },
+    { symbol: 'USDm', name: 'Mento Dollar', amount: stableBalances.USDm, status: holdingStatus.USDm, price: usdPrices.USDm ?? usdPrices.cUSD ?? null },
+    ...(stableBalances.USDT != null && stableBalances.USDT > 0 || holdingStatus.USDT !== 'ready'
+      ? [{ symbol: 'USDT', name: 'Tether USD', amount: stableBalances.USDT, status: holdingStatus.USDT, price: usdPrices.USDT ?? null }]
+      : []),
+    ...(stableBalances.USDC != null && stableBalances.USDC > 0 || holdingStatus.USDC !== 'ready'
+      ? [{ symbol: 'USDC', name: 'USD Coin', amount: stableBalances.USDC, status: holdingStatus.USDC, price: usdPrices.USDC ?? null }]
+      : []),
+  ];
   const flow = screen.id === 'send' || screen.id === 'tip' || screen.id === 'receive' || screen.id === 'token' || screen.id === 'profile';
   const nav: WalletNav = screen.id === 'activity' || screen.id === 'swap' || screen.id === 'settings' || screen.id === 'drops' ? screen.id : 'home';
   const pageTitle = screen.id === 'token' ? screen.token.symbol
@@ -690,6 +714,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
         onTokensChange={onImportedTokensChange}
         notify={onNotify}
         focus="assets"
+        addExternal
         importSignal={importSignal}
         onSelectImported={(token, balanceLabel) => setScreen({
           id: 'token',
@@ -713,6 +738,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
       subtitle={screen.id === 'home' ? 'Your tokens, your control.' : undefined}
       flow={flow}
       accountName={accountName}
+      avatarSrc={avatarSrc}
       accountDetail={accountDetail}
       chainLabel={chainLabel}
       address={wallet.address}
@@ -735,10 +761,12 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
           moreItems={[
             { id: 'activity', label: 'Activity', onClick: () => setScreen({ id: 'activity' }) },
             { id: 'drops', label: 'Badges & drops', onClick: () => setScreen({ id: 'drops' }) },
-            { id: 'add', label: 'Add token', onClick: () => setImportSignal((value) => value + 1) },
             ...(onCreateDrop ? [{ id: 'create-drop', label: 'Create a drop', onClick: () => onCreateDrop() }] : []),
             { id: 'settings', label: 'Settings', onClick: () => setScreen({ id: 'settings' }) },
           ]}
+          onAddToken={() => setImportSignal((value) => value + 1)}
+          onLaunchToken={() => setScreen({ id: 'profile' })}
+          launchLabel={profileToken ? 'Profile token' : 'Launch token'}
           summary={holdings('summary')}
           table={holdings('table')}
           activity={(
@@ -781,6 +809,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
               unlockedKey={unlockedKey}
               fees={fees}
               importedTokens={importedTokens}
+              feeSymbol={feeSymbol}
               notify={onNotify}
             />
           )}
@@ -792,28 +821,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
       )}
 
       {screen.id === 'swap' && (
-        <>
-          <section className="wallet-swap-block">
-            <h3>Profile token</h3>
-            <p className="you-note">Signs with this passkey wallet.</p>
-            <WalletTokenTools
-              wallet={wallet}
-              username={user.name ?? ''}
-              assetChainId={chainId}
-              assetChainLabel={chainLabel}
-              unlockedKey={unlockedKey}
-              onUnlockKey={(key) => setUnlockedKey(key)}
-              onTokensChange={onImportedTokensChange}
-              notify={onNotify}
-              focus="trade"
-            />
-          </section>
-          <section className="wallet-swap-block">
-            <h3>DEV26</h3>
-            <p className="you-note">Signs with a connected browser wallet. That account is separate from this passkey vault.</p>
-            <WalletTradeTab />
-          </section>
-        </>
+        <WalletSwap tokens={swapHoldings} chainLabel={chainLabel} />
       )}
 
       {screen.id === 'profile' && (
@@ -842,8 +850,14 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
               (screen.token.symbol === 'CELO' && holdingStatus.CELO === 'loading')
               || (screen.token.symbol === 'USDT' && holdingStatus.USDT === 'loading')
               || (screen.token.symbol === 'USDC' && holdingStatus.USDC === 'loading')
-              || (screen.token.symbol === 'cUSD' && holdingStatus.cUSD === 'loading')
+              || (screen.token.symbol === 'USDm' && holdingStatus.USDm === 'loading')
             }
+            usdLabel={(() => {
+              const quantity = Number(screen.token.balance);
+              const price = usdPrices[screen.token.symbol] ?? (screen.token.symbol === 'USDm' ? usdPrices.cUSD : undefined);
+              if (!Number.isFinite(quantity) || price == null) return null;
+              return formatUsd(quantity * price);
+            })()}
             onSend={() => setScreen({ id: 'send', token: screen.token.sendToken })}
             onReceive={() => setScreen({ id: 'receive', symbol: screen.token.symbol })}
             onRemove={screen.token.kind === 'imported' && screen.token.contract ? () => {
@@ -873,41 +887,23 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
       )}
 
       {screen.id === 'settings' && (
-        <>
-          <section className="wdash-card wset-account">
-            <h2>Connected account</h2>
-            <p>{accountName}</p>
-            <p>{chainLabel}</p>
-            <p className="wallet-receive-address">{wallet.address}</p>
-          </section>
-          <WalletSecurityTab
-            wallet={wallet}
-            unlockedKey={unlockedKey}
-            fees={fees}
-            feeSymbol={feeSymbol}
-            setFeeSymbol={setFeeSymbol}
-            onWalletChange={(next) => setWallet(next)}
-            onUnlockKey={(key) => setUnlockedKey(key)}
-            onSignOut={() => { void leaveAccount(); }}
-            notify={onNotify}
-          />
-          <section className="wallet-settings-block">
-            <h3>Your data</h3>
-            <p className="you-note">Download the profile, posts, tips, and claims stored for this wallet.</p>
-            <Button type="button" variant="outline" disabled={exporting} onClick={() => void downloadExport()}>
-              {exporting ? 'Preparing…' : 'Download my data'}
-            </Button>
-          </section>
-          {browserWallet && (
-            <section className="external-wallet-section">
-              <div>
-                <strong>Connected browser wallet</strong>
-                <span>{browserWallet.address.slice(0, 8)}…{browserWallet.address.slice(-6)}</span>
-              </div>
-              <Button type="button" variant="outline" onClick={browserWallet.onDisconnect}>Disconnect</Button>
-            </section>
-          )}
-        </>
+        <WalletSettings
+          accountName={accountName}
+          chainLabel={chainLabel}
+          address={wallet.address}
+          fees={fees}
+          feeSymbol={feeSymbol}
+          onFeeSymbol={setFeeSymbol}
+          wallet={wallet}
+          unlockedKey={unlockedKey}
+          onWalletChange={(next) => setWallet(next)}
+          onUnlockKey={(key) => setUnlockedKey(key)}
+          notify={onNotify}
+          onSignOut={() => { void leaveAccount(); }}
+          exporting={exporting}
+          onExport={() => { void downloadExport(); }}
+          browserWallet={browserWallet}
+        />
       )}
 
       {error && <p className="you-error" role="alert">{error}</p>}

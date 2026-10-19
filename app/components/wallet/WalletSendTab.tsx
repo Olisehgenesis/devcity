@@ -31,14 +31,14 @@ interface WalletSendTabProps {
   fees: Fee[];
   importedTokens: ImportedWalletToken[];
   feeSymbol: string;
-  setFeeSymbol: (symbol: string) => void;
+  setFeeSymbol?: (symbol: string) => void;
   initialToken?: string;
   chainLabel: string;
   availableBySymbol?: Record<string, string | null>;
   notify?: (message: string) => void;
 }
 
-export function WalletSendTab({ address, pinProtected, unlockedKey, fees, importedTokens, initialToken, chainLabel, availableBySymbol, notify }: WalletSendTabProps) {
+export function WalletSendTab({ address, pinProtected, unlockedKey, fees, importedTokens, feeSymbol, initialToken, chainLabel, availableBySymbol, notify }: WalletSendTabProps) {
   const [sendTo, setSendTo] = useState('');
   const [sendAmount, setSendAmount] = useState('');
   const [sendToken, setSendToken] = useState(initialToken || 'USDT');
@@ -71,7 +71,8 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
     }
     return { to: getAddress(sendTo), value: parseUnits(sendAmount, 18) };
   }, [sendAmount, sendTo, token]);
-  const networkFee = useFeeQuote(address, feeRequest);
+  const feePrefer = feeSymbol === 'auto' ? undefined : feeSymbol;
+  const networkFee = useFeeQuote(address, feeRequest, feePrefer);
 
   async function handleUnlock() {
     if (!pin) {
@@ -129,14 +130,14 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
           abi: ERC20_ABI,
           functionName: 'transfer',
           args: [getAddress(toAddress), amount],
-        });
+        }, { preferSymbol: feePrefer });
       } else {
         const amount = parseUnits(sendAmount, 18);
         txHash = await sendTransactionWithFee(client, {
           account,
           to: getAddress(toAddress),
           value: amount,
-        });
+        }, { preferSymbol: feePrefer });
       }
       setHash(txHash);
       setExplorer(ACTIVE_CHAIN.blockExplorers?.default.url ?? '');
@@ -272,7 +273,11 @@ export function WalletSendTab({ address, pinProtected, unlockedKey, fees, import
             </button>
           </p>
           <FeePreview quote={networkFee.quote} error={networkFee.error} loading={networkFee.loading} />
-          <p className="wallet-send-caution">Gas is paid in CELO when you have it, otherwise USDT, then USDC, then another fee currency you hold.</p>
+          <p className="wallet-send-caution">
+            {feeSymbol === 'auto'
+              ? 'The network fee is separate from this transfer. It is paid in CELO when you have it, otherwise USDT, then USDC, then another fee currency you hold.'
+              : `The network fee is separate from this transfer. It tries ${feeSymbol} first. If that balance cannot cover the fee, it falls back to CELO, then USDT, then USDC.`}
+          </p>
           <Button
             type="button"
             className="border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]"

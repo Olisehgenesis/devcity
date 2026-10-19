@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { FeeUnpayableError, feePreference, formatFeeAmount, sortFeeSymbols } from './gas';
+import { FeeUnpayableError, feePreference, formatFeeAmount, orderFeeCandidates, sortFeeSymbols } from './gas';
 
 describe('celo fee currency order', () => {
   it('pays CELO conceptually first, then USDT including USD₮, then USDC, then other tokens', () => {
@@ -11,6 +11,13 @@ describe('celo fee currency order', () => {
     const sorted = sortFeeSymbols(['EURm', 'USDC', 'USD₮', 'cUSD']);
     assert.deepEqual(sorted.slice(0, 2), ['USD₮', 'USDC']);
     assert.ok(sorted.indexOf('USDC') < sorted.indexOf('EURm'));
+  });
+
+  it('tries a requested fee currency first and ignores an unknown one', () => {
+    const automatic = [{ symbol: 'CELO' }, { symbol: 'USDT' }, { symbol: 'USDC' }];
+    assert.deepEqual(orderFeeCandidates(automatic, 'USDC').map((item) => item.symbol), ['USDC', 'CELO', 'USDT']);
+    assert.deepEqual(orderFeeCandidates(automatic, 'auto').map((item) => item.symbol), ['CELO', 'USDT', 'USDC']);
+    assert.deepEqual(orderFeeCandidates(automatic, 'cEUR').map((item) => item.symbol), ['CELO', 'USDT', 'USDC']);
   });
 
   it('formats an 18-decimal fee without claiming a zero balance', () => {
