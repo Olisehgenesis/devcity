@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, ChevronDown, KeyRound } from 'lucide-react';
 import { getAddress, parseUnits, type Hex } from 'viem';
 import { Button } from '@/components/ui/button';
+import { BrandLoader } from '../BrandLoader';
 import { formatUsd } from '../../hooks/useUsdPrices';
 import { useUnlockedKey } from '../../hooks/useUnlockedKey';
 import { decryptWithPassphrase, loadLocalWallet } from '@/lib/keystore';
@@ -300,10 +301,7 @@ export function WalletSwap({
 function SwapProgress({ from, to }: { from: string; to: string }) {
   return (
     <section className="swap-progress" role="status" aria-live="polite">
-      <div className="swap-logo" aria-hidden="true">
-        <i /><i /><i /><i /><i />
-      </div>
-      <p>Swapping {from} to {to}</p>
+      <BrandLoader label={`Swapping ${from} to ${to}`} />
     </section>
   );
 }
