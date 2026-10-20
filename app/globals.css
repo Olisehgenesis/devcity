@@ -3227,6 +3227,10 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
   overflow: auto;
   padding-bottom: calc(24px + env(safe-area-inset-bottom));
 }
+.sheet-backdrop.is-page.keeps-nav { z-index: 60; }
+.sheet-page.keeps-nav .sheet-body {
+  padding-bottom: calc(124px + env(safe-area-inset-bottom));
+}
 .sheet-back {
   display: grid;
   place-items: center;

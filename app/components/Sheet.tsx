@@ -13,10 +13,12 @@ interface SheetProps {
   size?: 'default' | 'vault' | 'page';
   /** The child draws its own header and close control. */
   bare?: boolean;
+  /** Leave the city bottom bar visible and tappable above this page. */
+  keepNav?: boolean;
   children: ReactNode;
 }
 
-export function Sheet({ open, onClose, title, eyebrow, size = 'default', bare = false, children }: SheetProps) {
+export function Sheet({ open, onClose, title, eyebrow, size = 'default', bare = false, keepNav = false, children }: SheetProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -73,10 +75,10 @@ export function Sheet({ open, onClose, title, eyebrow, size = 'default', bare = 
   const page = size === 'page';
 
   const dialog = (
-    <div className={page ? 'sheet-backdrop is-page' : 'sheet-backdrop'} onClick={page ? undefined : onClose}>
+    <div className={`${page ? 'sheet-backdrop is-page' : 'sheet-backdrop'}${keepNav ? ' keeps-nav' : ''}`} onClick={page ? undefined : onClose}>
       <div
         ref={dialogRef}
-        className={`${page ? 'sheet sheet-page' : size === 'vault' ? 'sheet sheet-vault' : 'sheet'}${bare ? ' sheet-bare' : ''}`}
+        className={`${page ? 'sheet sheet-page' : size === 'vault' ? 'sheet sheet-vault' : 'sheet'}${bare ? ' sheet-bare' : ''}${keepNav ? ' keeps-nav' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
