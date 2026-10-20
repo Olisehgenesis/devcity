@@ -131,19 +131,28 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
   }, [chainId, fees]);
 
   useEffect(() => {
-    if (!addr) return;
+    if (!addr || !user?.id) return;
     const mode = avatarMode === 'upload' ? 'UPLOAD' : avatarMode === 'initials' ? 'INITIALS' : 'DICEBEAR';
-    void fetch('/api/me', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userAddress: addr,
-        avatarMode: mode,
-        avatarSeed,
-        avatarImageData: avatarMode === 'upload' ? avatarImageData : null,
-      }),
-    });
-  }, [addr, avatarImageData, avatarMode, avatarSeed]);
+    void (async () => {
+      const linked = await fetch('/api/me/wallet', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress: addr }),
+      });
+      if (!linked.ok) return;
+      await fetch('/api/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userAddress: addr,
+          avatarMode: mode,
+          avatarSeed,
+          avatarImageData: avatarMode === 'upload' ? avatarImageData : null,
+        }),
+      });
+    })();
+  }, [addr, avatarImageData, avatarMode, avatarSeed, user?.id]);
   const handle = normalizeUsername(username) ?? normalizeUsername(user?.name ?? '') ?? 'city-explorer';
 
   useEffect(() => {

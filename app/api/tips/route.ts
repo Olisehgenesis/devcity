@@ -24,6 +24,7 @@ export async function POST(request: Request) {
       tokenSymbol: body.tokenSymbol,
       amount: body.amount,
       message: body.message,
+      txHash: body.txHash,
     });
     return NextResponse.json({ tip }, { status: 201 });
   } catch (err) {

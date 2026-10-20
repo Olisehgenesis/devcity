@@ -127,8 +127,9 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
           value: amount,
         }, { preferSymbol: feePrefer });
       }
+      let recordError = '';
       try {
-        await fetch('/api/tips', {
+        const recorded = await fetch('/api/tips', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -137,16 +138,22 @@ export function WalletTipTab({ address, pinProtected, unlockedKey, fees, importe
             tokenSymbol: token ? token.symbol : 'CELO',
             amount: tipAmount,
             message: 'Wallet tip',
+            txHash,
           }),
         });
+        if (!recorded.ok) {
+          const body = await recorded.json().catch(() => ({})) as { error?: string };
+          recordError = body.error || 'The tip was sent. The city record could not be saved.';
+        }
       } catch {
-        // DB tip record is best-effort.
+        recordError = 'The tip was sent. The city record could not be saved.';
       }
       setHash(txHash);
       setExplorer(ACTIVE_CHAIN.blockExplorers?.default.url ?? '');
       setTipAmount('');
       setTipTo('');
-      notify?.('Tip sent.');
+      if (recordError) setError(recordError);
+      else notify?.('Tip sent.');
     } catch (e: any) {
       setError(e?.shortMessage || e?.message || 'Tip failed');
     } finally {

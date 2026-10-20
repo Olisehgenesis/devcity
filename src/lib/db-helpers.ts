@@ -1,24 +1,20 @@
 import { prisma } from './prisma';
 import { Decimal } from '@prisma/client/runtime/library';
 import { signClaimAuthorization, dropIdToBytes32, CLAIM_CHAIN } from './signer';
-import { getConfig, getNonce } from '../../contracts/interact';
+import { readClaimNonce, readSuccessfulReceipt, readTransaction } from './claim-chain';
 import { parseUnits, type Hex } from 'viem';
 import { rateLimit, RATE_LIMITS, getClientIdentifier } from './rate-limit';
 import { NextRequest } from 'next/server';
 import { CLAIM_RADIUS_M, distanceMeters } from './geo';
 import { claimOutOfRangeMessage, parseClaimCoordinate } from './claim-eligibility';
 import { CELO_SEPOLIA } from './chain';
+import { ApiError } from './api-error';
+import { normalizeWalletAddress } from './wallet-address';
 
-export class ApiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+export { ApiError };
 
 function normalizeAddress(address: string): string {
-  return address.trim().toLowerCase();
+  return normalizeWalletAddress(address);
 }
 
 function toDecimal(value: Decimal | number | string): Decimal {
@@ -239,12 +235,7 @@ export async function authorizeClaim(
 
   let nonce = BigInt(0);
   try {
-    nonce = await getNonce(
-      user.walletAddress as Hex,
-      getConfig({
-        dropClaimAddress: (process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS as Hex | undefined) || CELO_SEPOLIA.dropClaim,
-      }),
-    );
+    nonce = await readClaimNonce(user.walletAddress as Hex);
   } catch {
     throw new ApiError(503, 'Unable to read chain nonce. Please try again.');
   }
@@ -280,6 +271,52 @@ export async function authorizeClaim(
     amount: amountWei.toString(),
     expiresAt: expiresAt.toString(),
   };
+}
+
+const TX_HASH = /^0x[0-9a-f]{64}$/;
+
+function normalizeTxHash(value: unknown): Hex {
+  if (typeof value !== 'string') throw new ApiError(400, 'A transaction hash is required.');
+  const hash = value.trim().toLowerCase();
+  if (!TX_HASH.test(hash)) throw new ApiError(400, 'That transaction hash is not valid.');
+  return hash as Hex;
+}
+
+export async function confirmClaim(input: { dropId: string; userAddress: string; txHash: string }) {
+  const dropId = String(input.dropId ?? '').trim();
+  if (!dropId) throw new ApiError(400, 'A drop is required.');
+  const user = await getOrCreateUser(input.userAddress);
+  const hash = normalizeTxHash(input.txHash);
+  const byHash = await prisma.dropClaim.findUnique({ where: { txHash: hash } });
+  if (byHash) {
+    if (byHash.dropId === dropId && byHash.userId === user.id && byHash.status === 'CONFIRMED') {
+      return { dropId, status: 'CONFIRMED' as const, txHash: hash };
+    }
+    throw new ApiError(409, 'That transaction is already recorded.');
+  }
+  const claim = await prisma.dropClaim.findUnique({
+    where: { dropId_userId: { dropId, userId: user.id } },
+  });
+  if (!claim) throw new ApiError(404, 'Claim this drop before recording the receipt.');
+  if (claim.status === 'CONFIRMED') throw new ApiError(409, 'This drop is already claimed.');
+
+  let receipt;
+  try {
+    receipt = await readSuccessfulReceipt(hash);
+  } catch {
+    throw new ApiError(503, 'The claim receipt could not be read yet. Try again.');
+  }
+  if (receipt.status !== 'success') throw new ApiError(400, 'The claim transaction failed. Nothing was recorded.');
+  const dropClaim = ((process.env.NEXT_PUBLIC_DROPCLAIM_ADDRESS as string | undefined) || CELO_SEPOLIA.dropClaim).toLowerCase();
+  if (receipt.to?.toLowerCase() !== dropClaim) {
+    throw new ApiError(400, 'That transaction did not call the drop contract.');
+  }
+
+  await prisma.dropClaim.update({
+    where: { id: claim.id },
+    data: { status: 'CONFIRMED', txHash: hash },
+  });
+  return { dropId, status: 'CONFIRMED' as const, txHash: hash };
 }
 
 export async function listClaims(userAddress: string) {
@@ -800,6 +837,15 @@ export async function listStalls(opts?: { lat?: number; lng?: number; radiusKm?:
   return stalls.map(serializeStall);
 }
 
+async function ownerFromInput(ownerId: string) {
+  const raw = String(ownerId ?? '').trim();
+  if (/^0x[0-9a-f]{40}$/i.test(raw)) return getOrCreateUser(raw);
+  if (!raw) throw new ApiError(400, 'An owner is required.');
+  const user = await prisma.user.findUnique({ where: { id: raw } });
+  if (!user) throw new ApiError(404, 'That account was not found.');
+  return user;
+}
+
 export async function createStall(input: {
   ownerId: string;
   name: string;
@@ -812,9 +858,10 @@ export async function createStall(input: {
 }) {
   if (!input.name) throw new ApiError(400, 'name is required');
   if (input.lat == null || input.lng == null) throw new ApiError(400, 'lat and lng are required');
+  const owner = await ownerFromInput(input.ownerId);
   const stall = await prisma.stall.create({
     data: {
-      ownerId: input.ownerId,
+      ownerId: owner.id,
       name: input.name,
       description: input.description,
       latitude: toDecimal(input.lat),
@@ -824,7 +871,7 @@ export async function createStall(input: {
       tags: input.tags ?? [],
     },
   });
-  await applyGameActions(input.ownerId, { awardBadge: 'event-host' });
+  if (owner.walletAddress) await applyGameActions(owner.walletAddress, { awardBadge: 'event-host' });
   return serializeStall(stall);
 }
 
@@ -877,9 +924,10 @@ export async function createBooth(input: {
 }) {
   if (!input.name) throw new ApiError(400, 'name is required');
   if (input.lat == null || input.lng == null) throw new ApiError(400, 'lat and lng are required');
+  const owner = await ownerFromInput(input.ownerId);
   const booth = await prisma.booth.create({
     data: {
-      ownerId: input.ownerId,
+      ownerId: owner.id,
       stallId: input.stallId,
       eventId: input.eventId,
       name: input.name,
@@ -961,15 +1009,63 @@ export async function createTip(input: {
   tokenSymbol: string;
   amount: string;
   message?: string;
+  txHash?: string;
 }) {
   if (!input.toAddress || !input.tokenSymbol || !input.amount) {
     throw new ApiError(400, 'fromAddress, toAddress, tokenSymbol and amount are required');
   }
+  const hash = normalizeTxHash(input.txHash);
   const from = await getOrCreateUser(input.fromAddress);
   const to = await getOrCreateUser(input.toAddress);
-  const token = await prisma.token.findFirst({ where: { symbol: { equals: input.tokenSymbol, mode: 'insensitive' } } });
+  const symbol = input.tokenSymbol.trim();
+  const token = symbol.toUpperCase() === 'CELO'
+    ? await prisma.token.upsert({
+      where: { chainId_contractAddress: { chainId: CLAIM_CHAIN.id, contractAddress: CELO_SEPOLIA.celo.toLowerCase() } },
+      create: {
+        creatorId: from.id,
+        name: 'CELO',
+        symbol: 'CELO',
+        chainId: CLAIM_CHAIN.id,
+        contractAddress: CELO_SEPOLIA.celo.toLowerCase(),
+        decimals: 18,
+        maxSupply: toDecimal(0),
+      },
+      update: {},
+    })
+    : await prisma.token.findFirst({ where: { symbol: { equals: symbol, mode: 'insensitive' } } });
   if (!token) throw new ApiError(404, `No token "${input.tokenSymbol}". Pick a token in the app.`);
   if (from.id === to.id) throw new ApiError(400, 'Cannot tip yourself');
+  const existing = await prisma.tip.findUnique({ where: { txHash: hash } });
+  if (existing) {
+    if (existing.fromUserId === from.id && existing.toUserId === to.id) {
+      return {
+        id: existing.id,
+        toId: to.id,
+        tokenSymbol: token.symbol,
+        amount: existing.amount.toString(),
+        txHash: hash,
+        createdAt: toIso(existing.createdAt),
+      };
+    }
+    throw new ApiError(409, 'That transaction is already recorded.');
+  }
+  let transaction;
+  let receipt;
+  try {
+    [transaction, receipt] = await Promise.all([readTransaction(hash), readSuccessfulReceipt(hash)]);
+  } catch {
+    throw new ApiError(503, 'The tip receipt could not be read yet. Try again.');
+  }
+  if (receipt.status !== 'success') throw new ApiError(400, 'The tip transaction failed. Nothing was recorded.');
+  if (transaction.from.toLowerCase() !== from.walletAddress) {
+    throw new ApiError(400, 'That transaction was not sent by this wallet.');
+  }
+  const native = symbol.toUpperCase() === 'CELO';
+  if (native) {
+    if (transaction.to?.toLowerCase() !== to.walletAddress) throw new ApiError(400, 'That transaction was not sent to this person.');
+  } else if (transaction.to?.toLowerCase() !== token.contractAddress?.toLowerCase()) {
+    throw new ApiError(400, 'That transaction did not call this token.');
+  }
   const tip = await prisma.tip.create({
     data: {
       fromUserId: from.id,
@@ -977,6 +1073,7 @@ export async function createTip(input: {
       tokenId: token.id,
       amount: toDecimal(input.amount),
       message: input.message,
+      txHash: hash,
     },
   });
 
@@ -988,6 +1085,7 @@ export async function createTip(input: {
     toId: to.id,
     tokenSymbol: token.symbol,
     amount: tip.amount.toString(),
+    txHash: hash,
     createdAt: toIso(tip.createdAt),
   };
 }

@@ -326,6 +326,14 @@ export default function CityHome() {
         return;
       }
       const wallet = await walletForUser(user.id, user.name);
+      if (wallet?.address) {
+        await fetch('/api/me/wallet', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userAddress: wallet.address }),
+        });
+      }
       setFeedUserAddress(wallet?.address ?? null);
       setFeedProfileStatus(wallet ? "ready" : "wallet-needed");
     } catch {
@@ -1159,12 +1167,20 @@ export default function CityHome() {
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("The claim transaction failed. Nothing was claimed.");
+      const recorded = await fetch("/api/claims", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dropId, userAddress: myAddress, txHash: hash }),
+      });
+      const recordedBody = await recorded.json().catch(() => ({})) as { error?: string };
       claim(selected.id, selected.name, tokenFor(selected), selected.amount ?? "1", hash);
       setChainClaims((current) => ({ ...current, [dropId]: true }));
       setClaimOutcome("success");
       setClaimAskPin(false);
       void refreshClaimStatus();
-      setNotice(`Claim successful. ${selected.amount} ${tokenFor(selected)} is in your wallet.`);
+      setNotice(recorded.ok
+        ? `Claim successful. ${selected.amount} ${tokenFor(selected)} is in your wallet.`
+        : `Claim successful. ${selected.amount} ${tokenFor(selected)} is in your wallet. ${recordedBody.error || "The city record will catch up."}`);
     } catch (error) {
       setClaimOutcome("failed");
       setClaimError(claimFailureMessage(error));
