@@ -425,7 +425,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     if (seedPayTouched) return;
     const usdt = payBalances.USDT;
     if (usdt == null || usdt > BigInt(0)) return;
-    const funded = SEED_PAY_SYMBOLS.find((symbol) => symbol !== 'USDT' && (payBalances[symbol] ?? BigInt(0)) > BigInt(0));
+    const funded = (['USDC', 'USDm', 'CELO'] as const).find((symbol) => (payBalances[symbol] ?? BigInt(0)) > BigInt(0));
     if (funded) setSeedPaySymbol(funded);
   }, [payBalances, seedPayTouched]);
 
@@ -1400,7 +1400,9 @@ function ProfileTokenPage({
                   ? 'Paying with USDT seeds the pool directly.'
                   : seedRouteBusy
                     ? `Finding a route from ${seedPaySymbol} to USDT…`
-                    : seedRouteError || seedRoute || `Enter a ${seedPaySymbol} amount to build the route.`}
+                    : seedRouteError || (seedRoute
+                      ? `${seedRoute}${seedPaySymbol === 'CELO' ? ' Mento does not swap CELO, so this Uniswap pool can reject the swap. USDC and USDm go through Mento.' : ''}`
+                      : `Enter a ${seedPaySymbol} amount to build the route.`)}
               </p>
               {!poolReady && (
                 <Button type="button" variant="outline" className="whitespace-normal" onClick={onUseDefaults}>

@@ -252,8 +252,9 @@ async function quoteDirect(tokenIn: Address, tokenOut: Address, amountIn: bigint
     quoteMento(tokenIn, tokenOut, amountIn),
     quoteUniswap(tokenIn, tokenOut, amountIn),
   ]);
-  if (mento && uniswap) return mento.amountOut >= uniswap.amountOut ? mento : uniswap;
-  return mento ?? uniswap;
+  // Mento settles Celo stables. A richer Uniswap quote can be a thin pool the router then rejects.
+  if (mento) return mento;
+  return uniswap;
 }
 
 export async function quoteSwap(tokenIn: SwapAsset, tokenOut: SwapAsset, amountIn: bigint): Promise<SwapQuote | null> {
