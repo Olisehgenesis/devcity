@@ -74,6 +74,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
   const signerAddressRef = useRef<string | null>(null);
   const conversationsRef = useRef(new Map<string, Dm<unknown>>());
   const peerAddressesRef = useRef(new Map<string, string>());
+  const connectLockRef = useRef<Promise<void> | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
   const [threads, setThreads] = useState<XmtpThread[]>([]);
@@ -143,6 +144,8 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
   }, [refreshThreads]);
 
   const connectWithSigner = useCallback(async (signer: Signer, signerAddress: string) => {
+    if (connectLockRef.current) return connectLockRef.current;
+    const run = (async () => {
     setStatus('connecting');
     setError('');
     let created: Client | null = null;
@@ -195,6 +198,13 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       created?.close();
       setStatus('error');
       setError(cause instanceof Error ? cause.message : 'XMTP could not connect.');
+    }
+    })();
+    connectLockRef.current = run;
+    try {
+      await run;
+    } finally {
+      connectLockRef.current = null;
     }
   }, [applyStreamedMessage, refreshThreads]);
 

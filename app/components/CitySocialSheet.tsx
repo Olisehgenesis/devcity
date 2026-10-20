@@ -8,6 +8,7 @@ import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
 import { FriendDesk } from './FriendDesk';
+import { UnlockSecret } from './PinBoxes';
 import { ChatList } from './chat/ChatList';
 import { useXmtpChat, type XmtpUiMessage } from '../hooks/useXmtpChat';
 import { resolveIdentity, shortAddress } from '../lib/resolve-identity';
@@ -67,6 +68,17 @@ type PresenceUser = {
   distance: number;
 };
 
+type FriendProfile = {
+  username: string;
+  displayName: string | null;
+  avatar: string | null;
+  address: string | null;
+  joinedAt: string | null;
+  viewerFollows: boolean;
+  following: Array<{ username: string | null; displayName: string | null; avatar: string | null; address: string | null }>;
+  posts: Array<{ id: string; text: string; createdAt: string }>;
+};
+
 const TONES = ['coral', 'yellow', 'blue', 'pink', 'mint', 'lime', 'orange'];
 
 function toneForUsername(username: string) {
@@ -105,16 +117,19 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [chatQuery, setChatQuery] = useState('');
   const [chatPane, setChatPane] = useState<'chats' | 'friends'>('chats');
   const [chatNames, setChatNames] = useState<Record<string, string>>({});
+  const [selectedFriend, setSelectedFriend] = useState<PresenceUser | null>(null);
+  const [friendProfile, setFriendProfile] = useState<FriendProfile | null>(null);
+  const [friendProfileError, setFriendProfileError] = useState('');
+  const [friendProfileLoading, setFriendProfileLoading] = useState(false);
+  const [friendsReload, setFriendsReload] = useState(0);
   const [chatActionError, setChatActionError] = useState('');
   const [inboxWallet, setInboxWallet] = useState<LocalWallet | null>(null);
   const [inboxWalletLoading, setInboxWalletLoading] = useState(false);
   const [inboxWalletError, setInboxWalletError] = useState('');
-  const [inboxWalletUnlocked, setInboxWalletUnlocked] = useState(false);
   const [inboxPin, setInboxPin] = useState('');
   const [inboxWalletRetry, setInboxWalletRetry] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const sessionKey = useUnlockedKey(userAddress);
-  const [openWalletAddress, setOpenWalletAddress] = useState<string | null>(null);
   const xmtp = useXmtpChat(open && view === 'chat', onNotify);
   const connectWithLocalWallet = xmtp.connectWithLocalWallet;
   const startXmtpConversation = xmtp.startConversation;
@@ -126,13 +141,6 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const hiddenChats = useChatRead((state) => state.hidden);
   const mutedChats = useChatRead((state) => state.muted);
   const lastReadAt = useChatRead((state) => state.lastReadAt);
-
-  useEffect(() => {
-    const sync = () => setOpenWalletAddress(getUnlockedWallet()?.address ?? null);
-    sync();
-    window.addEventListener('devcity-wallet-unlocked', sync);
-    return () => window.removeEventListener('devcity-wallet-unlocked', sync);
-  }, []);
 
   useEffect(() => {
     if (!startChatAddress) return;
@@ -154,10 +162,6 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       setInboxPin('');
       return;
     }
-    const unlocked = getUnlockedWallet();
-    if (unlocked && xmtpStatus === 'idle') {
-      void connectWithLocalWallet(unlocked.privateKey, unlocked.address);
-    }
     if (profileStatus !== 'ready' || !userAddress) {
       setInboxPin('');
       return;
@@ -165,7 +169,6 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     let cancelled = false;
     setInboxWallet(null);
     setInboxWalletError('');
-    setInboxWalletUnlocked(false);
     setInboxWalletLoading(true);
     void import('@/lib/keystore')
       .then(({ listLocalWallets }) => listLocalWallets())
@@ -174,8 +177,6 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
         const wallet = wallets.find((item) => item.address.toLowerCase() === userAddress.toLowerCase());
         if (!wallet) throw new Error('This device does not have the wallet for your passkey account.');
         setInboxWallet(wallet);
-        const privateKey = getUnlockedPrivateKey(wallet.address);
-        if (privateKey) setInboxWalletUnlocked(true);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -185,7 +186,16 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
         if (!cancelled) setInboxWalletLoading(false);
       });
     return () => { cancelled = true; };
-  }, [open, profileStatus, userAddress, view, inboxWalletRetry, connectWithLocalWallet, sessionKey, xmtpStatus]);
+  }, [open, profileStatus, userAddress, view, inboxWalletRetry]);
+
+  useEffect(() => {
+    if (!open || view !== 'chat' || xmtpStatus !== 'idle') return;
+    const unlocked = userAddress ? null : getUnlockedWallet();
+    const key = userAddress ? getUnlockedPrivateKey(userAddress) : unlocked?.privateKey;
+    const address = userAddress ?? unlocked?.address;
+    if (!key || !address) return;
+    void connectWithLocalWallet(key, address);
+  }, [open, view, xmtpStatus, sessionKey, userAddress, connectWithLocalWallet]);
 
   useEffect(() => {
     if (!open || view !== 'feed') return;
@@ -257,7 +267,32 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       }
     })();
     return () => { cancelled = true; };
-  }, [open, view, userAddress]);
+  }, [open, view, userAddress, friendsReload]);
+
+  useEffect(() => {
+    if (!selectedFriend) {
+      setFriendProfile(null);
+      setFriendProfileError('');
+      return;
+    }
+    const controller = new AbortController();
+    setFriendProfileLoading(true);
+    setFriendProfileError('');
+    void fetch(`/api/users/${encodeURIComponent(selectedFriend.username)}`, { signal: controller.signal })
+      .then(async (response) => {
+        const data = await response.json() as FriendProfile & { error?: string };
+        if (!response.ok) throw new Error(data.error || 'Could not open this profile.');
+        setFriendProfile(data);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setFriendProfileError(error instanceof Error ? error.message : 'Could not open this profile.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setFriendProfileLoading(false);
+      });
+    return () => controller.abort();
+  }, [selectedFriend]);
 
   async function toggleFollow(person: PresenceUser) {
     const self = await import('@/lib/keystore');
@@ -324,12 +359,6 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   }, [resolveInbox, threadKey, xmtpStatus]);
   const title = view === 'feed' ? 'Around the city' : view === 'people' ? 'People nearby' : thread ? shortInbox(thread.peerInboxId) : 'Your chats';
   const signedIn = profileStatus === 'ready' || profileStatus === 'wallet-needed';
-  const walletAlreadyOpen = Boolean(sessionKey || openWalletAddress);
-  const shouldConnectPasskeyInbox = profileStatus === 'ready'
-    && Boolean(userAddress)
-    && !walletAlreadyOpen
-    && xmtp.status !== 'connecting'
-    && (xmtp.status === 'idle' || xmtp.status === 'error' || xmtp.connectedAddress?.toLowerCase() !== userAddress?.toLowerCase());
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -368,14 +397,14 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     }
   }
 
-  async function connectPasskeyInbox() {
+  async function connectPasskeyInbox(pin = inboxPin) {
     if (!inboxWallet) return;
     let privateKey = getUnlockedPrivateKey(inboxWallet.address);
-    if (!privateKey && inboxWallet.pinProtected && !/^\d{6}$/.test(inboxPin)) {
+    if (!privateKey && inboxWallet.pinProtected && !/^\d{6}$/.test(pin)) {
       setChatActionError('Enter your 6-digit wallet PIN to unlock the inbox.');
       return;
     }
-    if (!privateKey && !inboxWallet.pinProtected && !inboxPin) {
+    if (!privateKey && !inboxWallet.pinProtected && !pin) {
       setChatActionError('Enter your wallet passphrase to unlock the inbox.');
       return;
     }
@@ -383,11 +412,10 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     try {
       if (!privateKey) {
         const { decryptWithPassphrase } = await import('@/lib/keystore');
-        const key = await decryptWithPassphrase(inboxPin, inboxWallet.encryptedPrivateKey);
+        const key = await decryptWithPassphrase(pin, inboxWallet.encryptedPrivateKey);
         if (!/^0x[a-fA-F0-9]{64}$/.test(key)) throw new Error('The unlocked wallet key is invalid.');
         privateKey = key as Hex;
         rememberUnlockedWallet(inboxWallet.address, privateKey);
-        setInboxWalletUnlocked(true);
       }
       await connectWithLocalWallet(privateKey, inboxWallet.address);
     } catch (error) {
@@ -565,7 +593,27 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               <button type="button" role="tab" aria-selected={chatPane === 'friends'} onClick={() => setChatPane('friends')}>Friends</button>
             </div>
           )}
-          {chatPane === 'friends' && !thread ? (
+          {chatPane === 'friends' && !thread && selectedFriend ? (
+            <FriendProfileView
+              friend={selectedFriend}
+              profile={friendProfile}
+              loading={friendProfileLoading}
+              error={friendProfileError}
+              onBack={() => setSelectedFriend(null)}
+              onUnfollow={async () => {
+                const address = selectedFriend.userId.replace(/^user_/, '');
+                if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return;
+                const response = await fetch(`/api/follows?followingAddress=${encodeURIComponent(address)}`, { method: 'DELETE' });
+                const data = await response.json().catch(() => ({})) as { error?: string };
+                if (!response.ok) {
+                  setFriendProfileError(data.error || 'Could not unfollow.');
+                  return;
+                }
+                setSelectedFriend(null);
+                setFriendsReload((count) => count + 1);
+              }}
+            />
+          ) : chatPane === 'friends' && !thread ? (
             <>
               <FriendDesk open={open} />
               <div className="inbox-friends">
@@ -575,8 +623,10 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                 {!friendsLoading && !friendsError && friends.length === 0 && <p className="social-empty">No one followed yet. Follow people from the map or People tab to message them here.</p>}
                 {friends.map((friend) => (
                   <article className="people-item" key={friend.userId}>
-                    <span className={`people-avatar tone-${toneForUsername(friend.username)}`}><img src={friend.avatarUrl ?? dicebearAvatarUrl(friend.username, avatarBackgroundForColor(toneForUsername(friend.username)))} alt={`${friend.username}'s avatar`} /><i className={friend.status === 'online' ? 'is-online' : ''} /></span>
-                    <div className="people-copy"><strong>{friend.username}</strong><span>{friend.status === 'online' ? 'Online now' : 'Offline'}</span></div>
+                    <button type="button" className="thread-open" onClick={() => setSelectedFriend(friend)}>
+                      <span className={`people-avatar tone-${toneForUsername(friend.username)}`}><img src={friend.avatarUrl ?? dicebearAvatarUrl(friend.username, avatarBackgroundForColor(toneForUsername(friend.username)))} alt="" /><i className={friend.status === 'online' ? 'is-online' : ''} /></span>
+                      <span className="people-copy"><strong>{friend.username}</strong><span>{friend.status === 'online' ? 'Online now' : 'Offline'}</span></span>
+                    </button>
                     <Button
                       type="button"
                       variant="outline"
@@ -596,58 +646,24 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                 ))}
               </div>
             </>
-          ) : shouldConnectPasskeyInbox ? (
-            <div className="xmtp-state xmtp-passkey-state">
-              <img className="app-art" src="/assets/app/key.svg" alt="" width={88} height={66} />
-              <strong>Open your encrypted inbox</strong>
-              {inboxWalletLoading ? (
-                <BrandLoader label="Checking your passkey wallet on this device…" />
-              ) : inboxWallet ? (
-                <>
-                  {inboxWalletUnlocked ? (
-                    <>
-                      <p>{inboxWallet.name || 'Your DEVCITY wallet'} is unlocked. Connect to XMTP to load your messages.</p>
-                      <Button type="button" onClick={() => void connectPasskeyInbox()}>Retry inbox connection</Button>
-                    </>
-                  ) : (
-                    <>
-                      <p>Unlock your wallet once. Inbox, claims, and sends share that unlock.</p>
-                      <Button type="button" onClick={onConnectWallet}>Open wallet</Button>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p>{inboxWalletError || 'Your passkey wallet is not available on this device.'}</p>
-                  {inboxWalletError && <Button type="button" variant="outline" onClick={() => setInboxWalletRetry((attempt) => attempt + 1)}>Try again</Button>}
-                  {!inboxWalletError && <Button type="button" onClick={onConnectWallet}>Open Wallet</Button>}
-                </>
-              )}
-              {(chatActionError || xmtp.error) && <p className="xmtp-error" role="alert">{chatActionError || xmtp.error}</p>}
-            </div>
-          ) : profileStatus === 'checking' && !walletAlreadyOpen ? (
-            <div className="xmtp-state"><BrandLoader /><strong>Checking your passkey account…</strong><p>Your existing DEVCITY wallet will be used if it is available on this device.</p></div>
-          ) : !walletAlreadyOpen && profileStatus !== 'ready' ? (
-            <div className="xmtp-state">
-              <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
-              <strong>{signedIn ? 'Finish setting up your wallet' : 'Sign in once'}</strong>
-              <p>Your encrypted messages are tied to your DEVCITY wallet. Sign in on this device to load your XMTP inbox.</p>
-              <Button type="button" onClick={onConnectWallet}>{profileStatus === 'wallet-needed' ? 'Finish wallet setup' : 'Open Wallet to sign in'}</Button>
-            </div>
-          ) : xmtp.status === 'idle' || xmtp.status === 'error' ? (
-            <div className="xmtp-state">
-              <span className="xmtp-state-icon"><MessageCircle size={21} /></span>
-              <strong>{walletAlreadyOpen ? 'Opening your messages' : 'Open your encrypted inbox'}</strong>
-              <p>{walletAlreadyOpen ? 'This wallet is already open. Messages use that same wallet.' : 'Messages use the wallet already open on this device.'}</p>
-              <Button type="button" onClick={() => {
-                const unlocked = getUnlockedWallet();
-                if (unlocked) void connectWithLocalWallet(unlocked.privateKey, unlocked.address);
-                else void xmtp.connect();
-              }}>{xmtp.status === 'error' ? 'Try messages again' : 'Open messages'}</Button>
-              {xmtp.error && <p className="xmtp-error" role="alert">{xmtp.error}</p>}
-            </div>
-          ) : xmtp.status === 'connecting' ? (
-            <div className="xmtp-state"><BrandLoader /><strong>Connecting to XMTP…</strong><p>Syncing your encrypted conversations. Approve any wallet request if prompted.</p></div>
+          ) : xmtp.status === 'connecting' || (xmtp.status === 'idle' && Boolean(sessionKey)) ? (
+            <div className="xmtp-state"><BrandLoader /><strong>Signing you into messages</strong><p>Your DEVCITY wallet signs this on this device.</p></div>
+          ) : xmtp.status !== 'ready' ? (
+            <InboxSignIn
+              loading={inboxWalletLoading || profileStatus === 'checking'}
+              wallet={inboxWallet}
+              pin={inboxPin}
+              error={chatActionError || xmtp.error || inboxWalletError}
+              signedIn={signedIn}
+              onPin={(next) => {
+                setInboxPin(next);
+                if (inboxWallet?.pinProtected && /^\d{6}$/.test(next)) void connectPasskeyInbox(next);
+              }}
+              onSubmit={() => void connectPasskeyInbox()}
+              onRetryWallet={() => setInboxWalletRetry((attempt) => attempt + 1)}
+              onSignIn={onRequestProfile}
+              onCreateWallet={onConnectWallet}
+            />
           ) : thread ? (
             <>
               <Button type="button" variant="outline" onClick={() => { xmtp.setActiveThreadId(null); setDraft(''); }}><ArrowLeft size={15} /> All chats</Button>
@@ -733,4 +749,114 @@ function XmtpAttachmentView({ attachment, mine }: { attachment: Attachment; mine
   if (!url) return <p className={`chat-bubble ${mine ? 'chat-outgoing' : 'chat-incoming'}`}>Decrypting attachment…</p>;
   if (attachment.mimeType.startsWith('image/')) return <a className={`chat-attachment ${mine ? 'is-mine' : ''}`} href={url} target="_blank" rel="noreferrer"><img src={url} alt={attachment.filename ?? 'Encrypted image attachment'} /><small>{attachment.filename ?? 'Image'}</small></a>;
   return <a className={`chat-file-attachment ${mine ? 'is-mine' : ''}`} href={url} download={attachment.filename ?? 'attachment'}><Paperclip size={14} /><span>{attachment.filename ?? 'Download attachment'}</span></a>;
+}
+
+function InboxSignIn({
+  loading,
+  wallet,
+  pin,
+  error,
+  signedIn,
+  onPin,
+  onSubmit,
+  onRetryWallet,
+  onSignIn,
+  onCreateWallet,
+}: {
+  loading: boolean;
+  wallet: LocalWallet | null;
+  pin: string;
+  error: string;
+  signedIn: boolean;
+  onPin: (next: string) => void;
+  onSubmit: () => void;
+  onRetryWallet: () => void;
+  onSignIn: () => void;
+  onCreateWallet: () => void;
+}) {
+  if (loading) return <div className="xmtp-state"><BrandLoader /><strong>Opening your inbox</strong><p>Checking the wallet on this device.</p></div>;
+  if (!signedIn) {
+    return (
+      <div className="xmtp-state">
+        <strong>Sign in to open your inbox</strong>
+        <p>Messages use the wallet on this account. Sign in and it signs you in here.</p>
+        <Button type="button" onClick={onSignIn}>Sign in</Button>
+      </div>
+    );
+  }
+  if (!wallet) {
+    return (
+      <div className="xmtp-state">
+        <strong>This device needs your wallet</strong>
+        <p>{error || 'Create or restore the wallet for this account. After that, the inbox signs itself.'}</p>
+        {error && <Button type="button" variant="outline" onClick={onRetryWallet}>Try again</Button>}
+        <Button type="button" onClick={onCreateWallet}>Set up wallet</Button>
+      </div>
+    );
+  }
+  return (
+    <form className="xmtp-state" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
+      <strong>Sign in to messages</strong>
+      <p>Your wallet signs this here. Enter the PIN once for this visit.</p>
+      <UnlockSecret id="inbox-pin" pinProtected={wallet.pinProtected} value={pin} onChange={onPin} />
+      {!wallet.pinProtected && <Button type="submit">Open inbox</Button>}
+      {error && <p className="xmtp-error" role="alert">{error}</p>}
+    </form>
+  );
+}
+
+function FriendProfileView({
+  friend,
+  profile,
+  loading,
+  error,
+  onBack,
+  onUnfollow,
+}: {
+  friend: PresenceUser;
+  profile: FriendProfile | null;
+  loading: boolean;
+  error: string;
+  onBack: () => void;
+  onUnfollow: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const name = profile?.displayName || friend.username;
+  return (
+    <div className="friend-profile">
+      <Button type="button" variant="outline" onClick={onBack}><ArrowLeft size={15} /> Friends</Button>
+      <div className="chat-thread-intro">
+        <span className={`people-avatar tone-${toneForUsername(friend.username)}`}>
+          <img src={profile?.avatar || friend.avatarUrl || dicebearAvatarUrl(friend.username, avatarBackgroundForColor(toneForUsername(friend.username)))} alt="" />
+        </span>
+        <strong>{name}</strong>
+        <small>{profile?.address ? shortAddress(profile.address) : friend.username}</small>
+      </div>
+      {profile?.viewerFollows && (
+        <Button type="button" variant="outline" disabled={busy} onClick={() => { setBusy(true); void onUnfollow().finally(() => setBusy(false)); }}>
+          {busy ? 'Unfollowing…' : 'Unfollow'}
+        </Button>
+      )}
+      {loading && <p className="social-empty" role="status">Loading their page…</p>}
+      {error && <p className="xmtp-error" role="alert">{error}</p>}
+      {profile && (
+        <>
+          <p className="social-section-label">FOLLOWS <span>{profile.following.length}</span></p>
+          {profile.following.length === 0 && <p className="social-empty">They are not following anyone yet.</p>}
+          {profile.following.map((person) => (
+            <article className="people-item" key={person.address ?? person.username ?? person.displayName}>
+              <span className="people-copy"><strong>{person.displayName || person.username || 'Someone'}</strong><span>{person.username ?? ''}</span></span>
+            </article>
+          ))}
+          <p className="social-section-label">POSTS <span>{profile.posts.length}</span></p>
+          {profile.posts.length === 0 && <p className="social-empty">No posts yet.</p>}
+          {profile.posts.map((post) => (
+            <article className="people-item" key={post.id}>
+              <span className="people-copy"><strong>{post.text}</strong><span>{timeAgo(Date.parse(post.createdAt))}</span></span>
+            </article>
+          ))}
+        </>
+      )}
+    </div>
+  );
 }
