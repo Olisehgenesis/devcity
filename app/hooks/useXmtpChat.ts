@@ -16,6 +16,7 @@ import {
   type Signer,
 } from '@xmtp/browser-sdk';
 import { CHAIN } from '@/lib/chain';
+import { prepareChatImage } from '../lib/compress-image';
 
 export type MessageDelivery = 'sending' | 'sent' | 'failed';
 
@@ -329,13 +330,16 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
     const conversationId = activeThreadRef.current;
     const conversation = conversationId ? conversationsRef.current.get(conversationId) : undefined;
     if (!conversation) throw new Error('Open a conversation first.');
-    if (file.size > 950 * 1024) throw new Error('XMTP inline attachments must be smaller than 950 KB.');
     setSending(true);
     try {
+      const prepared = file.type.startsWith('image/') ? await prepareChatImage(file) : file;
+      if (prepared.size > 950 * 1024) {
+        throw new Error('That file is still too large to send in a message.');
+      }
       await conversation.sendAttachment({
-        filename: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        content: new Uint8Array(await file.arrayBuffer()),
+        filename: prepared.name,
+        mimeType: prepared.type || 'application/octet-stream',
+        content: new Uint8Array(await prepared.arrayBuffer()),
       });
     } finally {
       setSending(false);

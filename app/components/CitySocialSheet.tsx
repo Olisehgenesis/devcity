@@ -679,7 +679,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                 <button type="submit" disabled={!draft.trim()} aria-label="Send message"><Send size={16} /></button>
               </form>
               <input ref={fileInput} type="file" className="avatar-file-input" onChange={sendFile} aria-label="Choose an encrypted attachment" />
-              <p className="chat-demo-note">Encrypted inline attachments up to 950 KB.</p>
+              <p className="chat-demo-note">Photos are compressed, then sent encrypted.</p>
               {chatActionError && <p className="xmtp-error" role="alert">{chatActionError}</p>}
             </>
           ) : (
