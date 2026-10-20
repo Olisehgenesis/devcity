@@ -5,6 +5,7 @@ import {
   devFaucetEnabled,
   devTestAccountsEnabled,
   isTestAccountEmail,
+  requestAllowsTestAccounts,
   requestHostIsLocal,
   testAccountEmail,
 } from './dev-test-auth';
@@ -22,6 +23,8 @@ describe('dev test accounts fail closed', () => {
     assert.equal(devTestAccountsEnabled({ NODE_ENV: 'development', BETTER_AUTH_URL: 'https://preview.devcity.fun' }), false);
     assert.equal(devTestAccountsEnabled({ NODE_ENV: 'development' }), false);
     assert.equal(devTestAccountsEnabled({ BETTER_AUTH_URL: 'http://example.com' }), false);
+    assert.equal(devTestAccountsEnabled({ NODE_ENV: 'production', BETTER_AUTH_URL: 'https://devcity.fun', DEV_TEST_ACCOUNTS: '1' }), true);
+    assert.equal(devTestAccountsEnabled({ NODE_ENV: 'production', BETTER_AUTH_URL: 'https://evil.example', DEV_TEST_ACCOUNTS: '1' }), false);
   });
 
   it('labels test accounts by their server-side email domain', () => {
@@ -37,6 +40,9 @@ describe('dev test accounts fail closed', () => {
     });
     assert.equal(requestHostIsLocal(local), true);
     assert.equal(requestHostIsLocal(forwarded), false);
+    const live = new Request('https://devcity.fun/api/dev/test-accounts', { headers: { host: 'devcity.fun' } });
+    assert.equal(requestAllowsTestAccounts(live, { NODE_ENV: 'production', BETTER_AUTH_URL: 'https://devcity.fun' }), false);
+    assert.equal(requestAllowsTestAccounts(live, { NODE_ENV: 'production', BETTER_AUTH_URL: 'https://devcity.fun', DEV_TEST_ACCOUNTS: '1' }), true);
   });
 });
 

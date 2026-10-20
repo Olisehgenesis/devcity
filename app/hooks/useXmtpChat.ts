@@ -74,7 +74,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
 
   const refreshThreads = useCallback(async (activeClient: Client) => {
     await activeClient.conversations.sync();
-    const dms = await activeClient.conversations.listDms({ consentStates: [ConsentState.Allowed] });
+    const dms = await activeClient.conversations.listDms({ consentStates: [ConsentState.Allowed, ConsentState.Unknown] });
     const nextThreads = await Promise.all(dms.map(async (conversation) => {
       const [peerInboxId, history] = await Promise.all([
         conversation.peerInboxId(),
@@ -118,7 +118,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       await refreshThreads(created);
       const activeClient = created;
       const stream = await activeClient.conversations.streamAllMessages({
-        consentStates: [ConsentState.Allowed],
+        consentStates: [ConsentState.Allowed, ConsentState.Unknown],
         onValue: (message) => {
           const uiMessage = toUiMessage(message, activeClient.inboxId ?? '');
           if (activeThreadRef.current === uiMessage.conversationId) {

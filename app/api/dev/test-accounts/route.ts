@@ -7,9 +7,8 @@ import {
 } from '@/lib/dev-test-accounts';
 import {
   TEST_ACCOUNT_LABEL,
-  devTestAccountsEnabled,
   isTestAccountEmail,
-  requestHostIsLocal,
+  requestAllowsTestAccounts,
 } from '@/lib/dev-test-auth';
 import { normalizeUsername } from '@/lib/usernames';
 
@@ -20,7 +19,7 @@ function unavailable() {
 }
 
 function allowed(request: Request) {
-  return devTestAccountsEnabled() && requestHostIsLocal(request);
+  return requestAllowsTestAccounts(request);
 }
 
 type UsernameSignIn = {

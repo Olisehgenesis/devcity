@@ -24,7 +24,12 @@ function isLocalHost(hostname: string | null): boolean {
  * Username/password test accounts exist only on a local, non-production process.
  * A client flag cannot enable this. Missing or production configuration fails closed.
  */
+function optedInTestHost(hostname: string | null): boolean {
+  return isLocalHost(hostname) || hostname === 'devcity.fun' || hostname === 'demo.devcity.fun';
+}
+
 export function devTestAccountsEnabled(env: Env = process.env): boolean {
+  if (env.DEV_TEST_ACCOUNTS === '1') return optedInTestHost(hostnameOf(env.BETTER_AUTH_URL));
   if (env.NODE_ENV === 'production') return false;
   if (env.VERCEL_ENV === 'production') return false;
   const host = hostnameOf(env.BETTER_AUTH_URL);
@@ -48,6 +53,14 @@ export function requestHostIsLocal(request: Request): boolean {
   if (/devcity\.fun/i.test(forwarded)) return false;
   const host = (request.headers.get('host') ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
   return isLocalHost(host);
+}
+
+export function requestAllowsTestAccounts(request: Request, env: Env = process.env): boolean {
+  if (!devTestAccountsEnabled(env)) return false;
+  if (requestHostIsLocal(request)) return true;
+  const raw = (request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '').split(',')[0] ?? '';
+  const host = raw.trim().toLowerCase().replace(/:\d+$/, '');
+  return host === 'devcity.fun' || host === 'demo.devcity.fun';
 }
 
 export function testAccountEmail(username: string): string {
