@@ -40,7 +40,7 @@ Borrow the qualities that make Snapchat feel immediate: mobile-first composition
 ### Build now
 
 - Next.js responsive web app, installable PWA foundation
-- Base Sepolia as the first chain environment; keep chain configuration isolated
+- Celo Sepolia as the first chain environment; keep chain configuration isolated
 - Map-first city home with seeded demo data for people, places, events, and drops
 - Event-scoped profiles: username, avatar, wallet address, and visibility preference
 - Token creation with a fixed maximum supply and token icon
@@ -57,9 +57,9 @@ Borrow the qualities that make Snapchat feel immediate: mobile-first composition
 - Realtime exact user tracking and public exact location
 - Full 3D city and 3D avatars
 
-## Base and wallet decisions
+## Celo and wallet decisions
 
-- **Chain:** Base; Base Sepolia for development and the first pilot.
+- **Chain:** Celo; Celo Sepolia for development and the first pilot.
 - **Wallet UX:** Passkey-first smart account through a maintained account SDK. Keep account creation, bundler, and paymaster implementation behind adapters so providers can change.
 - **External wallets:** Add as a compatible path, but do not make WalletConnect a Phase 1 dependency.
 - **Gas sponsorship:** Sponsored claims with per-wallet and per-drop budget limits. Testnet sponsorship is not evidence of production economics.
@@ -93,11 +93,11 @@ Borrow the qualities that make Snapchat feel immediate: mobile-first composition
 
 ## Pilot exit criteria
 
-Run one real event on Base Sepolia. Aim for a median claim time below 15 seconds, near-zero avoidable claim failures, understandable eligibility feedback, and no public exact-location exposure. Test QR sharing, GPS spoofing, duplicate devices, poor connectivity, and first-time smart-account deployment before expanding scope.
+Run one real event on Celo Sepolia. Aim for a median claim time below 15 seconds, near-zero avoidable claim failures, understandable eligibility feedback, and no public exact-location exposure. Test QR sharing, GPS spoofing, duplicate devices, poor connectivity, and first-time smart-account deployment before expanding scope.
 
 ## Open implementation decisions
 
-- Select and prove the passkey smart-account SDK, bundler, and paymaster on Base Sepolia.
+- Select and prove the passkey smart-account SDK, bundler, and paymaster on Celo Sepolia.
 - Choose the first pilot event, event organizer, and expected attendee count.
 - Decide whether drops are pre-funded or minted on claim; prefer pre-funded for the pilot unless token issuance constraints require otherwise.
 - Confirm backend and database hosting, including PostGIS support, before implementing location verification.
