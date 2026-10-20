@@ -1677,6 +1677,7 @@ export default function CityHome() {
         onClose={() => { setSocialView(null); setActiveTab("map"); }}
         onTip={(name, initials, color, address) => { closeSheets("tip"); setTipTarget({ name, initials, color, address }); }}
         startChatAddress={startChatAddress}
+        onStartChatHandled={() => setStartChatAddress(null)}
       />
       <TipSheet
         open={tipTarget !== null}

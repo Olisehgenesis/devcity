@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { hexToBytes, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { useAccount, useWalletClient } from 'wagmi';
@@ -15,6 +15,9 @@ import {
   type Dm,
   type Signer,
 } from '@xmtp/browser-sdk';
+import { CHAIN } from '@/lib/chain';
+
+export type MessageDelivery = 'sending' | 'sent' | 'failed';
 
 export interface XmtpUiMessage {
   id: string;
@@ -24,14 +27,18 @@ export interface XmtpUiMessage {
   mine: boolean;
   text: string;
   attachment?: Attachment;
+  delivery: MessageDelivery;
 }
 
 export interface XmtpThread {
   id: string;
   peerInboxId: string;
+  peerAddress: string | null;
   lastMessage: XmtpUiMessage | null;
   conversation: Dm<unknown>;
 }
+
+const VISIBLE_CONSENT = [ConsentState.Allowed, ConsentState.Unknown];
 
 function toUiMessage(message: DecodedMessage, selfInboxId: string): XmtpUiMessage {
   const attachment = isAttachment(message) ? message.content : undefined;
@@ -49,7 +56,12 @@ function toUiMessage(message: DecodedMessage, selfInboxId: string): XmtpUiMessag
     mine: message.senderInboxId === selfInboxId,
     text,
     attachment,
+    delivery: 'sent',
   };
+}
+
+function sortThreads(items: XmtpThread[]) {
+  return items.slice().sort((left, right) => (right.lastMessage?.sentAt.getTime() ?? 0) - (left.lastMessage?.sentAt.getTime() ?? 0));
 }
 
 export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) => void) {
@@ -60,6 +72,8 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
   const notifyRef = useRef(notifyIncoming);
   const activeThreadRef = useRef<string | null>(null);
   const signerAddressRef = useRef<string | null>(null);
+  const conversationsRef = useRef(new Map<string, Dm<unknown>>());
+  const peerAddressesRef = useRef(new Map<string, string>());
   const [client, setClient] = useState<Client | null>(null);
   const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
   const [threads, setThreads] = useState<XmtpThread[]>([]);
@@ -72,19 +86,61 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
   notifyRef.current = notifyIncoming;
   activeThreadRef.current = activeThreadId;
 
+  const rememberThreads = useCallback((nextThreads: XmtpThread[]) => {
+    for (const item of nextThreads) conversationsRef.current.set(item.id, item.conversation);
+    setThreads(sortThreads(nextThreads));
+  }, []);
+
   const refreshThreads = useCallback(async (activeClient: Client) => {
     await activeClient.conversations.sync();
-    const dms = await activeClient.conversations.listDms({ consentStates: [ConsentState.Allowed, ConsentState.Unknown] });
+    const dms = await activeClient.conversations.listDms({ consentStates: VISIBLE_CONSENT });
     const nextThreads = await Promise.all(dms.map(async (conversation) => {
       const [peerInboxId, history] = await Promise.all([
         conversation.peerInboxId(),
         conversation.messages({ limit: BigInt(1) }),
       ]);
       const lastMessage = history[0] ? toUiMessage(history[0], activeClient.inboxId ?? '') : null;
-      return { id: conversation.id, peerInboxId, lastMessage, conversation };
+      return {
+        id: conversation.id,
+        peerInboxId,
+        peerAddress: peerAddressesRef.current.get(conversation.id) ?? null,
+        lastMessage,
+        conversation,
+      };
     }));
-    setThreads(nextThreads.sort((left, right) => (right.lastMessage?.sentAt.getTime() ?? 0) - (left.lastMessage?.sentAt.getTime() ?? 0)));
-  }, []);
+    rememberThreads(nextThreads);
+  }, [rememberThreads]);
+
+  const applyStreamedMessage = useCallback((uiMessage: XmtpUiMessage, activeClient: Client) => {
+    setThreads((current) => {
+      const known = current.some((item) => item.id === uiMessage.conversationId);
+      if (!known) {
+        void refreshThreads(activeClient);
+        return current;
+      }
+      return sortThreads(current.map((item) => item.id === uiMessage.conversationId
+        ? { ...item, lastMessage: uiMessage }
+        : item));
+    });
+    setMessages((current) => {
+      if (activeThreadRef.current !== uiMessage.conversationId) return current;
+      if (current.some((item) => item.id === uiMessage.id)) return current;
+      if (uiMessage.mine) {
+        const pendingIndex = current.findIndex((item) => item.delivery === 'sending' && item.text === uiMessage.text);
+        if (pendingIndex >= 0) {
+          const next = current.slice();
+          next[pendingIndex] = uiMessage;
+          return next;
+        }
+      }
+      return [...current, uiMessage];
+    });
+    if (!uiMessage.mine) {
+      notifyRef.current(uiMessage.attachment
+        ? `New attachment: ${uiMessage.attachment.filename ?? 'file'}`
+        : `New message: ${uiMessage.text.slice(0, 72)}`);
+    }
+  }, [refreshThreads]);
 
   const connectWithSigner = useCallback(async (signer: Signer, signerAddress: string) => {
     setStatus('connecting');
@@ -102,6 +158,8 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
         clientRef.current = null;
         streamRef.current = null;
         signerAddressRef.current = null;
+        conversationsRef.current.clear();
+        peerAddressesRef.current.clear();
         setClient(null);
         setConnectedAddress(null);
         setThreads([]);
@@ -113,23 +171,15 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       }
 
       const xmtpEnv = process.env.NEXT_PUBLIC_XMTP_ENV === 'production' ? 'production' : 'dev';
-      const clientOptions = { env: xmtpEnv } as Omit<ConstructorParameters<typeof Client>[0], 'codecs'> & { codecs?: [] };
-      created = await Client.create<[]>(signer, clientOptions);
+      // v7 already registers text, attachment, remote attachment, reply, reaction, and transaction reference.
+      const clientOptions = { env: xmtpEnv, disableAutoRegister: false };
+      created = await Client.create(signer, clientOptions);
       await refreshThreads(created);
       const activeClient = created;
       const stream = await activeClient.conversations.streamAllMessages({
-        consentStates: [ConsentState.Allowed, ConsentState.Unknown],
+        consentStates: VISIBLE_CONSENT,
         onValue: (message) => {
-          const uiMessage = toUiMessage(message, activeClient.inboxId ?? '');
-          if (activeThreadRef.current === uiMessage.conversationId) {
-            setMessages((current) => current.some((item) => item.id === uiMessage.id) ? current : [...current, uiMessage]);
-          }
-          if (!uiMessage.mine) {
-            notifyRef.current(uiMessage.attachment
-              ? `New attachment: ${uiMessage.attachment.filename ?? 'file'}`
-              : `New message: ${uiMessage.text.slice(0, 72)}`);
-          }
-          void refreshThreads(activeClient);
+          applyStreamedMessage(toUiMessage(message, activeClient.inboxId ?? ''), activeClient);
         },
         onError: (streamError) => {
           setError(streamError.message);
@@ -146,7 +196,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       setStatus('error');
       setError(cause instanceof Error ? cause.message : 'XMTP could not connect.');
     }
-  }, [refreshThreads]);
+  }, [applyStreamedMessage, refreshThreads]);
 
   const connect = useCallback(async () => {
     if (!address || !walletClient) {
@@ -157,7 +207,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       ? createSCWSigner(
           address as Address,
           async (message) => walletClient.signMessage({ account: walletClient.account, message }),
-          BigInt(chainId ?? 8453),
+          BigInt(chainId ?? CHAIN.id),
         )
       : {
           type: 'EOA',
@@ -185,21 +235,27 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       setMessages([]);
       return;
     }
+    const conversation = conversationsRef.current.get(activeThreadId);
+    if (!conversation) return;
     let cancelled = false;
-    const thread = threads.find((item) => item.id === activeThreadId);
-    if (!thread) return;
-
     void (async () => {
       try {
-        await thread.conversation.sync();
-        const history = await thread.conversation.messages();
-        if (!cancelled) setMessages(history.map((message) => toUiMessage(message, client.inboxId ?? '')));
+        await conversation.sync();
+        const history = await conversation.messages();
+        if (!cancelled) {
+          setMessages((current) => {
+            const pending = current.filter((item) => item.delivery !== 'sent');
+            const confirmed = history.map((message) => toUiMessage(message, client.inboxId ?? ''));
+            const confirmedTexts = new Set(confirmed.map((item) => item.text));
+            return [...confirmed, ...pending.filter((item) => !confirmedTexts.has(item.text))];
+          });
+        }
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not load this conversation.');
       }
     })();
     return () => { cancelled = true; };
-  }, [activeThreadId, client, enabled, threads]);
+  }, [activeThreadId, client, enabled]);
 
   useEffect(() => () => {
     void streamRef.current?.end();
@@ -216,24 +272,52 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       identifier: normalized,
       identifierKind: IdentifierKind.Ethereum,
     });
+    conversationsRef.current.set(conversation.id, conversation);
+    peerAddressesRef.current.set(conversation.id, normalized.toLowerCase());
     await refreshThreads(client);
     setActiveThreadId(conversation.id);
     return conversation;
   }, [client, refreshThreads]);
 
-  const sendText = useCallback(async (text: string) => {
-    const conversation = threads.find((item) => item.id === activeThreadId)?.conversation;
-    if (!conversation || !text.trim()) return;
+  const sendText = useCallback(async (text: string, retryId?: string) => {
+    const conversationId = activeThreadRef.current;
+    const conversation = conversationId ? conversationsRef.current.get(conversationId) : undefined;
+    const body = text.trim();
+    if (!conversation || !conversationId || !body) return;
+    const localId = retryId ?? `local-${crypto.randomUUID()}`;
+    const optimistic: XmtpUiMessage = {
+      id: localId,
+      conversationId,
+      senderInboxId: client?.inboxId ?? '',
+      sentAt: new Date(),
+      mine: true,
+      text: body,
+      delivery: 'sending',
+    };
+    setMessages((current) => retryId
+      ? current.map((item) => item.id === retryId ? { ...item, delivery: 'sending', sentAt: new Date() } : item)
+      : [...current, optimistic]);
     setSending(true);
     try {
-      await conversation.sendText(text.trim());
+      const sentId = await conversation.sendText(body);
+      setMessages((current) => current.map((item) => item.id === localId ? { ...item, id: sentId, delivery: 'sent' } : item));
+    } catch (cause) {
+      setMessages((current) => current.map((item) => item.id === localId ? { ...item, delivery: 'failed' } : item));
+      setError(cause instanceof Error ? cause.message : 'Message could not be sent.');
     } finally {
       setSending(false);
     }
-  }, [activeThreadId, threads]);
+  }, [client]);
+
+  const retryMessage = useCallback(async (messageId: string) => {
+    const failed = messages.find((item) => item.id === messageId && item.delivery === 'failed');
+    if (!failed) return;
+    await sendText(failed.text, failed.id);
+  }, [messages, sendText]);
 
   const sendAttachment = useCallback(async (file: File) => {
-    const conversation = threads.find((item) => item.id === activeThreadId)?.conversation;
+    const conversationId = activeThreadRef.current;
+    const conversation = conversationId ? conversationsRef.current.get(conversationId) : undefined;
     if (!conversation) throw new Error('Open a conversation first.');
     if (file.size > 950 * 1024) throw new Error('XMTP inline attachments must be smaller than 950 KB.');
     setSending(true);
@@ -246,9 +330,19 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
     } finally {
       setSending(false);
     }
-  }, [activeThreadId, threads]);
+  }, []);
 
-  return {
+  const refresh = useCallback(() => client ? refreshThreads(client) : Promise.resolve(), [client, refreshThreads]);
+
+  const resolveInbox = useCallback(async (inboxId: string) => {
+    const current = clientRef.current;
+    if (!current) return null;
+    const states = await current.preferences.getInboxStates([inboxId]);
+    const ethereum = states[0]?.accountIdentifiers.find((item) => item.identifierKind === IdentifierKind.Ethereum);
+    return ethereum?.identifier.toLowerCase() ?? null;
+  }, []);
+
+  return useMemo(() => ({
     address,
     isWalletConnected: isConnected,
     client,
@@ -264,7 +358,28 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
     connectWithLocalWallet,
     startConversation,
     sendText,
+    retryMessage,
     sendAttachment,
-    refresh: () => client ? refreshThreads(client) : Promise.resolve(),
-  };
+    refresh,
+    resolveInbox,
+  }), [
+    address,
+    isConnected,
+    client,
+    connectedAddress,
+    threads,
+    activeThreadId,
+    messages,
+    status,
+    error,
+    sending,
+    connect,
+    connectWithLocalWallet,
+    startConversation,
+    sendText,
+    retryMessage,
+    sendAttachment,
+    refresh,
+    resolveInbox,
+  ]);
 }

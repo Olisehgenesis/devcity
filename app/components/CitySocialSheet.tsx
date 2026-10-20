@@ -8,7 +8,10 @@ import { Sheet } from './Sheet';
 import { timeAgo } from '../lib/city-store';
 import { avatarBackgroundForColor, dicebearAvatarUrl } from '../lib/avatars';
 import { FriendDesk } from './FriendDesk';
+import { ChatList } from './chat/ChatList';
 import { useXmtpChat, type XmtpUiMessage } from '../hooks/useXmtpChat';
+import { resolveIdentity, shortAddress } from '../lib/resolve-identity';
+import { useChatRead } from '../lib/chat-read';
 import type { Attachment } from '@xmtp/browser-sdk';
 import type { Hex } from 'viem';
 import type { LocalWallet } from '@/lib/keystore';
@@ -53,6 +56,7 @@ interface CitySocialSheetProps {
   onClose: () => void;
   onTip: (name: string, initials: string, color: string, address?: string) => void;
   startChatAddress?: string | null;
+  onStartChatHandled?: () => void;
 }
 
 type PresenceUser = {
@@ -80,7 +84,7 @@ function initialsFor(username: string) {
     .join('') || username.slice(0, 2).toUpperCase();
 }
 
-export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress }: CitySocialSheetProps) {
+export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress, onStartChatHandled }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
   const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
@@ -98,6 +102,9 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [commentingId, setCommentingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [recipient, setRecipient] = useState('');
+  const [chatQuery, setChatQuery] = useState('');
+  const [chatPane, setChatPane] = useState<'chats' | 'friends'>('chats');
+  const [chatNames, setChatNames] = useState<Record<string, string>>({});
   const [chatActionError, setChatActionError] = useState('');
   const [inboxWallet, setInboxWallet] = useState<LocalWallet | null>(null);
   const [inboxWalletLoading, setInboxWalletLoading] = useState(false);
@@ -110,6 +117,15 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [openWalletAddress, setOpenWalletAddress] = useState<string | null>(null);
   const xmtp = useXmtpChat(open && view === 'chat', onNotify);
   const connectWithLocalWallet = xmtp.connectWithLocalWallet;
+  const startXmtpConversation = xmtp.startConversation;
+  const resolveInbox = xmtp.resolveInbox;
+  const xmtpStatus = xmtp.status;
+  const markRead = useChatRead((state) => state.markRead);
+  const hideChat = useChatRead((state) => state.hide);
+  const muteChat = useChatRead((state) => state.mute);
+  const hiddenChats = useChatRead((state) => state.hidden);
+  const mutedChats = useChatRead((state) => state.muted);
+  const lastReadAt = useChatRead((state) => state.lastReadAt);
 
   useEffect(() => {
     const sync = () => setOpenWalletAddress(getUnlockedWallet()?.address ?? null);
@@ -119,11 +135,19 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   }, []);
 
   useEffect(() => {
-    if (startChatAddress) {
-      setRecipient(startChatAddress);
-      xmtp.setActiveThreadId(null);
-    }
-  }, [startChatAddress, xmtp]);
+    if (!startChatAddress) return;
+    setRecipient(startChatAddress);
+    if (xmtpStatus !== 'ready') return;
+    let cancelled = false;
+    void startXmtpConversation(startChatAddress)
+      .catch((cause: unknown) => {
+        if (!cancelled) setChatActionError(cause instanceof Error ? cause.message : 'Could not start this chat.');
+      })
+      .finally(() => {
+        if (!cancelled) onStartChatHandled?.();
+      });
+    return () => { cancelled = true; };
+  }, [onStartChatHandled, startChatAddress, startXmtpConversation, xmtpStatus]);
 
   useEffect(() => {
     if (!open || view !== 'chat') {
@@ -131,7 +155,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       return;
     }
     const unlocked = getUnlockedWallet();
-    if (unlocked && xmtp.status === 'idle') {
+    if (unlocked && xmtpStatus === 'idle') {
       void connectWithLocalWallet(unlocked.privateKey, unlocked.address);
     }
     if (profileStatus !== 'ready' || !userAddress) {
@@ -161,7 +185,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
         if (!cancelled) setInboxWalletLoading(false);
       });
     return () => { cancelled = true; };
-  }, [open, profileStatus, userAddress, view, inboxWalletRetry, connectWithLocalWallet, sessionKey, xmtp.status]);
+  }, [open, profileStatus, userAddress, view, inboxWalletRetry, connectWithLocalWallet, sessionKey, xmtpStatus]);
 
   useEffect(() => {
     if (!open || view !== 'feed') return;
@@ -262,6 +286,42 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const filteredPeople = useMemo(() => nearbyPeople.filter((person) =>
     `${person.username} ${person.status}`.toLowerCase().includes(query.toLowerCase())), [nearbyPeople, query]);
   const thread = xmtp.threads.find((item) => item.id === xmtp.activeThreadId);
+  const visibleThreads = xmtp.threads.filter((item) => !hiddenChats[item.id]);
+  const unreadCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of visibleThreads) {
+      const sentAt = item.lastMessage?.sentAt.getTime() ?? 0;
+      if (item.lastMessage && !item.lastMessage.mine && sentAt > (lastReadAt[item.id] ?? 0)) counts[item.id] = 1;
+    }
+    return counts;
+  }, [lastReadAt, visibleThreads]);
+  const threadKey = visibleThreads.map((item) => `${item.id}:${item.peerAddress ?? ''}:${item.peerInboxId}`).join('|');
+  const visibleThreadsRef = useRef(visibleThreads);
+  visibleThreadsRef.current = visibleThreads;
+
+  useEffect(() => {
+    if (xmtp.activeThreadId) markRead(xmtp.activeThreadId);
+  }, [markRead, xmtp.activeThreadId]);
+
+  useEffect(() => {
+    if (xmtpStatus !== 'ready' || !threadKey) return;
+    let cancelled = false;
+    void (async () => {
+      const next: Record<string, string> = {};
+      for (const item of visibleThreadsRef.current) {
+        const address = item.peerAddress ?? await resolveInbox(item.peerInboxId);
+        if (!address) continue;
+        try {
+          const identity = await resolveIdentity(address);
+          next[item.id] = identity.displayName || identity.username || shortAddress(address);
+        } catch {
+          next[item.id] = shortAddress(address);
+        }
+      }
+      if (!cancelled) setChatNames((current) => ({ ...current, ...next }));
+    })();
+    return () => { cancelled = true; };
+  }, [resolveInbox, threadKey, xmtpStatus]);
   const title = view === 'feed' ? 'Around the city' : view === 'people' ? 'People nearby' : thread ? shortInbox(thread.peerInboxId) : 'Your chats';
   const signedIn = profileStatus === 'ready' || profileStatus === 'wallet-needed';
   const walletAlreadyOpen = Boolean(sessionKey || openWalletAddress);
@@ -276,8 +336,9 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     if (!draft.trim()) return;
     try {
       setChatActionError('');
-      await xmtp.sendText(draft);
+      const body = draft;
       setDraft('');
+      await xmtp.sendText(body);
     } catch (error) {
       setChatActionError(error instanceof Error ? error.message : 'Message could not be sent.');
     }
@@ -417,7 +478,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   }
 
   return (
-    <Sheet open={open && view !== null} onClose={onClose} title={title} size="page">
+    <Sheet open={open && view !== null} onClose={onClose} title={title} size="page" keepNav>
       {view === 'feed' && (
         <div className="social-feed">
           <div className="social-live-line"><span className="live-dot" /> City feed</div>
@@ -498,8 +559,44 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
 
       {view === 'chat' && (
         <div className="social-chat">
-          <FriendDesk open={open} />
-          {shouldConnectPasskeyInbox ? (
+          {!thread && (
+            <div className="chat-pane-switch" role="tablist" aria-label="Inbox">
+              <button type="button" role="tab" aria-selected={chatPane === 'chats'} onClick={() => setChatPane('chats')}>Chats</button>
+              <button type="button" role="tab" aria-selected={chatPane === 'friends'} onClick={() => setChatPane('friends')}>Friends</button>
+            </div>
+          )}
+          {chatPane === 'friends' && !thread ? (
+            <>
+              <FriendDesk open={open} />
+              <div className="inbox-friends">
+                <p className="social-section-label">PEOPLE YOU FOLLOW <span>{friends.length}</span></p>
+                {friendsLoading && <p className="social-empty" role="status">Loading your friends…</p>}
+                {friendsError && <p className="feed-error" role="alert">{friendsError}</p>}
+                {!friendsLoading && !friendsError && friends.length === 0 && <p className="social-empty">No one followed yet. Follow people from the map or People tab to message them here.</p>}
+                {friends.map((friend) => (
+                  <article className="people-item" key={friend.userId}>
+                    <span className={`people-avatar tone-${toneForUsername(friend.username)}`}><img src={friend.avatarUrl ?? dicebearAvatarUrl(friend.username, avatarBackgroundForColor(toneForUsername(friend.username)))} alt={`${friend.username}'s avatar`} /><i className={friend.status === 'online' ? 'is-online' : ''} /></span>
+                    <div className="people-copy"><strong>{friend.username}</strong><span>{friend.status === 'online' ? 'Online now' : 'Offline'}</span></div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="rounded-full"
+                      onClick={() => {
+                        const address = friend.userId.replace(/^user_/, '');
+                        if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return;
+                        setChatPane('chats');
+                        setRecipient(address);
+                        void xmtp.startConversation(address).catch((error: unknown) => setChatActionError(error instanceof Error ? error.message : 'Could not start this chat.'));
+                      }}
+                      aria-label={`Message ${friend.username}`}
+                      title={`Message ${friend.username}`}
+                    ><MessageCircle size={17} /></Button>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : shouldConnectPasskeyInbox ? (
             <div className="xmtp-state xmtp-passkey-state">
               <img className="app-art" src="/assets/app/key.svg" alt="" width={88} height={66} />
               <strong>Open your encrypted inbox</strong>
@@ -554,16 +651,16 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
           ) : thread ? (
             <>
               <Button type="button" variant="outline" onClick={() => { xmtp.setActiveThreadId(null); setDraft(''); }}><ArrowLeft size={15} /> All chats</Button>
-              <div className="chat-thread-intro"><span className="people-avatar"><MessageCircle size={17} /></span><strong>{shortInbox(thread.peerInboxId)}</strong><small>End-to-end encrypted with XMTP</small></div>
+              <div className="chat-thread-intro"><span className="people-avatar"><MessageCircle size={17} /></span><strong>{chatNames[thread.id] ?? shortInbox(thread.peerInboxId)}</strong><small>End-to-end encrypted with XMTP</small></div>
               {!notificationsEnabled && <Button type="button" variant="outline" onClick={onEnableNotifications}>Enable message notifications</Button>}
               <div className="chat-messages">
-                {xmtp.messages.map((message) => <XmtpMessageView key={message.id} message={message} />)}
+                {xmtp.messages.map((message) => <XmtpMessageView key={message.id} message={message} onRetry={() => void xmtp.retryMessage(message.id)} />)}
                 {xmtp.messages.length === 0 && <p className="chat-demo-note">This encrypted conversation is ready. Send the first message.</p>}
               </div>
               <form className="chat-composer" onSubmit={sendMessage}>
                 <button type="button" onClick={() => fileInput.current?.click()} disabled={xmtp.sending} aria-label="Attach a file" title="Attach file"><Paperclip size={16} /></button>
                 <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Write an encrypted message" aria-label="Message" />
-                <button type="submit" disabled={!draft.trim() || xmtp.sending} aria-label="Send message"><Send size={16} /></button>
+                <button type="submit" disabled={!draft.trim()} aria-label="Send message"><Send size={16} /></button>
               </form>
               <input ref={fileInput} type="file" className="avatar-file-input" onChange={sendFile} aria-label="Choose an encrypted attachment" />
               <p className="chat-demo-note">Encrypted inline attachments up to 950 KB.</p>
@@ -571,46 +668,21 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
             </>
           ) : (
             <>
-              <div className="social-live-line"><span className="live-dot" /> XMTP · ENCRYPTED INBOX</div>
               {!notificationsEnabled && <Button type="button" variant="outline" onClick={onEnableNotifications}>Enable message notifications</Button>}
-              <div className="inbox-friends">
-                <p className="social-section-label">YOUR FRIENDS <span>{friends.length}</span></p>
-                {friendsLoading && <p className="social-empty" role="status">Loading your friends…</p>}
-                {friendsError && <p className="feed-error" role="alert">{friendsError}</p>}
-                {!friendsLoading && !friendsError && friends.length === 0 && <p className="social-empty">No friends yet. Follow people from the map or People tab to message them here.</p>}
-                {friends.map((friend) => (
-                  <article className="people-item" key={friend.userId}>
-                    <span className={`people-avatar tone-${toneForUsername(friend.username)}`}><img src={friend.avatarUrl ?? dicebearAvatarUrl(friend.username, avatarBackgroundForColor(toneForUsername(friend.username)))} alt={`${friend.username}'s avatar`} /><i className={friend.status === 'online' ? 'is-online' : ''} /></span>
-                    <div className="people-copy"><strong>{friend.username}</strong><span>{friend.status === 'online' ? 'Online now' : 'Offline'}</span></div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="rounded-full"
-                      onClick={() => {
-                        const address = friend.userId.replace(/^user_/, '');
-                        if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return;
-                        setRecipient(address);
-                        void xmtp.startConversation(address).catch((error: unknown) => setChatActionError(error instanceof Error ? error.message : 'Could not start this chat.'));
-                      }}
-                      aria-label={`Message ${friend.username}`}
-                      title={`Message ${friend.username}`}
-                    ><MessageCircle size={17} /></Button>
-                  </article>
-                ))}
-              </div>
-              <form className="xmtp-new-chat" onSubmit={startConversation}>
-                <input value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder="Start a chat with 0x wallet address" aria-label="Recipient wallet address" />
-                <button type="submit" disabled={!recipient.trim()} aria-label="Start encrypted chat"><MessageCircle size={16} /></button>
-              </form>
-              {xmtp.threads.map((item) => (
-                <button className="thread-item" key={item.id} onClick={() => xmtp.setActiveThreadId(item.id)}>
-                  <span className="people-avatar"><MessageCircle size={16} /></span>
-                  <span className="thread-copy"><strong>{shortInbox(item.peerInboxId)}</strong><small>{item.lastMessage?.text ?? 'No messages yet'}</small></span>
-                  <span className="thread-end"><small>{item.lastMessage ? timeAgo(item.lastMessage.sentAt.getTime()) : ''}</small></span>
-                </button>
-              ))}
-              {xmtp.threads.length === 0 && <p className="social-empty">Your XMTP inbox is empty. Start a chat with someone’s wallet address.</p>}
+              <ChatList
+                threads={visibleThreads}
+                names={chatNames}
+                unread={unreadCounts}
+                muted={mutedChats}
+                query={chatQuery}
+                recipient={recipient}
+                onQuery={setChatQuery}
+                onRecipient={setRecipient}
+                onOpen={(threadId) => xmtp.setActiveThreadId(threadId)}
+                onStart={startConversation}
+                onHide={hideChat}
+                onMute={muteChat}
+              />
               {chatActionError && <p className="xmtp-error" role="alert">{chatActionError}</p>}
             </>
           )}
@@ -628,9 +700,24 @@ function shortInbox(inboxId: string) {
   return inboxId.length > 16 ? `${inboxId.slice(0, 7)}…${inboxId.slice(-5)}` : inboxId;
 }
 
-function XmtpMessageView({ message }: { message: XmtpUiMessage }) {
+function messageClock(sentAt: Date) {
+  return sentAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function XmtpMessageView({ message, onRetry }: { message: XmtpUiMessage; onRetry: () => void }) {
+  const stamp = messageClock(message.sentAt);
+  const state = message.delivery === 'sending' ? 'Sending' : message.delivery === 'failed' ? 'Failed. Tap to retry' : stamp;
   if (message.attachment) return <XmtpAttachmentView attachment={message.attachment} mine={message.mine} />;
-  return <p className={`chat-bubble ${message.mine ? 'chat-outgoing' : 'chat-incoming'}`}>{message.text}</p>;
+  return (
+    <div className={`chat-bubble-wrap ${message.mine ? 'is-mine' : ''}`}>
+      {message.delivery === 'failed' ? (
+        <button type="button" className={`chat-bubble ${message.mine ? 'chat-outgoing' : 'chat-incoming'}`} onClick={onRetry}>{message.text}</button>
+      ) : (
+        <p className={`chat-bubble ${message.mine ? 'chat-outgoing' : 'chat-incoming'}`}>{message.text}</p>
+      )}
+      <small className="chat-bubble-time">{state}</small>
+    </div>
+  );
 }
 
 function XmtpAttachmentView({ attachment, mine }: { attachment: Attachment; mine: boolean }) {
