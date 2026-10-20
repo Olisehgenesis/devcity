@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDownToLine, ArrowUpRight, CirclePlus, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { ArrowDownToLine, CirclePlus, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import {
   createPublicClient,
@@ -31,6 +31,7 @@ import { writeContractWithFee, type TxRequest } from '@/lib/gas';
 import { useFeeQuote } from '../hooks/useFeeQuote';
 import { useUnlockedKey } from '../hooks/useUnlockedKey';
 import { FeePreview } from './wallet/FeePreview';
+import { TokenMark } from './wallet/TokenMark';
 import { UnlockSecret } from './PinBoxes';
 import {
   getImportedWalletTokens,
@@ -39,6 +40,15 @@ import {
   type ImportedWalletToken,
 } from '@/lib/wallet-assets';
 import { CELO_SEPOLIA, ERC20_ABI, POOL_MANAGER_ABI } from '@/lib/chain';
+import {
+  executeSwap,
+  formatTokenAmount,
+  quoteIsFresh,
+  quoteSwap,
+  routeLabel,
+  swapAsset,
+  type SwapQuote,
+} from '@/lib/swap';
 
 const PROFILE_FACTORY_ABI = [
   { type: 'function', name: 'getUserToken', stateMutability: 'view', inputs: [{ name: 'user', type: 'address' }], outputs: [{ type: 'address' }] },
@@ -60,6 +70,16 @@ const PROFILE_TOKEN_ABI = [
 ] as const;
 
 const SEPOLIA_USDT = CELO_SEPOLIA.usdt as Address;
+const SEED_PAY_SYMBOLS = ['USDT', 'CELO', 'USDC', 'USDm'] as const;
+
+function seedRouteText(quote: SwapQuote, fromSymbol: string) {
+  const known = SEED_PAY_SYMBOLS
+    .map((symbol) => swapAsset(symbol))
+    .filter((asset): asset is NonNullable<ReturnType<typeof swapAsset>> => Boolean(asset));
+  const nameOf = (address: Address) => known.find((asset) => asset.address.toLowerCase() === address.toLowerCase())?.symbol ?? 'token';
+  const path = [fromSymbol, ...quote.legs.map((leg) => nameOf(leg.tokenOut))];
+  return `${path.join(' → ')} · ${routeLabel(quote)}`;
+}
 const publicClient = createPublicClient({
   chain: celoSepolia,
   transport: http(CELO_SEPOLIA.rpcUrl),
@@ -161,7 +181,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
   const [balances, setBalances] = useState<Record<string, bigint>>({});
   const [prices, setPrices] = useState<Record<string, TokenPrice>>({});
   const [profileToken, setProfileToken] = useState<ProfileTokenDetails | null>(null);
-  const [profileAction, setProfileAction] = useState<'send' | 'trade' | 'liquidity'>('send');
+  const [profileAction, setProfileAction] = useState<'send' | 'trade' | 'liquidity'>(focus === 'trade' ? 'trade' : 'send');
   const [profileStats, setProfileStats] = useState<{ icon?: string; totalSupplyFormatted?: number } | null>(null);
   const [priceAwareFactory, setPriceAwareFactory] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -175,6 +195,12 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
   const [sellTokenAmount, setSellTokenAmount] = useState('');
   const [liquidityTokenAmount, setLiquidityTokenAmount] = useState('');
   const [liquidityUsdtAmount, setLiquidityUsdtAmount] = useState('');
+  const [seedPaySymbol, setSeedPaySymbol] = useState<(typeof SEED_PAY_SYMBOLS)[number]>('USDT');
+  const [seedPayTouched, setSeedPayTouched] = useState(false);
+  const [payBalances, setPayBalances] = useState<Partial<Record<string, bigint>>>({});
+  const [seedQuote, setSeedQuote] = useState<SwapQuote | null>(null);
+  const [seedQuoting, setSeedQuoting] = useState(false);
+  const [seedQuoteError, setSeedQuoteError] = useState('');
   const [pin, setPin] = useState('');
   const [operation, setOperation] = useState<'import' | 'launch' | 'tip' | 'buy' | 'sell' | 'update-uri' | 'liquidity' | null>(null);
   const [transactionHash, setTransactionHash] = useState('');
@@ -189,7 +215,10 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     () => username.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase() || 'CITY',
     [username],
   );
-  const initialPricePreview = Number(liquidityUsdtAmount) / Number(liquidityTokenAmount);
+  const expectedSeedUsdt = seedPaySymbol === 'USDT'
+    ? Number(liquidityUsdtAmount)
+    : (seedQuote ? Number(formatTokenAmount(seedQuote.amountOut, 6)) : Number.NaN);
+  const initialPricePreview = expectedSeedUsdt / Number(liquidityTokenAmount);
   const launchFeeRequest = useMemo<TxRequest | null>(() => {
     if (profileToken) return null;
     const name = (tokenName.trim() || `${username || 'Your name'}.devcity.fun`).slice(0, 32);
@@ -367,6 +396,92 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
     void checkFactoryCapability();
   }, [checkFactoryCapability, loadProfileToken, loadTokens]);
 
+  const loadPayBalances = useCallback(async () => {
+    const rows = await Promise.all(SEED_PAY_SYMBOLS.map(async (symbol) => {
+      const asset = swapAsset(symbol);
+      if (!asset) return [symbol, BigInt(0)] as const;
+      try {
+        const balance = asset.native
+          ? await publicClient.getBalance({ address: wallet.address as Address })
+          : await publicClient.readContract({
+            address: asset.address,
+            abi: ERC20_ABI,
+            functionName: 'balanceOf',
+            args: [wallet.address as Address],
+          });
+        return [symbol, balance] as const;
+      } catch {
+        return [symbol, BigInt(0)] as const;
+      }
+    }));
+    setPayBalances(Object.fromEntries(rows));
+  }, [wallet.address]);
+
+  useEffect(() => {
+    void loadPayBalances();
+  }, [loadPayBalances]);
+
+  useEffect(() => {
+    if (seedPayTouched) return;
+    const usdt = payBalances.USDT;
+    if (usdt == null || usdt > BigInt(0)) return;
+    const funded = SEED_PAY_SYMBOLS.find((symbol) => symbol !== 'USDT' && (payBalances[symbol] ?? BigInt(0)) > BigInt(0));
+    if (funded) setSeedPaySymbol(funded);
+  }, [payBalances, seedPayTouched]);
+
+  useEffect(() => {
+    const payAsset = swapAsset(seedPaySymbol);
+    if (seedPaySymbol === 'USDT' || !payAsset) {
+      setSeedQuote(null);
+      setSeedQuoteError('');
+      setSeedQuoting(false);
+      return;
+    }
+    if (!liquidityUsdtAmount || Number(liquidityUsdtAmount) <= 0) {
+      setSeedQuote(null);
+      setSeedQuoteError('');
+      setSeedQuoting(false);
+      return;
+    }
+    setSeedQuote(null);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      let amountIn: bigint;
+      try {
+        amountIn = parseUnits(liquidityUsdtAmount, payAsset.decimals);
+      } catch {
+        if (!cancelled) {
+          setSeedQuote(null);
+          setSeedQuoteError('Enter an amount with fewer decimal places.');
+          setSeedQuoting(false);
+        }
+        return;
+      }
+      const usdtAsset = swapAsset('USDT');
+      if (!usdtAsset || amountIn <= BigInt(0)) return;
+      setSeedQuoting(true);
+      setSeedQuoteError('');
+      void quoteSwap(payAsset, usdtAsset, amountIn)
+        .then((next) => {
+          if (cancelled) return;
+          setSeedQuote(next);
+          setSeedQuoteError(next ? '' : `No route from ${payAsset.symbol} to USDT.`);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setSeedQuote(null);
+          setSeedQuoteError('The route could not be loaded.');
+        })
+        .finally(() => {
+          if (!cancelled) setSeedQuoting(false);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [liquidityUsdtAmount, seedPaySymbol]);
+
   useEffect(() => {
     if (!profileToken?.address) {
       setProfileStats(null);
@@ -383,6 +498,12 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
       .catch(() => {});
     return () => { cancelled = true; };
   }, [assetChainId, profileToken?.address]);
+
+  useEffect(() => {
+    if (profileAction === 'trade' && profileToken && !profileToken.poolCreated) {
+      setProfileAction('send');
+    }
+  }, [profileAction, profileToken]);
 
   useEffect(() => {
     if (!tokenName && username) setTokenName(`${username.replace(/[^a-zA-Z0-9-]/g, '')}.devcity.fun`);
@@ -683,36 +804,75 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
       setError('The deployed factory does not yet support safe price-aware pool creation.');
       return;
     }
-    let tokenAmount: bigint;
-    let usdtAmount: bigint;
-    let amount0: bigint;
-    let amount1: bigint;
-    let initialSqrtPriceX96 = BigInt(0);
-    try {
-      tokenAmount = parseUnits(liquidityTokenAmount, profileToken.decimals);
-      usdtAmount = parseUnits(liquidityUsdtAmount, 6);
-      const profileTokenIsCurrency0 = profileToken.address.toLowerCase() < SEPOLIA_USDT.toLowerCase();
-      amount0 = profileTokenIsCurrency0 ? tokenAmount : usdtAmount;
-      amount1 = profileTokenIsCurrency0 ? usdtAmount : tokenAmount;
-      if (isInitialPool) initialSqrtPriceX96 = sqrtPriceX96FromAmounts(amount0, amount1);
-    } catch {
-      setError('Enter valid liquidity amounts and a starting price inside the Uniswap V4 range.');
+    const payAsset = swapAsset(seedPaySymbol);
+    const usdtAsset = swapAsset('USDT');
+    if (!payAsset || !usdtAsset) {
+      setError('Choose USDT, CELO, USDC, or USDm to fund this pool.');
       return;
     }
-    if (tokenAmount <= BigInt(0) || usdtAmount <= BigInt(0)) {
+    let tokenAmount: bigint;
+    let payAmount: bigint;
+    try {
+      tokenAmount = parseUnits(liquidityTokenAmount, profileToken.decimals);
+      payAmount = parseUnits(liquidityUsdtAmount, payAsset.decimals);
+    } catch {
+      setError('Enter valid liquidity amounts.');
+      return;
+    }
+    if (tokenAmount <= BigInt(0) || payAmount <= BigInt(0)) {
       setError('Both liquidity amounts must be greater than zero.');
+      return;
+    }
+    const held = payBalances[seedPaySymbol];
+    if (held != null && held < payAmount) {
+      setError(`You have ${formatTokenAmount(held, payAsset.decimals)} ${seedPaySymbol}. Choose a token you hold. The route swaps it to USDT, then seeds the pool.`);
       return;
     }
     setOperation('liquidity');
     setError('');
     setTransactionHash('');
+    let swapped = false;
     try {
-      const [tokenBalance, usdtBalance] = await Promise.all([
-        publicClient.readContract({ address: profileToken.address, abi: PROFILE_TOKEN_ABI, functionName: 'balanceOf', args: [wallet.address as Address] }),
-        publicClient.readContract({ address: SEPOLIA_USDT, abi: ERC20_ABI, functionName: 'balanceOf', args: [wallet.address as Address] }),
-      ]);
+      let usdtAmount = payAmount;
+      if (seedPaySymbol !== 'USDT') {
+        const quoted = seedQuote && seedQuote.amountIn === payAmount && quoteIsFresh(seedQuote)
+          ? seedQuote
+          : await quoteSwap(payAsset, usdtAsset, payAmount);
+        if (!quoted) throw new Error(`No route from ${seedPaySymbol} to USDT.`);
+        const before = await publicClient.readContract({
+          address: SEPOLIA_USDT,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [wallet.address as Address],
+        });
+        const privateKey = await ensureUnlocked();
+        await executeSwap({
+          quote: quoted,
+          privateKey,
+          recipient: wallet.address as Address,
+          slippagePercent: 0.5,
+        });
+        swapped = true;
+        const after = await publicClient.readContract({
+          address: SEPOLIA_USDT,
+          abi: ERC20_ABI,
+          functionName: 'balanceOf',
+          args: [wallet.address as Address],
+        });
+        usdtAmount = after > before ? after - before : BigInt(0);
+        if (usdtAmount <= BigInt(0)) throw new Error('The swap finished, but no USDT arrived to seed the pool.');
+      }
+      const profileTokenIsCurrency0 = profileToken.address.toLowerCase() < SEPOLIA_USDT.toLowerCase();
+      const amount0 = profileTokenIsCurrency0 ? tokenAmount : usdtAmount;
+      const amount1 = profileTokenIsCurrency0 ? usdtAmount : tokenAmount;
+      const initialSqrtPriceX96 = isInitialPool ? sqrtPriceX96FromAmounts(amount0, amount1) : BigInt(0);
+      const tokenBalance = await publicClient.readContract({
+        address: profileToken.address,
+        abi: PROFILE_TOKEN_ABI,
+        functionName: 'balanceOf',
+        args: [wallet.address as Address],
+      });
       if (tokenBalance < tokenAmount) throw new Error(`Not enough ${profileToken.symbol} in this wallet.`);
-      if (usdtBalance < usdtAmount) throw new Error('Not enough Celo Sepolia USDT in this wallet.');
       const client = await walletClient();
       const factory = CELO_SEPOLIA.profileTokenFactory as Address;
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 900);
@@ -755,9 +915,11 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
       setLiquidityTokenAmount('');
       setLiquidityUsdtAmount('');
       await loadProfileToken();
+      await loadPayBalances();
       notify?.(isInitialPool ? 'Your Uniswap V4 pool is live.' : 'Liquidity added to your Uniswap V4 pool.');
     } catch (liquidityError) {
-      setError(liquidityError instanceof Error ? liquidityError.message : 'Liquidity could not be added.');
+      const message = liquidityError instanceof Error ? liquidityError.message : 'Liquidity could not be added.';
+      setError(swapped ? `USDT from the swap is in this wallet. The pool was not seeded. ${message}` : message);
     } finally {
       setOperation(null);
     }
@@ -899,7 +1061,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <UnlockSecret id="profile-token-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                 </div>
               )}
-              <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={operation === 'launch' || Boolean(launchFee.error)} onClick={() => void launchToken()}>
+              <Button type="button" disabled={operation === 'launch' || Boolean(launchFee.error)} onClick={() => void launchToken()}>
                 {operation === 'launch' ? 'Initialising…' : 'Initialise profile token'}
               </Button>
               <FeePreview quote={launchFee.quote} error={launchFee.error} loading={launchFee.loading} />
@@ -930,7 +1092,24 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                 onLiquidityTokenAmount={setLiquidityTokenAmount}
                 liquidityUsdtAmount={liquidityUsdtAmount}
                 onLiquidityUsdtAmount={setLiquidityUsdtAmount}
-                onUseDefaults={() => { setLiquidityTokenAmount('1000'); setLiquidityUsdtAmount('10'); setError(''); }}
+                onUseDefaults={() => { setSeedPaySymbol('USDT'); setSeedPayTouched(true); setLiquidityTokenAmount('1000'); setLiquidityUsdtAmount('10'); setError(''); }}
+                seedPaySymbol={seedPaySymbol}
+                onSeedPaySymbol={(symbol) => { setSeedPayTouched(true); setSeedPaySymbol(symbol); setError(''); }}
+                seedPayChoices={SEED_PAY_SYMBOLS.map((symbol) => {
+                  const asset = swapAsset(symbol);
+                  const balance = payBalances[symbol];
+                  const reserve = symbol === 'CELO' ? parseUnits('0.05', 18) : BigInt(0);
+                  const spendable = balance == null ? null : (balance > reserve ? balance - reserve : BigInt(0));
+                  return {
+                    symbol,
+                    balance: !asset || balance == null ? '…' : formatTokenAmount(balance, asset.decimals),
+                    max: !asset || spendable == null ? '' : formatUnits(spendable, asset.decimals),
+                  };
+                })}
+                seedRoute={seedPaySymbol === 'USDT' || !seedQuote ? '' : `${seedRouteText(seedQuote, seedPaySymbol)}. About ${formatTokenAmount(seedQuote.amountOut, 6)} USDT, then the pool is seeded.`}
+                seedRouteBusy={seedQuoting}
+                seedRouteError={seedPaySymbol === 'USDT' ? '' : seedQuoteError}
+                seedRouteReady={seedPaySymbol === 'USDT' || Boolean(seedQuote)}
                 initialPricePreview={initialPricePreview}
                 signingKey={Boolean(signingKey)}
                 pinProtected={wallet.pinProtected}
@@ -1003,6 +1182,13 @@ function ProfileTokenPage({
   liquidityUsdtAmount,
   onLiquidityUsdtAmount,
   onUseDefaults,
+  seedPaySymbol,
+  onSeedPaySymbol,
+  seedPayChoices,
+  seedRoute,
+  seedRouteBusy,
+  seedRouteError,
+  seedRouteReady,
   initialPricePreview,
   signingKey,
   pinProtected,
@@ -1044,6 +1230,13 @@ function ProfileTokenPage({
   liquidityUsdtAmount: string;
   onLiquidityUsdtAmount: (value: string) => void;
   onUseDefaults: () => void;
+  seedPaySymbol: (typeof SEED_PAY_SYMBOLS)[number];
+  onSeedPaySymbol: (symbol: (typeof SEED_PAY_SYMBOLS)[number]) => void;
+  seedPayChoices: { symbol: (typeof SEED_PAY_SYMBOLS)[number]; balance: string; max: string }[];
+  seedRoute: string;
+  seedRouteBusy: boolean;
+  seedRouteError: string;
+  seedRouteReady: boolean;
   initialPricePreview: number;
   signingKey: boolean;
   pinProtected?: boolean;
@@ -1062,14 +1255,6 @@ function ProfileTokenPage({
   onLiquidity: () => void;
   onUpdateUri: () => void;
 }) {
-  const [wide, setWide] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia('(min-width: 861px)');
-    const update = () => setWide(query.matches);
-    update();
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
   const available = shownAmount(token.balance, token.decimals);
   const supply = shownAmount(token.totalSupply, token.decimals, 2);
   const treasury = shownAmount(token.treasuryBalance, token.decimals, 2);
@@ -1088,152 +1273,180 @@ function ProfileTokenPage({
       <UnlockSecret id={id} pinProtected={pinProtected} value={pin} onChange={onPin} />
     </div>
   );
-  const facts: Array<[string, string]> = [
-    ['Symbol', token.symbol],
-    ['Decimals', String(token.decimals)],
-    ['Total supply', `${supply} ${token.symbol}`],
-    ['Treasury reserve', `${treasury} ${token.symbol}`],
-    ['Network', chainLabel],
-  ];
 
   return (
     <div className="ptoken">
-      <header className="ptoken-head">
-        {iconSrc ? (
-          // Token art comes from the token's own URI, which is not a fixed image host.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img className="ptoken-icon" src={iconSrc} alt="" />
-        ) : null}
-        <div>
-          <h3>{token.name}</h3>
-          <p>{token.symbol}</p>
+      <article className="pticket" aria-labelledby="ptoken-title">
+        <header className="pticket-head">
+          <span className="pticket-sticker">
+            <TokenMark symbol={token.symbol} src={iconSrc} />
+          </span>
+          <div>
+            <h3 id="ptoken-title">{token.name}</h3>
+            <p>{token.symbol} on {chainLabel}</p>
+          </div>
+        </header>
+        <p className="pticket-kicker">You have</p>
+        <p className="pticket-amount">{available}<span>{token.symbol}</span></p>
+        <p className="pticket-price">
+          {token.price == null
+            ? 'No live USDT price yet'
+            : `${token.price.toPrecision(5)} USDT each${token.priceSource ? ` · ${token.priceSource}` : ''}`}
+        </p>
+        <div className="pticket-tear" aria-hidden="true" />
+        <dl className="pticket-facts">
+          <div><dt>Minted</dt><dd>{supply}</dd></div>
+          <div><dt>Treasury</dt><dd>{treasury}</dd></div>
+          <div><dt>Pool</dt><dd className={poolReady ? 'is-open' : ''}>{poolReady ? 'Open' : 'Not open'}</dd></div>
+        </dl>
+        <p className="pticket-address">
+          <span>{token.address.slice(0, 6)}…{token.address.slice(-4)}</span>
+          <button type="button" onClick={onCopy} aria-label={copied ? 'Address copied' : 'Copy contract address'}>{copied ? 'Copied' : 'Copy'}</button>
+          <a href={explorer} target="_blank" rel="noreferrer">Explorer <ExternalLink size={13} aria-hidden="true" /></a>
+        </p>
+      </article>
+
+      <div className="pticket-work">
+        <div className="pticket-jobs" role="tablist" aria-label="What to do with this token">
+          <button type="button" role="tab" id="ptoken-tab-send" aria-controls="ptoken-panel" aria-selected={action === 'send'} className={action === 'send' ? 'is-active' : ''} onClick={() => onAction('send')}>Send</button>
+          {poolReady && <button type="button" role="tab" id="ptoken-tab-trade" aria-controls="ptoken-panel" aria-selected={action === 'trade'} className={action === 'trade' ? 'is-active' : ''} onClick={() => onAction('trade')}>Trade</button>}
+          <button type="button" role="tab" id="ptoken-tab-pool" aria-controls="ptoken-panel" aria-selected={action === 'liquidity'} className={action === 'liquidity' ? 'is-active' : ''} onClick={() => onAction('liquidity')}>Pool</button>
         </div>
-      </header>
-      <div className="ptoken-layout">
-        <div className="ptoken-main">
-          <section className="ptoken-card" aria-label="Token balance">
-            <p>Available to you</p>
-            <strong>{available} <small>{token.symbol}</small></strong>
-            <dl className="ptoken-stats">
-              <div><dt>Total supply</dt><dd>{supply} {token.symbol}</dd></div>
-              <div><dt>Treasury reserve</dt><dd>{treasury} {token.symbol}</dd></div>
-              <div>
-                <dt>Price</dt>
-                <dd>{token.price == null ? 'Price unavailable' : `${token.price.toPrecision(5)} USDT`}</dd>
-              </div>
-            </dl>
-            {token.price != null && token.priceSource && <p className="ptoken-note">{token.priceSource} · indicative, not a sale quote</p>}
-            <div className="ptoken-links">
-              <Button type="button" variant="outline" onClick={onCopy}><Copy size={15} />{copied ? 'Copied' : 'Copy address'}</Button>
-              <a className="wallet-token-explorer" href={explorer} target="_blank" rel="noreferrer">View on explorer <ExternalLink size={13} /></a>
+
+        {action === 'send' && (
+          <section className="pticket-job" id="ptoken-panel" role="tabpanel" aria-labelledby="ptoken-tab-send">
+            <h3>Send some</h3>
+            <p className="pticket-lead">To any address on {chainLabel}.</p>
+            <label className="wallet-field-label" htmlFor="profile-token-recipient">Who gets it</label>
+            <input id="profile-token-recipient" className="you-passphrase" value={recipient} onChange={(event) => onRecipient(event.target.value)} placeholder="0x…" autoComplete="off" />
+            <label className="wallet-field-label" htmlFor="profile-token-amount">How much</label>
+            <div className="wallet-send-amount-row">
+              <input id="profile-token-amount" className="you-passphrase" value={tipAmount} onChange={(event) => onTipAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" aria-invalid={tipTooMuch} aria-describedby={tipTooMuch ? 'profile-token-amount-error' : 'profile-token-available'} />
+              <Button type="button" variant="outline" onClick={() => onTipAmount(formatUnits(token.balance, token.decimals))}>Max</Button>
             </div>
+            <p className="pticket-available" id="profile-token-available">Available {available} {token.symbol}</p>
+            {tipTooMuch && <p className="you-error" id="profile-token-amount-error" role="alert">That amount is more than you have.</p>}
+            {unlock('profile-token-send-pin')}
+            <FeePreview quote={tipFee.quote} error={tipFee.error} loading={tipFee.loading} />
+            <Button type="button" className="pticket-go" disabled={operation === 'tip' || !recipient || !tipAmount || tipTooMuch || Boolean(tipFee.error)} onClick={onTip}>
+              {operation === 'tip' ? 'Sending…' : `Send ${token.symbol}`}
+            </Button>
           </section>
+        )}
 
-          <div className="ptoken-tabs" role="tablist" aria-label="Token actions">
-            <button type="button" role="tab" aria-selected={action === 'send'} className={action === 'send' ? 'is-active' : ''} onClick={() => onAction('send')}>Send</button>
-            {poolReady && <button type="button" role="tab" aria-selected={action === 'trade'} className={action === 'trade' ? 'is-active' : ''} onClick={() => onAction('trade')}>Trade</button>}
-            <button type="button" role="tab" aria-selected={action === 'liquidity'} className={action === 'liquidity' ? 'is-active' : ''} onClick={() => onAction('liquidity')}>Liquidity</button>
-          </div>
+        {action === 'trade' && poolReady && (
+          <section className="pticket-job" id="ptoken-panel" role="tabpanel" aria-labelledby="ptoken-tab-trade">
+            <h3>Buy with USDT</h3>
+            <label className="wallet-field-label" htmlFor="profile-token-buy-usdt">USDT to spend</label>
+            <input id="profile-token-buy-usdt" className="you-passphrase" value={buyUsdtAmount} onChange={(event) => onBuyUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
+            {unlock('profile-token-buy-pin')}
+            <FeePreview quote={buyFee.quote} error={buyFee.error} loading={buyFee.loading} />
+            <Button type="button" className="pticket-go" disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || Boolean(buyFee.error)} onClick={onBuy}>
+              {operation === 'buy' ? 'Buying…' : `Buy ${token.symbol}`}
+            </Button>
+            <h3 className="pticket-job-next">Sell {token.symbol}</h3>
+            <label className="wallet-field-label" htmlFor="profile-token-sell-amount">Amount to sell</label>
+            <input id="profile-token-sell-amount" className="you-passphrase" value={sellTokenAmount} onChange={(event) => onSellTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
+            {unlock('profile-token-sell-pin')}
+            <FeePreview quote={sellFee.quote} error={sellFee.error} loading={sellFee.loading} />
+            <Button type="button" variant="outline" className="pticket-go" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || Boolean(sellFee.error)} onClick={onSell}>
+              {operation === 'sell' ? 'Selling…' : `Sell ${token.symbol}`}
+            </Button>
+            <p className="wallet-token-footnote">Trades keep 5% slack against the shown spot. A big price move can make the trade fail. There is no extra protocol tax.</p>
+          </section>
+        )}
 
-          {action === 'send' && (
-            <section className="ptoken-panel" aria-label="Send or tip">
-              <h3>Send or tip</h3>
-              <label className="wallet-field-label" htmlFor="profile-token-recipient">Recipient address</label>
-              <input id="profile-token-recipient" className="you-passphrase" value={recipient} onChange={(event) => onRecipient(event.target.value)} placeholder="0x…" autoComplete="off" />
-              <label className="wallet-field-label" htmlFor="profile-token-amount">Amount · available {available} {token.symbol}</label>
-              <div className="wallet-send-amount-row">
-                <input id="profile-token-amount" className="you-passphrase" value={tipAmount} onChange={(event) => onTipAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
-                <Button type="button" variant="outline" onClick={() => onTipAmount(formatUnits(token.balance, token.decimals))}>Max</Button>
+        {action === 'liquidity' && (
+          poolReady || canSeed ? (
+            <section className="pticket-job" id="ptoken-panel" role="tabpanel" aria-labelledby="ptoken-tab-pool">
+              <h3>{poolReady ? 'Add to the USDT pool' : 'Open a USDT pool'}</h3>
+              <p className="pticket-lead">The pool pairs {token.symbol} with USDT.</p>
+              <div className="pseed-row">
+                <TokenMark symbol={token.symbol} src={iconSrc} />
+                <div className="pseed-meta">
+                  <strong>{token.symbol}</strong>
+                  <small>Balance {available}</small>
+                </div>
+                <input id="profile-token-liquidity-token" value={liquidityTokenAmount} onChange={(event) => onLiquidityTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" aria-label={`${token.symbol} amount`} />
+                <Button type="button" variant="outline" onClick={() => onLiquidityTokenAmount(formatUnits(token.balance, token.decimals))}>Max</Button>
               </div>
-              {tipTooMuch && <p className="you-error" role="alert">Amount exceeds the available balance.</p>}
-              {unlock('profile-token-send-pin')}
-              <FeePreview quote={tipFee.quote} error={tipFee.error} loading={tipFee.loading} />
-              <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={operation === 'tip' || !recipient || !tipAmount || tipTooMuch || Boolean(tipFee.error)} onClick={onTip}>
-                {operation === 'tip' ? 'Sending…' : <><ArrowUpRight size={16} /> Send {token.symbol}</>}
-              </Button>
-            </section>
-          )}
-
-          {action === 'trade' && poolReady && (
-            <section className="ptoken-panel" aria-label="Buy or sell">
-              <h3>Buy or sell on your pool</h3>
-              <label className="wallet-field-label" htmlFor="profile-token-buy-usdt">Buy with USDT</label>
-              <input id="profile-token-buy-usdt" className="you-passphrase" value={buyUsdtAmount} onChange={(event) => onBuyUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="USDT amount" inputMode="decimal" />
-              {unlock('profile-token-buy-pin')}
-              <FeePreview quote={buyFee.quote} error={buyFee.error} loading={buyFee.loading} />
-              <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={operation === 'buy' || operation === 'sell' || !buyUsdtAmount || Boolean(buyFee.error)} onClick={onBuy}>
-                {operation === 'buy' ? 'Buying…' : `Buy ${token.symbol}`}
-              </Button>
-              <label className="wallet-field-label" htmlFor="profile-token-sell-amount">Sell {token.symbol}</label>
-              <input id="profile-token-sell-amount" className="you-passphrase" value={sellTokenAmount} onChange={(event) => onSellTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder={`${token.symbol} amount`} inputMode="decimal" />
-              {unlock('profile-token-sell-pin')}
-              <FeePreview quote={sellFee.quote} error={sellFee.error} loading={sellFee.loading} />
-              <Button type="button" variant="outline" className="w-full" disabled={operation === 'buy' || operation === 'sell' || !sellTokenAmount || Boolean(sellFee.error)} onClick={onSell}>
-                {operation === 'sell' ? 'Selling…' : `Sell ${token.symbol} for USDT`}
-              </Button>
-              <p className="wallet-token-footnote">No protocol trade tax. Trades use a 5% minimum-receive tolerance against the displayed spot price; large price moves or price impact can make a trade revert.</p>
-            </section>
-          )}
-
-          {action === 'liquidity' && (
-            poolReady || canSeed ? (
-              <section className="ptoken-panel" aria-label="Liquidity">
-                <h3>{poolReady ? 'Add to your Uniswap V4 pool' : 'Seed your Uniswap V4 pool'}</h3>
-                <label className="wallet-field-label" htmlFor="profile-token-liquidity-token">{token.symbol} amount</label>
-                <input id="profile-token-liquidity-token" className="you-passphrase" value={liquidityTokenAmount} onChange={(event) => onLiquidityTokenAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
-                <label className="wallet-field-label" htmlFor="profile-token-liquidity-usdt">USDT amount</label>
-                <input id="profile-token-liquidity-usdt" className="you-passphrase" value={liquidityUsdtAmount} onChange={(event) => onLiquidityUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" />
-                {!poolReady && (
-                  <Button type="button" variant="outline" className="whitespace-normal" onClick={onUseDefaults}>
-                    Use defaults (1,000 {token.symbol} + 10 USDT · 0.01 USDT start)
-                  </Button>
-                )}
-                {unlock('profile-token-liquidity-pin')}
-                {!poolReady && Number.isFinite(initialPricePreview) && initialPricePreview > 0 && (
-                  <p className="wallet-token-price-preview">Starting spot price · {initialPricePreview.toPrecision(5)} USDT per {token.symbol}</p>
-                )}
-                <Button type="button" className="w-full border-transparent bg-[#1A1028] text-white hover:bg-[#120a1c]" disabled={operation === 'liquidity' || !liquidityTokenAmount || !liquidityUsdtAmount} onClick={onLiquidity}>
-                  {operation === 'liquidity' ? 'Approving and adding…' : poolReady ? 'Add liquidity' : 'Create pool and seed'}
+              <div className="pseed-row">
+                <TokenMark symbol={seedPaySymbol} />
+                <div className="pseed-meta">
+                  <label className="pseed-pick" htmlFor="profile-token-pay">
+                    <select
+                      id="profile-token-pay"
+                      value={seedPaySymbol}
+                      onChange={(event) => {
+                        const next = SEED_PAY_SYMBOLS.find((symbol) => symbol === event.target.value);
+                        if (next) onSeedPaySymbol(next);
+                      }}
+                    >
+                      {seedPayChoices.map((choice) => (
+                        <option key={choice.symbol} value={choice.symbol}>{choice.symbol}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <small>Balance {seedPayChoices.find((choice) => choice.symbol === seedPaySymbol)?.balance ?? '…'}</small>
+                </div>
+                <input id="profile-token-liquidity-usdt" value={liquidityUsdtAmount} onChange={(event) => onLiquidityUsdtAmount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0.00" inputMode="decimal" aria-label={`${seedPaySymbol} amount`} />
+                <Button type="button" variant="outline" onClick={() => {
+                  const choice = seedPayChoices.find((item) => item.symbol === seedPaySymbol);
+                  if (choice?.max) onLiquidityUsdtAmount(choice.max);
+                }}>Max</Button>
+              </div>
+              <p className="pseed-route" role="status">
+                {seedPaySymbol === 'USDT'
+                  ? 'Paying with USDT seeds the pool directly.'
+                  : seedRouteBusy
+                    ? `Finding a route from ${seedPaySymbol} to USDT…`
+                    : seedRouteError || seedRoute || `Enter a ${seedPaySymbol} amount to build the route.`}
+              </p>
+              {!poolReady && (
+                <Button type="button" variant="outline" className="whitespace-normal" onClick={onUseDefaults}>
+                  Use 1,000 {token.symbol} and 10 USDT
                 </Button>
-                <p className="wallet-token-footnote">{poolReady
-                  ? 'The pool keeps its current price. The factory may use less than the amounts entered and returns unused tokens.'
-                  : 'The starting spot price is set from the token and USDT amounts above. The factory may use less than those amounts and returns unused tokens.'} You will approve only the amounts needed.</p>
-              </section>
-            ) : (
-              <div className="wallet-liquidity-notice">
-                <div><ArrowDownToLine size={16} /><strong>Uniswap liquidity</strong></div>
-                <p>Initial liquidity seeding is paused for safety. The deployed factory initializes new pools at a hard-coded raw 1:1 price instead of the price you choose. The contract must be upgraded before adding USDT liquidity.</p>
-              </div>
-            )
-          )}
-
-          <details className="wallet-token-manage-details">
-            <summary>Manage token details</summary>
-            <label className="wallet-field-label" htmlFor="profile-token-uri-edit">Token details URL</label>
-            <input id="profile-token-uri-edit" className="you-passphrase" value={editTokenURI} onChange={(event) => onEditTokenURI(event.target.value)} placeholder="https://… or ipfs://" maxLength={2048} />
-            {unlock('profile-token-manage-pin')}
-            <Button type="button" variant="outline" disabled={operation === 'update-uri'} onClick={onUpdateUri}>{operation === 'update-uri' ? 'Saving…' : 'Update token details'}</Button>
-          </details>
-          {transactionHash && (
-            <p className="wallet-transaction-status" role="status">
-              Confirmed: <a href={`${explorerBase}/tx/${transactionHash}`} target="_blank" rel="noreferrer">{transactionHash.slice(0, 10)}…</a>
-            </p>
-          )}
-        </div>
-        <details className="ptoken-details" open={wide || undefined}>
-          <summary>Token details</summary>
-          <dl>
-            {facts.map(([label, value]) => (
-              <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
-            ))}
-            <div><dt>Contract</dt><dd>{token.address.slice(0, 6)}…{token.address.slice(-4)}</dd></div>
-          </dl>
-          <div className="ptoken-links">
-            <Button type="button" variant="outline" onClick={onCopy}><Copy size={15} />{copied ? 'Copied' : 'Copy address'}</Button>
-            <a className="wallet-token-explorer" href={explorer} target="_blank" rel="noreferrer">View on explorer <ExternalLink size={13} /></a>
-          </div>
-        </details>
+              )}
+              {unlock('profile-token-liquidity-pin')}
+              {!poolReady && Number.isFinite(initialPricePreview) && initialPricePreview > 0 && (
+                <p className="wallet-token-price-preview">Starting price {initialPricePreview.toPrecision(5)} USDT each</p>
+              )}
+              <Button
+                type="button"
+                disabled={operation === 'liquidity' || !liquidityTokenAmount || !liquidityUsdtAmount || (seedPaySymbol !== 'USDT' && (seedRouteBusy || !seedRouteReady))}
+                onClick={onLiquidity}
+              >
+                {operation === 'liquidity'
+                  ? (seedPaySymbol === 'USDT' ? 'Approving and adding…' : 'Swapping, then seeding…')
+                  : seedPaySymbol === 'USDT'
+                    ? (poolReady ? 'Add to pool' : 'Open the pool')
+                    : (poolReady ? 'Swap and add' : 'Swap and seed')}
+              </Button>
+              <p className="wallet-token-footnote">{poolReady
+                ? 'The pool keeps its current price. Unused tokens come back to you.'
+                : 'The starting price comes from the token amount and the USDT that arrives. Unused tokens come back to you.'}</p>
+            </section>
+          ) : (
+            <div className="wallet-liquidity-notice" id="ptoken-panel" role="tabpanel" aria-labelledby="ptoken-tab-pool">
+              <div><ArrowDownToLine size={16} /><strong>Pool seeding is paused</strong></div>
+              <p>New pools would still open at a raw 1:1 price, not the price you pick. The contract needs an upgrade before you can add USDT.</p>
+            </div>
+          )
+        )}
       </div>
+
+      <details className="pticket-art">
+        <summary>Picture and details</summary>
+        <label className="wallet-field-label" htmlFor="profile-token-uri-edit">Token details URL</label>
+        <input id="profile-token-uri-edit" className="you-passphrase" value={editTokenURI} onChange={(event) => onEditTokenURI(event.target.value)} placeholder="https://… or ipfs://" maxLength={2048} />
+        {unlock('profile-token-manage-pin')}
+        <Button type="button" variant="outline" disabled={operation === 'update-uri'} onClick={onUpdateUri}>{operation === 'update-uri' ? 'Saving…' : 'Update token details'}</Button>
+      </details>
+      {transactionHash && (
+        <p className="wallet-transaction-status" role="status">
+          Confirmed: <a href={`${explorerBase}/tx/${transactionHash}`} target="_blank" rel="noreferrer">{transactionHash.slice(0, 10)}…</a>
+        </p>
+      )}
     </div>
   );
 }
