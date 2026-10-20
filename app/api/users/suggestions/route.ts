@@ -12,27 +12,32 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'userAddress is required' }, { status: 400 });
     }
 
-    const userId = `user_${userAddress.toLowerCase()}`;
-
-    // Get users this user already follows
-    const existingFollows = await prisma.follow.findMany({
-      where: { followerId: userId },
-      select: { followingId: true },
+    const viewer = await prisma.user.findFirst({
+      where: { walletAddress: { equals: userAddress, mode: 'insensitive' } },
+      select: { id: true },
     });
 
-    const followingIds = existingFollows.map((f) => f.followingId);
-    const excludeIds = [...followingIds, userId];
+    const existingFollows = viewer
+      ? await prisma.follow.findMany({
+          where: { followerId: viewer.id },
+          select: { followingId: true },
+        })
+      : [];
+
+    const excludeIds = [...existingFollows.map((follow) => follow.followingId), viewer?.id].filter((id): id is string => Boolean(id));
 
     // Get suggested users: those with most followers, activity, or nearby presence
     const suggestions = await prisma.user.findMany({
       where: {
-        id: { notIn: excludeIds },
-        broadcasts: { some: {} }, // Only users who have posted
+        ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
+        walletAddress: { not: null },
+        broadcasts: { some: {} },
       },
       select: {
         id: true,
         username: true,
         avatarUrl: true,
+        walletAddress: true,
         _count: {
           select: {
             broadcasts: true,
@@ -56,6 +61,7 @@ export async function GET(request: Request) {
         return {
           id: user.id,
           username: user.username,
+          walletAddress: user.walletAddress,
           avatarUrl: user.avatarUrl,
           broadcastCount: user._count.broadcasts,
           followerCount: user._count.followers,

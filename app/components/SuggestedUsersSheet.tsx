@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useSuggestedUsers, type SuggestedUser } from '../hooks/useSuggestedUsers';
 import { Sheet } from './Sheet';
 import { UserPlus } from 'lucide-react';
@@ -13,15 +14,43 @@ interface SuggestedUsersSheetProps {
   onFollow: (userId: string) => void;
 }
 
-function SuggestedUserCard({ user, onFollow }: { user: SuggestedUser; onFollow: (userId: string) => void }) {
+function SuggestedUserCard({ user, userAddress, onFollow }: { user: SuggestedUser; userAddress: string | null; onFollow: (userId: string) => void }) {
+  const [followed, setFollowed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function follow() {
+    if (!user.walletAddress || !userAddress || busy || followed) return;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch('/api/follows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ followerAddress: userAddress, followingAddress: user.walletAddress }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Could not follow that person.');
+      setFollowed(true);
+      onFollow(user.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not follow that person.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="gsheet-row">
       <AvatarBubble name={user.username} seed={user.username} tone="sky" size={44} />
       <div className="gsheet-copy">
         <strong>@{user.username}</strong>
         <span>{user.broadcastCount} posts · {user.followerCount} followers</span>
+        {error && <span>{error}</span>}
       </div>
-      <Button type="button" onClick={() => onFollow(user.id)}><UserPlus size={14} /> Follow</Button>
+      <Button type="button" disabled={!user.walletAddress || !userAddress || busy || followed} onClick={() => void follow()}>
+        <UserPlus size={14} /> {followed ? 'Following' : 'Follow'}
+      </Button>
     </div>
   );
 }
@@ -42,7 +71,7 @@ export function SuggestedUsersSheet({ open, userAddress, onClose, onFollow }: Su
             <p>Come back later for people to follow.</p>
           </div>
         ) : (
-          suggestions.map((user) => <SuggestedUserCard key={user.id} user={user} onFollow={onFollow} />)
+          suggestions.map((user) => <SuggestedUserCard key={user.id} user={user} userAddress={userAddress} onFollow={onFollow} />)
         )}
       </div>
     </Sheet>

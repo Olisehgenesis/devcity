@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 export type SuggestedUser = {
   id: string;
   username: string;
+  walletAddress: string | null;
   avatarUrl: string | null;
   broadcastCount: number;
   followerCount: number;
