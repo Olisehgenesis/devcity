@@ -66,7 +66,7 @@ export async function GET(request: Request) {
   const ownerParam = search.get('owner');
 
   let token: Address | null = null;
-  let owner: Address | null = ownerParam && isAddress(ownerParam) ? getAddress(ownerParam) : null;
+  const owner: Address | null = ownerParam && isAddress(ownerParam) ? getAddress(ownerParam) : null;
   if (addressParam && isAddress(addressParam)) {
     token = getAddress(addressParam);
   } else if (owner) {
