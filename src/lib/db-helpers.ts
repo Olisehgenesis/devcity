@@ -458,8 +458,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 // Broadcasts
 // ---------------------------------------------------------------------------
 
-export function serializeBroadcast(broadcast: any, viewerAddress?: string) {
-  const viewer = viewerAddress ? normalizeAddress(viewerAddress) : null;
+export function serializeBroadcast(broadcast: any, viewerUserId?: string | null) {
   return {
     id: broadcast.id,
     text: broadcast.text,
@@ -469,8 +468,8 @@ export function serializeBroadcast(broadcast: any, viewerAddress?: string) {
     avatarUrl: broadcast.user?.avatarUrl ?? null,
     createdAt: toIso(broadcast.createdAt),
     likes: broadcast._count?.broadcastLikes ?? broadcast.broadcastLikes?.length ?? 0,
-    liked: viewer
-      ? (broadcast.broadcastLikes?.some((l: any) => l.userId === `user_${viewer}`) ?? false)
+    liked: viewerUserId
+      ? (broadcast.broadcastLikes?.some((like: { userId: string }) => like.userId === viewerUserId) ?? false)
       : false,
     comments: (broadcast.broadcastComments ?? []).map((c: any) => ({
       id: c.id,
@@ -491,18 +490,19 @@ export function serializeBroadcast(broadcast: any, viewerAddress?: string) {
 }
 
 export async function listBroadcasts(viewerAddress?: string) {
+  const viewer = viewerAddress ? await getOrCreateUser(viewerAddress) : null;
   const broadcasts = await prisma.broadcast.findMany({
     include: {
       user: true,
       _count: { select: { broadcastLikes: true, broadcastComments: true } },
-      broadcastLikes: viewerAddress ? { where: { userId: `user_${normalizeAddress(viewerAddress)}` } } : false,
+      broadcastLikes: viewer ? { where: { userId: viewer.id } } : false,
       broadcastComments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
       broadcastReactions: { include: { user: true } },
     },
     orderBy: { createdAt: 'desc' },
     take: 50,
   });
-  return broadcasts.map((b) => serializeBroadcast(b, viewerAddress));
+  return broadcasts.map((broadcast) => serializeBroadcast(broadcast, viewer?.id));
 }
 
 export async function createBroadcast(userAddress: string, text: string, mediaUrl?: string, request?: NextRequest) {
@@ -532,7 +532,7 @@ export async function createBroadcast(userAddress: string, text: string, mediaUr
     },
   });
 
-  return serializeBroadcast(broadcast, userAddress);
+  return serializeBroadcast(broadcast, user.id);
 }
 
 export async function toggleLike(broadcastId: string, userAddress: string) {
@@ -563,7 +563,7 @@ export async function toggleLike(broadcastId: string, userAddress: string) {
       broadcastComments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
     },
   });
-  return serializeBroadcast(updated, userAddress);
+  return serializeBroadcast(updated, user.id);
 }
 
 export async function addComment(broadcastId: string, userAddress: string, text: string) {
@@ -587,7 +587,7 @@ export async function addComment(broadcastId: string, userAddress: string, text:
       broadcastComments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
     },
   });
-  return serializeBroadcast(updated, userAddress);
+  return serializeBroadcast(updated, user.id);
 }
 
 // ---------------------------------------------------------------------------
