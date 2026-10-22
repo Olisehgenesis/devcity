@@ -45,8 +45,8 @@ model User {
   eventMessages     EventMessage[]
   notifications     Notification[]
   drafts            BroadcastDraft[]
-stalls            Stall[]
-   booths            Booth[]
+  stalls            Stall[]
+  booths            Booth[]
    following         Follow[]              @relation("FollowFollower")
    followers         Follow[]              @relation("FollowFollowing")
    friendRequestsSent     FriendRequest[]  @relation("FriendRequestFrom")

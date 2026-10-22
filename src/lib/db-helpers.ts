@@ -11,6 +11,7 @@ import { CELO_SEPOLIA } from './chain';
 import { ApiError } from './api-error';
 import { normalizeWalletAddress } from './wallet-address';
 import { parseMentions } from './mentions';
+import { parseHashtags } from './hashtags';
 import { normalizeUsername } from './usernames';
 
 export { ApiError };
@@ -520,6 +521,33 @@ async function loadBroadcast(id: string, viewerUserId?: string | null) {
   });
 }
 
+export async function syncBroadcastHashtags(broadcastId: string, text: string) {
+  const next = new Set(parseHashtags(text));
+  const current = await prisma.broadcastHashtag.findMany({
+    where: { broadcastId },
+    include: { hashtag: true },
+  });
+  for (const row of current) {
+    if (next.has(row.hashtag.tag)) {
+      next.delete(row.hashtag.tag);
+      continue;
+    }
+    await prisma.broadcastHashtag.delete({ where: { id: row.id } });
+    await prisma.hashtag.update({
+      where: { id: row.hashtagId },
+      data: { usageCount: { decrement: 1 } },
+    });
+  }
+  for (const tag of next) {
+    const hashtag = await prisma.hashtag.upsert({
+      where: { tag },
+      create: { tag, usageCount: 1 },
+      update: { usageCount: { increment: 1 } },
+    });
+    await prisma.broadcastHashtag.create({ data: { broadcastId, hashtagId: hashtag.id } });
+  }
+}
+
 async function notifyAboutText(text: string, actor: { id: string; username: string | null }, extra: { broadcastId: string; commentId?: string; replyToUserId?: string | null }) {
   const handles = parseMentions(text).slice(0, 8);
   const mentioned = handles.length
@@ -581,6 +609,7 @@ export async function createBroadcast(userAddress: string, text: string, mediaUr
     include: broadcastInclude(user.id),
   });
 
+  await syncBroadcastHashtags(broadcast.id, trimmed);
   await notifyAboutText(trimmed, user, { broadcastId: broadcast.id });
 
   await prisma.activity.create({

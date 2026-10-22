@@ -53,6 +53,15 @@ type FeedBroadcast = {
 };
 
 const REACTIONS = ['🔥', '👀', '💜'];
+const draftQueues = new Map<string, Promise<void>>();
+const activeDraftIds = new Map<string, string>();
+
+function enqueueDraft(userAddress: string, task: () => Promise<void>) {
+  const previous = draftQueues.get(userAddress) ?? Promise.resolve();
+  const next = previous.then(task, task);
+  draftQueues.set(userAddress, next);
+  return next;
+}
 
 function countLabel(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -160,9 +169,8 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [exploreTags, setExploreTags] = useState<Array<{ tag: string; usageCount: number }>>([]);
   const [explorePeople, setExplorePeople] = useState<Array<{ id: string; username: string | null; avatarUrl: string | null }>>([]);
   const [exploreLoading, setExploreLoading] = useState(false);
-  const draftIdRef = useRef<string | null>(null);
+  const draftIdRef = useRef<string | null>(userAddress ? activeDraftIds.get(userAddress) ?? null : null);
   const composerDirty = useRef(false);
-  const draftChain = useRef(Promise.resolve());
   const latestComposer = useRef({ text: '', media: null as string | null });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
@@ -295,21 +303,23 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     if (!open || view !== 'feed' || profileStatus !== 'ready' || !userAddress || !composerDirty.current) return;
     if (!broadcastDraft.trim() && !broadcastMedia) return;
     const timer = window.setTimeout(() => {
-      draftChain.current = draftChain.current.then(async () => {
+      void enqueueDraft(userAddress, async () => {
         if (!composerDirty.current) return;
         const text = latestComposer.current.text;
         const media = latestComposer.current.media;
         if (!text.trim() && !media) return;
-        const response = await fetch(draftIdRef.current ? `/api/drafts/${encodeURIComponent(draftIdRef.current)}` : '/api/drafts', {
-          method: draftIdRef.current ? 'PATCH' : 'POST',
+        const id = activeDraftIds.get(userAddress) ?? draftIdRef.current;
+        const response = await fetch(id ? `/api/drafts/${encodeURIComponent(id)}` : '/api/drafts', {
+          method: id ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userAddress, text, mediaUrl: media }),
         });
         const data = await response.json().catch(() => ({})) as { draft?: { id: string; text: string; mediaUrl: string | null; updatedAt: string | null } };
         if (!response.ok || !data.draft) return;
         draftIdRef.current = data.draft.id;
+        activeDraftIds.set(userAddress, data.draft.id);
         setDrafts((items) => [data.draft!, ...items.filter((item) => item.id !== data.draft!.id)]);
-      }).catch(() => undefined);
+      });
     }, 800);
     return () => window.clearTimeout(timer);
   }, [broadcastDraft, broadcastMedia, open, view, profileStatus, userAddress]);
@@ -555,10 +565,12 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
       if (!response.ok || !data.broadcast) throw new Error(data.error || 'Broadcast could not be saved.');
       setBroadcasts((items) => [data.broadcast!, ...items.filter((item) => item.id !== data.broadcast!.id)]);
-      if (draftIdRef.current) {
-        void fetch(`/api/drafts/${encodeURIComponent(draftIdRef.current)}?userAddress=${encodeURIComponent(userAddress)}`, { method: 'DELETE' });
-        setDrafts((items) => items.filter((item) => item.id !== draftIdRef.current));
+      const publishedDraft = activeDraftIds.get(userAddress) ?? draftIdRef.current;
+      if (publishedDraft) {
+        void fetch(`/api/drafts/${encodeURIComponent(publishedDraft)}?userAddress=${encodeURIComponent(userAddress)}`, { method: 'DELETE' });
+        setDrafts((items) => items.filter((item) => item.id !== publishedDraft));
         draftIdRef.current = null;
+        activeDraftIds.delete(userAddress);
       }
       composerDirty.current = false;
       setBroadcastDraft('');
@@ -720,27 +732,36 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   async function saveDraftNow() {
     if (!userAddress || (!broadcastDraft.trim() && !broadcastMedia)) return;
     composerDirty.current = true;
-    const response = await fetch(draftIdRef.current ? `/api/drafts/${encodeURIComponent(draftIdRef.current)}` : '/api/drafts', {
-      method: draftIdRef.current ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userAddress, text: broadcastDraft, mediaUrl: broadcastMedia }),
+    const text = broadcastDraft;
+    const media = broadcastMedia;
+    let failed = '';
+    await enqueueDraft(userAddress, async () => {
+      const id = activeDraftIds.get(userAddress) ?? draftIdRef.current;
+      const response = await fetch(id ? `/api/drafts/${encodeURIComponent(id)}` : '/api/drafts', {
+        method: id ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, text, mediaUrl: media }),
+      });
+      const data = await response.json().catch(() => ({})) as { draft?: { id: string; text: string; mediaUrl: string | null; updatedAt: string | null }; error?: string };
+      if (!response.ok || !data.draft) {
+        failed = data.error || 'Draft could not be saved.';
+        return;
+      }
+      draftIdRef.current = data.draft.id;
+      activeDraftIds.set(userAddress, data.draft.id);
+      setDrafts((items) => [data.draft!, ...items.filter((item) => item.id !== data.draft!.id)]);
     });
-    const data = await response.json().catch(() => ({})) as { draft?: { id: string; text: string; mediaUrl: string | null; updatedAt: string | null }; error?: string };
-    if (!response.ok || !data.draft) {
-      setFeedError(data.error || 'Draft could not be saved.');
-      return;
-    }
-    draftIdRef.current = data.draft.id;
-    setDrafts((items) => [data.draft!, ...items.filter((item) => item.id !== data.draft!.id)]);
-    onNotify('Draft saved.');
+    if (failed) setFeedError(failed);
+    else onNotify('Draft saved.');
   }
 
   async function removeDraft(id: string) {
     if (!userAddress) return;
     await fetch(`/api/drafts/${encodeURIComponent(id)}?userAddress=${encodeURIComponent(userAddress)}`, { method: 'DELETE' });
     setDrafts((items) => items.filter((item) => item.id !== id));
-    if (draftIdRef.current === id) {
+    if (draftIdRef.current === id || activeDraftIds.get(userAddress) === id) {
       draftIdRef.current = null;
+      activeDraftIds.delete(userAddress);
       composerDirty.current = false;
       setBroadcastDraft('');
       setBroadcastMedia(null);
@@ -871,8 +892,8 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
         {broadcast.mediaUrl && <img className="broadcast-media" src={broadcast.mediaUrl} alt="" />}
         {broadcast.updatedAt && broadcast.updatedAt !== broadcast.createdAt && <small className="chat-demo-note">Edited</small>}
         <div className="broadcast-actions">
-          <button className={broadcast.liked ? 'is-liked' : ''} onClick={() => void toggleLike(broadcast.id)} disabled={pendingBroadcastId === broadcast.id} aria-label={broadcast.liked ? 'Unlike broadcast' : 'Like broadcast'}><Heart size={15} fill={broadcast.liked ? 'currentColor' : 'none'} /> {broadcast.likes}</button>
-          <button onClick={() => setCommentingId(commentingId === broadcast.id ? null : broadcast.id)}><MessageCircle size={15} /> {countLabel(conversationCount(broadcast), 'comment', 'comments')}</button>
+          <button type="button" className={broadcast.liked ? 'is-liked' : ''} onClick={() => void toggleLike(broadcast.id)} disabled={pendingBroadcastId === broadcast.id} aria-label={broadcast.liked ? 'Unlike broadcast' : 'Like broadcast'}><Heart size={15} fill={broadcast.liked ? 'currentColor' : 'none'} /> {broadcast.likes}</button>
+          <button type="button" onClick={() => setCommentingId(commentingId === broadcast.id ? null : broadcast.id)} aria-label="Show comments"><MessageCircle size={15} /> {countLabel(conversationCount(broadcast), 'comment', 'comments')}</button>
           {REACTIONS.map((emoji) => {
             const count = (broadcast.reactions ?? []).filter((reaction) => reaction.emoji === emoji).length;
             const mine = (broadcast.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.userId === `user_${userAddress?.toLowerCase()}`);

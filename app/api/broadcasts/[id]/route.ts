@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getOrCreateUser, ApiError } from '@/lib/db-helpers';
+import { getOrCreateUser, ApiError, syncBroadcastHashtags } from '@/lib/db-helpers';
 
 // GET /api/broadcasts/[id] - Get a single broadcast
 export async function GET(
@@ -100,6 +100,7 @@ export async function PATCH(
       throw new ApiError(410, 'Edit window has expired (5 minutes)');
     }
 
+    await syncBroadcastHashtags(id, text);
     const updated = await prisma.broadcast.update({
       where: { id },
       data: {
@@ -170,6 +171,7 @@ export async function DELETE(
       throw new ApiError(403, 'Not authorized to delete this broadcast');
     }
 
+    await syncBroadcastHashtags(id, '');
     await prisma.broadcast.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
