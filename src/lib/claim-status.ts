@@ -57,6 +57,19 @@ function claimantsFromDrop(drop: { currentClaimants: bigint } | readonly unknown
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function chainField(drop: unknown, index: number, name: string): unknown {
+  if (drop && typeof drop === 'object' && name in drop) return (drop as Record<string, unknown>)[name];
+  return Array.isArray(drop) ? drop[index] : undefined;
+}
+
+/** An unregistered drop reads back as a zero token. That is not a real claim count. */
+export function isRegisteredChainDrop(drop: unknown): boolean {
+  const token = chainField(drop, 0, 'token');
+  const active = chainField(drop, 8, 'isActive');
+  const zero = typeof token === 'string' && /^0x0{40}$/i.test(token);
+  return !(zero && active !== true);
+}
+
 async function readChainDrop(dropId: string, userAddress?: Address): Promise<Pick<DropClaimStatus, 'claimedByUser' | 'currentClaimants'>> {
   const client = createPublicClient({
     chain: celoSepolia,
@@ -69,6 +82,9 @@ async function readChainDrop(dropId: string, userAddress?: Address): Promise<Pic
     functionName: 'getDrop',
     args: [dropIdBytes],
   });
+  if (!isRegisteredChainDrop(drop)) {
+    throw new Error('Drop is not registered on chain');
+  }
   let claimedByUser = false;
   if (userAddress) {
     try {

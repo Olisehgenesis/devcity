@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowLeftRight, ChevronDown, Copy, History, LogOut, Settings, Wallet } from 'lucide-react';
 
-export type WalletNav = 'home' | 'activity' | 'swap' | 'drops' | 'settings';
+export type WalletNav = 'home' | 'activity' | 'swap' | 'drops' | 'settings' | 'assets' | 'overview' | 'trade';
 
 interface WalletShellProps {
   nav: WalletNav;
@@ -25,10 +25,14 @@ interface WalletShellProps {
 
 const NAV: { id: WalletNav; label: string; icon: typeof Wallet }[] = [
   { id: 'home', label: 'Wallet', icon: Wallet },
+  { id: 'assets', label: 'Assets', icon: Wallet },
   { id: 'activity', label: 'Activity', icon: History },
   { id: 'swap', label: 'Swap', icon: ArrowLeftRight },
+  { id: 'trade', label: 'Trading', icon: ArrowLeftRight },
+  { id: 'overview', label: 'Overview', icon: Wallet },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
+const TAB_NAV = NAV.filter((item) => item.id === 'home' || item.id === 'activity' || item.id === 'swap' || item.id === 'settings');
 
 export function WalletShell({
   nav,
@@ -184,7 +188,7 @@ export function WalletShell({
       </div>
 
       <nav className="wshell-tabbar" aria-label="Wallet">
-        {NAV.map((item) => {
+        {TAB_NAV.map((item) => {
           const Icon = item.icon;
           const active = nav === item.id;
           return (

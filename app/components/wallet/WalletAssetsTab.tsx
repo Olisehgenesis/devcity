@@ -20,7 +20,7 @@ interface WalletAssetsTabProps {
 }
 
 export function WalletAssetsTab({ wallet, username, chainId, chainLabel, stableBalances, profileToken, unlockedKey, onUnlockKey, onTokensChange, notify }: WalletAssetsTabProps) {
-  const heldStables = (['USDT', 'USDC', 'cUSD'] as const).filter((sym) => (stableBalances[sym] ?? 0) > 0);
+  const heldStables = (['USDT', 'USDC', 'USDm', 'cUSD'] as const).filter((sym) => (stableBalances[sym] ?? 0) > 0);
   const profileBalance = profileToken ? Number(profileToken.balance) / 10 ** profileToken.decimals : 0;
   return (
     <>
@@ -31,7 +31,7 @@ export function WalletAssetsTab({ wallet, username, chainId, chainLabel, stableB
             {heldStables.map((sym) => (
               <div className="wallet-token-row" key={sym}>
                 <span className={`wallet-token-mark wallet-token-${sym.toLowerCase()}`}>{sym.slice(0, 1)}</span>
-                <span className="wallet-token-name"><strong>{sym}</strong><small>{sym === 'cUSD' ? 'Celo Dollar' : sym === 'USDT' ? 'Tether USD' : 'USD Coin'}</small></span>
+                <span className="wallet-token-name"><strong>{sym}</strong><small>{sym === 'cUSD' || sym === 'USDm' ? 'Celo Dollar' : sym === 'USDT' ? 'Tether USD' : 'USD Coin'}</small></span>
                 <strong className="wallet-token-balance">{stableBalances[sym].toFixed(sym === 'cUSD' ? 4 : 2)}</strong>
               </div>
             ))}

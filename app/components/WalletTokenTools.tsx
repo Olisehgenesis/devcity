@@ -1061,7 +1061,7 @@ export function WalletTokenTools({ wallet, username, assetChainId, assetChainLab
                   <UnlockSecret id="profile-token-pin" pinProtected={wallet.pinProtected} value={pin} onChange={setPin} />
                 </div>
               )}
-              <Button type="button" disabled={operation === 'launch' || Boolean(launchFee.error)} onClick={() => void launchToken()}>
+              <Button type="button" disabled={operation === 'launch' || Boolean(launchFee.error) || (!signingKey && pin.length !== 6)} onClick={() => void launchToken()}>
                 {operation === 'launch' ? 'Initialising…' : 'Initialise profile token'}
               </Button>
               <FeePreview quote={launchFee.quote} error={launchFee.error} loading={launchFee.loading} />

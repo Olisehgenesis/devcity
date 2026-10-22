@@ -5,6 +5,7 @@ import { ExternalLink, Heart, QrCode } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { Button } from '@/components/ui/button';
 import { resolveRecipient } from '../lib/resolve-user';
+import { friendlyError } from '@/lib/friendly-error';
 import type { TipTarget } from './TipSheet';
 
 interface ScanSheetProps {
@@ -82,7 +83,7 @@ export function ScanSheet({ open, onClose, onTip, onOpenDrop }: ScanSheetProps) 
         stopScanner = controls.stop;
         if (cancelled) controls.stop();
       } catch (error) {
-        setCameraError(error instanceof Error ? error.message : 'Could not access the camera.');
+        setCameraError(friendlyError(error, 'The camera could not be opened. Type the code instead.'));
       } finally {
         if (!cancelled) setScanning(false);
       }

@@ -16,6 +16,7 @@ import {
   MapPinOff,
   MessageCircle,
   Plus,
+  Search,
   Trophy,
   TrendingUp,
   UsersRound,
@@ -46,7 +47,7 @@ import { CELO_SEPOLIA } from "@/lib/chain";
 import { writeContractWithFee } from "@/lib/gas";
 import { useFeeQuote } from "./hooks/useFeeQuote";
 import { FeePreview } from "./components/wallet/FeePreview";
-import { CLAIM_RADIUS_M, distanceMeters } from "@/lib/geo";
+import { CLAIM_RADIUS_M, distanceMeters, formatDistance } from "@/lib/geo";
 import { claimDistanceSentence, claimFailureMessage, claimNeedsPin, resolveClaimView, type ClaimLocationStatus } from "@/lib/claim-eligibility";
 import { TrendingSheet } from "./components/TrendingSheet";
 import { LeaderboardSheet } from "./components/LeaderboardSheet";
@@ -54,6 +55,9 @@ import { NotificationSheet } from "./components/NotificationSheet";
 import { SuggestedUsersSheet } from "./components/SuggestedUsersSheet";
 import { StoryViewer } from "./components/StoryViewer";
 import type { Story } from "./lib/stories";
+import { PublicProfileSheet } from "./components/PublicProfileSheet";
+import { useRealtimePresence } from "./hooks/useRealtimePresence";
+import { useAutoSync } from "./hooks/useAutoSync";
 
 type MarkerKind = "drop" | "person" | "place" | "event";
 type CityMarker = {
@@ -72,6 +76,7 @@ type CityMarker = {
   avatar?: string;
   url?: string;
   category?: string;
+  address?: string;
   raw?: EventApiItem;
 };
 type FilterKind = "all" | MarkerKind;
@@ -230,8 +235,7 @@ export default function CityHome() {
   const [filter, setFilter] = useState<FilterKind>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cardClosed, setCardClosed] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<NavTab>("map");
   const [notice, setNotice] = useState("");
   const [youOpen, setYouOpen] = useState(false);
@@ -301,6 +305,19 @@ export default function CityHome() {
   const [suggestedOpen, setSuggestedOpen] = useState(false);
   const [activeStory, setActiveStory] = useState<Story | null>(null);
   const [createDropOpen, setCreateDropOpen] = useState(false);
+  const [publicHandle, setPublicHandle] = useState<string | null>(null);
+  const [searchSeed, setSearchSeed] = useState("");
+  const [createDate, setCreateDate] = useState("");
+  const [createTime, setCreateTime] = useState("");
+  const [cityStories, setCityStories] = useState<Array<{ id: string; username: string | null; content: string; mediaUrl: string | null }>>([]);
+  const positionRef = useRef<{ lat: number; lng: number; at: number } | null>(null);
+  const mapReadyRef = useRef(false);
+  useAutoSync(Boolean(feedUserAddress));
+  const livePresence = useRealtimePresence(
+    myPosition ? myPosition[1] : DEVCON_VENUE[1],
+    myPosition ? myPosition[0] : DEVCON_VENUE[0],
+    50,
+  );
   const [createDropLocation, setCreateDropLocation] = useState<{ lat: number; lng: number } | null>(null);
   const onMapTapRef = useRef<(lng: number, lat: number) => void>(() => {});
   const [dropLoading, setDropLoading] = useState(true);
@@ -430,6 +447,9 @@ export default function CityHome() {
       : undefined;
   const selectedIsTest = Boolean(selected?.id.startsWith('test-'));
   const selectedDropId = selected?.kind === "drop" ? selected.id.replace(/^drop-/, "") : "";
+  const missingDropId = dropSheetOpen && !dropLoading && selectedId?.startsWith("drop-") && !allMarkers.some((marker) => marker.id === selectedId)
+    ? selectedId.replace(/^drop-/, "")
+    : "";
   const isClaimed = Boolean(chainClaims[selectedDropId]);
   const selectedClaimedCount = selected?.kind === "drop" ? (chainCounts[selectedDropId] ?? selected.claimedCount) : selected?.claimedCount;
   const claimLocationStatus: ClaimLocationStatus = locationPreferenceReady && !locationSharing
@@ -438,9 +458,9 @@ export default function CityHome() {
     ? "denied"
     : locationState === "unavailable"
       ? "unavailable"
-      : locationState === "timeout"
+      : locationState === "timeout" && !myPosition
         ? "timeout"
-      : locationState === "inside" || locationState === "outside"
+      : myPosition || locationState === "inside" || locationState === "outside"
         ? "ready"
         : "checking";
   const claimView = resolveClaimView({
@@ -498,7 +518,19 @@ export default function CityHome() {
       setScanOpen(false);
       setSocialView(null);
       setDropSheetOpen(Boolean(drop));
-      setYouOpen(Boolean(user));
+      if (user) {
+        const handle = decodeURIComponent(user[1]);
+        if (handle === "you") {
+          setYouOpen(true);
+          setPublicHandle(null);
+        } else {
+          setYouOpen(false);
+          setPublicHandle(handle);
+        }
+      } else {
+        setYouOpen(false);
+        setPublicHandle(null);
+      }
       if (drop) {
         setSelectedId(`drop-${decodeURIComponent(drop[1])}`);
         setCardClosed(false);
@@ -606,12 +638,16 @@ export default function CityHome() {
     map.on('moveend', settleMarkers);
     map.on('zoomend', settleMarkers);
     map.on("load", () => {
+      mapReadyRef.current = true;
       setMapReady(true);
       setMapError(false);
     });
     map.on("error", (event) => {
+      const message = String((event.error as { message?: string } | undefined)?.message ?? event.error ?? "");
       console.error("City map error:", event.error);
-      if (!mapReady) setMapError(true);
+      if (mapReadyRef.current) return;
+      if (/image|sprite|glyph|tile|ajax/i.test(message)) return;
+      setMapError(true);
     });
     return () => {
       mapMarkers.forEach((marker) => marker.remove());
@@ -677,17 +713,18 @@ export default function CityHome() {
     let cancelled = false;
     fetch(`/api/presence/nearby?lat=${DEVCON_VENUE[1]}&lng=${DEVCON_VENUE[0]}&radius=50`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { users?: Array<{ userId: string; username: string | null; lat: number; lng: number; distance: number }> } | null) => {
+      .then((data: { users?: Array<{ userId: string; username: string | null; lat: number; lng: number; distance: number; walletAddress?: string | null }> } | null) => {
         if (cancelled || !data?.users) return;
         setPersonMarkers(data.users.filter((user) => Number.isFinite(user.lat) && Number.isFinite(user.lng)).map((user) => ({
           id: `person-${user.userId}`,
           kind: "person" as const,
           name: user.username || "Someone nearby",
           detail: "Approximate location",
-          distance: `${user.distance} km`,
+          distance: !user.distance || user.distance <= 0 ? "Nearby" : `${formatDistance(user.distance * 1000)} away`,
           latitude: user.lat,
           longitude: user.lng,
           color: "lime",
+          address: user.walletAddress ?? undefined,
         })));
       })
       .catch(() => {});
@@ -695,6 +732,61 @@ export default function CityHome() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!livePresence.users.length) return;
+    setPersonMarkers(livePresence.users
+      .filter((user) => Number.isFinite(user.lat) && Number.isFinite(user.lng))
+      .map((user) => {
+        const wallet = (user as { walletAddress?: string | null }).walletAddress;
+        return {
+          id: `person-${user.userId}`,
+          kind: "person" as const,
+          name: user.username || "Someone nearby",
+          detail: "Approximate location",
+          distance: !user.distance || user.distance <= 0 ? "Nearby" : `${formatDistance(user.distance * 1000)} away`,
+          latitude: user.lat as number,
+          longitude: user.lng as number,
+          color: "lime",
+          address: wallet ?? undefined,
+        };
+      }));
+  }, [livePresence.users]);
+
+  useEffect(() => {
+    if (!feedUserAddress || !locationSharing || !myPosition) return;
+    const send = () => {
+      void fetch("/api/presence/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          userAddress: feedUserAddress,
+          lat: myPosition[1],
+          lng: myPosition[0],
+          status: "ONLINE",
+          visibility: "APPROXIMATE",
+        }),
+      });
+    };
+    send();
+    const timer = window.setInterval(send, 30000);
+    return () => window.clearInterval(timer);
+  }, [feedUserAddress, locationSharing, myPosition]);
+
+  const loadStories = useCallback(async () => {
+    try {
+      const response = await fetch("/api/stories");
+      if (!response.ok) return;
+      const data = await response.json() as { stories?: Array<{ id: string; username: string | null; content: string; mediaUrl: string | null }> };
+      setCityStories(data.stories ?? []);
+    } catch {
+      /* Stories stay as the last good list. */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStories();
+  }, [loadStories]);
 
   useEffect(() => {
     let cancelled = false;
@@ -913,7 +1005,7 @@ export default function CityHome() {
   }, []);
 
   useEffect(() => {
-    if (!locationPreferenceReady || !locationSharing || !myPosition) return;
+    if (!locationPreferenceReady || !locationSharing || !myPosition || !feedUserAddress) return;
     const timer = window.setTimeout(() => {
       void fetch('/api/me/location', {
         method: 'POST',
@@ -922,7 +1014,7 @@ export default function CityHome() {
       });
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [locationPreferenceReady, locationSharing, myPosition]);
+  }, [feedUserAddress, locationPreferenceReady, locationSharing, myPosition]);
 
   useEffect(() => {
     let cancelled = false;
@@ -957,6 +1049,7 @@ export default function CityHome() {
     let settled = false;
     const accept = (coords: GeolocationCoordinates) => {
       const position: [number, number] = [coords.longitude, coords.latitude];
+      positionRef.current = { lng: coords.longitude, lat: coords.latitude, at: Date.now() };
       setMyPosition(position);
       const inside = isInsideMumbai(position[0], position[1]);
       setLocationState(inside ? "inside" : "outside");
@@ -1032,29 +1125,49 @@ export default function CityHome() {
   }
 
   function readFreshClaimPosition(): Promise<{ lat: number; lng: number }> {
+    const cached = positionRef.current;
+    if (cached && Date.now() - cached.at < 20_000) {
+      return Promise.resolve({ lat: cached.lat, lng: cached.lng });
+    }
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(Object.assign(new Error("Location is unavailable."), { claimLocation: "unavailable" as const }));
         return;
       }
+      let settled = false;
+      const finish = (run: () => void) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        run();
+      };
+      const timer = window.setTimeout(() => {
+        if (cached) finish(() => resolve({ lat: cached.lat, lng: cached.lng }));
+        else finish(() => reject(Object.assign(new Error("Location is on, but this reading timed out."), { claimLocation: "timeout" as const })));
+      }, 8_000);
       navigator.geolocation.getCurrentPosition(
         ({ coords }) => {
           if (!Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) {
-            reject(Object.assign(new Error("Location is unavailable."), { claimLocation: "unavailable" as const }));
+            finish(() => reject(Object.assign(new Error("Location is unavailable."), { claimLocation: "unavailable" as const })));
             return;
           }
-          resolve({ lat: coords.latitude, lng: coords.longitude });
+          positionRef.current = { lat: coords.latitude, lng: coords.longitude, at: Date.now() };
+          finish(() => resolve({ lat: coords.latitude, lng: coords.longitude }));
         },
         (error) => {
           const where = geoFailure(error);
+          if (cached) {
+            finish(() => resolve({ lat: cached.lat, lng: cached.lng }));
+            return;
+          }
           const message = where === "denied"
             ? "Location permission is required."
             : where === "timeout"
               ? "Location is on, but this reading timed out."
               : "This device could not find a position.";
-          reject(Object.assign(new Error(message), { claimLocation: where }));
+          finish(() => reject(Object.assign(new Error(message), { claimLocation: where })));
         },
-        { enableHighAccuracy: false, timeout: 15000, maximumAge: 20000 },
+        { enableHighAccuracy: false, timeout: 7000, maximumAge: 20000 },
       );
     });
   }
@@ -1213,6 +1326,8 @@ export default function CityHome() {
           name: createName.trim(),
           lat,
           lng,
+          startDate: createKind === "event" && createDate ? `${createDate}T00:00:00.000Z` : undefined,
+          startTime: createKind === "event" && createTime ? createTime : undefined,
         }),
       });
       const data = await res.json();
@@ -1228,6 +1343,8 @@ export default function CityHome() {
       }
       setCreateKind(null);
       setCreateName("");
+      setCreateDate("");
+      setCreateTime("");
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : "Could not create. Try again.");
     } finally {
@@ -1268,11 +1385,13 @@ export default function CityHome() {
       setLocationPromptOpen(false);
       setOutsidePromptOpen(false);
     }
-    await fetch('/api/me/location', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sharing: next }),
-    }).catch(() => {});
+    if (feedUserAddress) {
+      await fetch('/api/me/location', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sharing: next }),
+      }).catch(() => {});
+    }
     setNotice(next ? 'Location is on for friends.' : 'Location is off. Friends cannot see you.');
   }
 
@@ -1280,11 +1399,13 @@ export default function CityHome() {
     if (!locationSharing) {
       setLocationSharing(true);
       localStorage.setItem('devcity-location-sharing', 'on');
-      void fetch('/api/me/location', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sharing: true }),
-      });
+      if (feedUserAddress) {
+        void fetch('/api/me/location', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sharing: true }),
+        });
+      }
     }
     if (!navigator.geolocation) {
       setLocationState("unavailable");
@@ -1373,6 +1494,74 @@ export default function CityHome() {
     setLeaderboardOpen(false);
     setSuggestedOpen(false);
     setActiveStory(null);
+    setPublicHandle(null);
+    setCreateMenuOpen(false);
+    setCityMenuOpen(false);
+  }
+
+  function beginCreate(kind: "stall" | "booth" | "event") {
+    setCreateMenuOpen(false);
+    setCityMenuOpen(false);
+    if (!feedUserAddress) {
+      setNotice("Create a passkey wallet before you add a place.");
+      openWallet();
+      return;
+    }
+    setCreateKind(kind);
+    setCreateName("");
+    setCreateError("");
+    setCreateDate("");
+    setCreateTime("");
+  }
+
+  function openPublicProfile(handle: string) {
+    closeSheets();
+    setPublicHandle(handle);
+    setActiveTab("map");
+    rememberPath(`/u/${encodeURIComponent(handle)}`);
+  }
+
+  function openCityStory(story: { username: string | null; content: string; mediaUrl: string | null }) {
+    const name = story.username || "Someone";
+    setActiveStory({
+      name,
+      initials: name.slice(0, 1).toUpperCase(),
+      color: "coral",
+      time: "now",
+      place: "Mumbai",
+      segments: [{ text: story.content || "A moment from the city", sub: story.mediaUrl ? "Photo attached" : undefined }],
+    });
+  }
+
+  async function toggleEventGoing(event: NonNullable<CityMarker["raw"]>) {
+    if (!feedUserAddress) {
+      setNotice("Open your wallet to save that you are going.");
+      openWallet();
+      return;
+    }
+    const saved = savedEvents.find((item) => item.id === event.id);
+    const going = saved?.attendance === "going";
+    const payload = {
+      id: event.id,
+      name: event.name,
+      organizer: event.organizer,
+      location: event.location,
+      startDate: event.startDate,
+      url: event.url,
+    };
+    if (going) removeSavedEvent(event.id);
+    else saveEvent(payload);
+    const response = await fetch(`/api/events/${encodeURIComponent(event.id)}/rsvp`, {
+      method: going ? "DELETE" : "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userAddress: feedUserAddress, status: "going" }),
+    });
+    if (!response.ok) {
+      if (going) saveEvent(payload);
+      else removeSavedEvent(event.id);
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      setNotice(data.error || "Could not update your RSVP.");
+    }
   }
 
   function openProfile() {
@@ -1463,27 +1652,44 @@ export default function CityHome() {
         )}
         {mapError && <div className="map-load-notice" role="status">
           <span>{mapReady ? "Some map details are taking a moment." : "The map is taking a moment to arrive."}</span>
-          <button onClick={() => window.location.reload()}>Retry</button>
+          <button type="button" onClick={() => setMapError(false)}>Dismiss</button>
+          {!mapReady && <button type="button" onClick={() => window.location.reload()}>Retry</button>}
         </div>}
 
-        {dropLoading && <div className="map-drops-status" role="status"><span className="spinner" /> Loading drops…</div>}
-        {!dropLoading && dropError && (
-          <div className="map-drops-status is-error" role="status">Couldn&apos;t load drops. <button onClick={() => void refreshDrops()}>Retry</button></div>
-        )}
-        {!dropLoading && !dropError && dropMarkers.length === 0 && (
-          <div className="map-drops-status" role="status">No live drops yet. Press and hold, or double-press, the map to create one.</div>
-        )}
-        {locationPreferenceReady && !locationSharing && (
-          <div className="map-drops-status" role="status">Location is off. Friends cannot see you on the map.</div>
-        )}
-
-        {offline && <div className="map-drops-status is-error" role="status">You are offline. The map will catch up when the connection returns.</div>}
-        {eventStatus === 'error' && <div className="map-drops-status is-error" role="status">Couldn&apos;t load events. <button onClick={() => window.location.reload()}>Retry</button></div>}
+        <div className="map-status-stack">
+          {dropLoading && <div className="map-drops-status" role="status"><span className="spinner" /> Loading drops…</div>}
+          {!dropLoading && dropError && (
+            <div className="map-drops-status is-error" role="status">Couldn&apos;t load drops. <button onClick={() => void refreshDrops()}>Retry</button></div>
+          )}
+          {!dropLoading && !dropError && dropMarkers.length === 0 && filter === "all" && (
+            <div className="map-drops-status" role="status">No live drops yet. Press and hold, or double-press, the map to create one.</div>
+          )}
+          {!dropLoading && filter !== "all" && visibleMarkers.length === 0 && (
+            <div className="map-drops-status" role="status">Nothing in this filter yet.</div>
+          )}
+          {locationPreferenceReady && !locationSharing && (
+            <div className="map-drops-status" role="status">Location is off. Friends cannot see you on the map.</div>
+          )}
+          {offline && <div className="map-drops-status is-error" role="status">You are offline. The map will catch up when the connection returns.</div>}
+          {eventStatus === 'error' && <div className="map-drops-status is-error" role="status">Couldn&apos;t load events. <button onClick={() => window.location.reload()}>Retry</button></div>}
+        </div>
         <header className="topbar">
           <div className="top-actions">
-            <Button variant="outline" size="icon" className="rounded-full" type="button" onClick={() => { setCityMenuOpen((v) => !v); }} aria-label="City hub" title="City hub">
-              <GameIcon name="spark" size={20} />
-            </Button>
+            <div className="menu-anchor">
+              <Button variant="outline" size="icon" className="rounded-full" type="button" onClick={() => { setCityMenuOpen((v) => !v); setCreateMenuOpen(false); }} aria-expanded={cityMenuOpen} aria-label="City hub" title="City hub">
+                <GameIcon name="spark" size={20} />
+              </Button>
+              {cityMenuOpen && (
+                <div className="create-menu menu-pop" role="menu">
+                  <span className="city-hub-label">City hub</span>
+                  <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setSearchSeed(""); setSearchSheetOpen(true); }}><Search size={16} /> Search</button>
+                  <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets("social"); setActiveTab("feed"); setSocialView("people"); }}><UsersRound size={16} /> People</button>
+                  <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets(); setTrendingOpen(true); }}><TrendingUp size={16} /> Trending</button>
+                  <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets(); setLeaderboardOpen(true); }}><Trophy size={16} /> Leaderboard</button>
+                  <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets(); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
+                </div>
+              )}
+            </div>
             <Button
               variant="outline"
               size="icon"
@@ -1494,6 +1700,9 @@ export default function CityHome() {
               aria-label={locationSharing ? "Turn location off" : "Turn location on"}
               title={locationSharing ? "Location is on" : "Location is off"}
             >{locationSharing ? <MapPin size={18} /> : <MapPinOff size={18} />}</Button>
+            <Button variant="outline" size="icon" type="button" className="rounded-full" onClick={() => { setSearchSeed(""); setSearchSheetOpen(true); setCityMenuOpen(false); setCreateMenuOpen(false); }} aria-label="Search the city" title="Search">
+              <Search size={18} />
+            </Button>
             <Button variant="outline" size="icon" type="button" className={`ml-auto rounded-full overflow-hidden p-0.5${youOpen ? " bg-[#ffe8f3]" : ""}`} onClick={openProfile} aria-label="Open your profile" title="Your profile">
               <img src={currentAvatarSrc ?? dicebearAvatarUrl(avatarSeed || "devcity26")} alt="" className="size-full rounded-full object-cover" />
             </Button>
@@ -1504,27 +1713,30 @@ export default function CityHome() {
           <div className="filter-list" role="group" aria-label="Filter map">
             {filters.map((item) => <button key={item.id} className={`filter-chip ${filter === item.id ? "is-selected" : ""}`} onClick={() => chooseFilter(item.id)}>{item.label}</button>)}
           </div>
-          <button className="locate-button" onClick={() => setCreateMenuOpen((v) => !v)} aria-label="Create a stall or booth" title="Create"><Plus size={18} /></button>
+          <div className="menu-anchor">
+            <button className="locate-button" onClick={() => { setCreateMenuOpen((v) => !v); setCityMenuOpen(false); }} aria-expanded={createMenuOpen} aria-label="Create a stall or booth" title="Create"><Plus size={18} /></button>
+            {createMenuOpen && (
+              <div className="create-menu menu-pop menu-pop-end" role="menu">
+                <span className="city-hub-label">Create in the city</span>
+                <button className="create-menu-item" role="menuitem" onClick={() => beginCreate("stall")}><BuildingSprite id="cafe" size={30} /> Create stall</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => beginCreate("booth")}><BuildingSprite id="booth" size={30} /> Create booth</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => beginCreate("event")}><CalendarDays size={16} /> Create event</button>
+                <button className="create-menu-item" role="menuitem" onClick={() => openCreateDrop()}><Gift size={16} /> Create a drop</button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {(createMenuOpen || cityMenuOpen) && (
-          <div className="create-menu city-hub" role="menu">
-            {createMenuOpen && (
-              <>
-                <span className="city-hub-label">Create in the city</span>
-                <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateMenuOpen(false); }}><BuildingSprite id="cafe" size={30} /> Create stall</button>
-                <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateMenuOpen(false); }}><BuildingSprite id="booth" size={30} /> Create booth</button>
-                <button className="create-menu-item" role="menuitem" onClick={() => openCreateDrop()}><Gift size={16} /> Create a drop</button>
-              </>
-            )}
-            {cityMenuOpen && (
-              <>
-                <span className="city-hub-label">City hub</span>
-                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setTrendingOpen(true); }}><TrendingUp size={16} /> Trending</button>
-                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setLeaderboardOpen(true); }}><Trophy size={16} /> Leaderboard</button>
-                <button className="create-menu-item" role="menuitem" onClick={() => { closeSheets(); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
-              </>
-            )}
+        {cityStories.length > 0 && (
+          <div className="map-stories">
+            <div className="stories-rail" aria-label="Stories">
+              {cityStories.map((story) => (
+                <button key={story.id} type="button" className="story-ring" onClick={() => openCityStory(story)}>
+                  <span className="avatar-bubble">{(story.username || "?").slice(0, 1).toUpperCase()}</span>
+                  <small>{story.username || "Story"}</small>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1542,23 +1754,9 @@ export default function CityHome() {
             onClose={() => setCardClosed(true)}
             onShowOnMap={() => mapRef.current?.flyTo({ center: [selected.longitude, selected.latitude], zoom: 15.5, duration: 900 })}
             attendance={savedEvents.find((event) => event.id === selected.raw?.id)?.attendance ?? null}
-            onToggleGoing={() => {
-              const event = selected.raw;
-              if (!event || (eventWhen(event) !== 'upcoming' && eventWhen(event) !== 'live')) return;
-              const saved = savedEvents.find((item) => item.id === event.id);
-              if (saved) {
-                if (saved.attendance === "going") removeSavedEvent(saved.id);
-                return;
-              }
-              saveEvent({
-                id: event.id,
-                name: event.name,
-                organizer: event.organizer,
-                location: event.location,
-                startDate: event.startDate,
-                url: event.url,
-              });
-            }}
+            userAddress={feedUserAddress}
+            onNeedAccount={openWallet}
+            onToggleGoing={() => { if (selected.raw) void toggleEventGoing(selected.raw); }}
           />
         ) : (
         <article className={`activity-card ${selected.kind === "drop" ? "drop-card" : ""}`} aria-live="polite">
@@ -1599,11 +1797,11 @@ export default function CityHome() {
                 type="button"
                 variant="outline"
                 className="min-w-0 flex-1 shrink px-2"
-                onClick={() => setTipTarget({ name: selected.name, initials: selected.initials ?? selected.name[0], color: selected.color })}
+                onClick={() => setTipTarget({ name: selected.name, initials: selected.initials ?? selected.name[0], color: selected.color, address: selected.address })}
               >
                 <Heart size={15} /> Tip
               </Button>
-              <Button type="button" variant="outline" className="min-w-0 flex-1 shrink px-2" onClick={() => { closeSheets("social"); setActiveTab('chat'); setSocialView('chat'); }}>
+              <Button type="button" variant="outline" className="min-w-0 flex-1 shrink px-2" onClick={() => { if (selected.address) messageUser(selected.address, selected.name); else { closeSheets("social"); setActiveTab('chat'); setSocialView('chat'); } }}>
                 <MessageCircle size={15} /> Say hello
               </Button>
             </div>
@@ -1660,8 +1858,10 @@ export default function CityHome() {
       />
       <SearchSheet
         open={searchSheetOpen}
-        onClose={() => setSearchSheetOpen(false)}
+        onClose={() => { setSearchSheetOpen(false); setSearchSeed(""); }}
         onMessageUser={messageUser}
+        onOpenUser={openPublicProfile}
+        initialQuery={searchSeed}
       />
       <CitySocialSheet
         open={socialView !== null}
@@ -1678,6 +1878,8 @@ export default function CityHome() {
         onTip={(name, initials, color, address) => { closeSheets("tip"); setTipTarget({ name, initials, color, address }); }}
         startChatAddress={startChatAddress}
         onStartChatHandled={() => setStartChatAddress(null)}
+        onOpenHashtag={(tag) => { setSearchSeed(tag.startsWith("#") ? tag : `#${tag}`); setSearchSheetOpen(true); }}
+        onStoriesChanged={() => { void loadStories(); }}
       />
       <TipSheet
         open={tipTarget !== null}
@@ -1687,7 +1889,16 @@ export default function CityHome() {
         notify={setNotice}
       />
       <TrendingSheet open={trendingOpen} onClose={() => setTrendingOpen(false)} />
-      <LeaderboardSheet open={leaderboardOpen} onClose={() => setLeaderboardOpen(false)} />
+      <LeaderboardSheet open={leaderboardOpen} onClose={() => setLeaderboardOpen(false)} signedIn={Boolean(feedUserAddress)} userAddress={feedUserAddress} />
+      <PublicProfileSheet
+        handle={publicHandle}
+        onClose={() => {
+          setPublicHandle(null);
+          if (window.location.pathname.startsWith("/u/") && !window.location.pathname.endsWith("/you")) window.history.back();
+        }}
+        onMessage={(address, username) => { setPublicHandle(null); messageUser(address, username); }}
+        onTip={(name, address) => { setPublicHandle(null); closeSheets("tip"); setTipTarget({ name, initials: name.slice(0, 1), color: "coral", address }); }}
+      />
       <NotificationSheet open={notificationsOpen} userAddress={feedUserAddress} onClose={() => setNotificationsOpen(false)} />
       <SuggestedUsersSheet
         open={suggestedOpen}
@@ -1701,16 +1912,16 @@ export default function CityHome() {
           <div className="place-choices" role="menu">
             <span className="city-hub-label">This spot</span>
             <button className="create-menu-item" role="menuitem" onClick={() => { setSkipDropLocation(true); setCreateDropOpen(true); setPlaceMenu(null); }}><Gift size={16} /> Drop</button>
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("event"); setCreateName(""); setPlaceMenu(null); }}><CalendarDays size={16} /> Event</button>
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("stall"); setCreateName(""); setPlaceMenu(null); }}><BuildingSprite id="cafe" size={30} /> Stall</button>
-            <button className="create-menu-item" role="menuitem" onClick={() => { setCreateKind("booth"); setCreateName(""); setPlaceMenu(null); }}><BuildingSprite id="booth" size={30} /> Other</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setPlaceMenu(null); beginCreate("event"); }}><CalendarDays size={16} /> Event</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setPlaceMenu(null); beginCreate("stall"); }}><BuildingSprite id="cafe" size={30} /> Stall</button>
+            <button className="create-menu-item" role="menuitem" onClick={() => { setPlaceMenu(null); beginCreate("booth"); }}><BuildingSprite id="booth" size={30} /> Other</button>
           </div>
         </Sheet>
       )}
       {createKind && (
         <Sheet
           open
-          onClose={() => { setCreateKind(null); setCreateName(""); }}
+          onClose={() => { setCreateKind(null); setCreateName(""); setCreateDate(""); setCreateTime(""); }}
           title={createKind === "stall" ? "Create a stall" : createKind === "event" ? "Create an event" : "Create something else"}
         >
           <div className="drop-sheet-content">
@@ -1722,11 +1933,19 @@ export default function CityHome() {
               placeholder={createKind === "stall" ? "Stall name" : createKind === "event" ? "Event name" : "Name"}
               aria-label="Name"
             />
+            {createKind === "event" && (
+              <div className="create-when">
+                <label htmlFor="create-event-date">Date</label>
+                <input id="create-event-date" className="create-name-input" type="date" value={createDate} onChange={(event) => setCreateDate(event.target.value)} />
+                <label htmlFor="create-event-time">Start time</label>
+                <input id="create-event-time" className="create-name-input" type="time" value={createTime} onChange={(event) => setCreateTime(event.target.value)} />
+              </div>
+            )}
             <p className="drop-sheet-copy">
               {createKind === "stall"
                 ? "This stall uses the spot you pressed on the map."
                 : createKind === "event"
-                  ? "This event uses the spot you pressed on the map."
+                  ? "This event uses the spot you pressed on the map. A date lets people say they are going."
                   : "This uses the spot you pressed on the map."}
             </p>
             <Button type="button" disabled={creatingPlace || !createName.trim()} onClick={() => void handleCreatePlace()}>
@@ -1767,6 +1986,15 @@ export default function CityHome() {
           </div>
         </div>
       )}
+      {missingDropId && (
+        <Sheet open onClose={() => { setDropSheetOpen(false); setSelectedId(null); if (window.location.pathname.startsWith("/drop/")) window.history.back(); }} eyebrow="Drop" title="Drop not found">
+          <div className="drop-sheet-content">
+            <img className="app-art" src="/assets/original/drop-crate.svg" alt="" width={88} height={88} />
+            <p className="drop-sheet-copy">No live drop uses that link. It may have ended, or the address was copied wrong.</p>
+            <Button type="button" onClick={() => { setDropSheetOpen(false); setSelectedId(null); if (window.location.pathname.startsWith("/drop/")) window.history.pushState({ devcity: "/" }, "", "/"); }}>Back to the map</Button>
+          </div>
+        </Sheet>
+      )}
       {dropSheetOpen && selected?.kind === "drop" && (
         <Sheet open={dropSheetOpen} onClose={() => { setDropSheetOpen(false); if (window.location.pathname.startsWith("/drop/")) window.history.back(); }} eyebrow={selectedIsTest ? "TEST" : "Live drop"} title={claimView.state === "success" ? "Claimed" : selected.name}>
           <div className="drop-sheet-content">
@@ -1775,7 +2003,7 @@ export default function CityHome() {
             {selectedIsTest && <p className="prototype-note">TEST drop. This is not real data and nothing can be claimed.</p>}
             <p className={`claim-flow-status is-${claimView.state}`} role={claimView.state === "failed" ? "alert" : "status"}>{claimView.title}</p>
             <p className="drop-sheet-copy">{claimView.detail}</p>
-            <div className="drop-sheet-meta"><span>{claimView.distanceM != null ? claimDistanceSentence(claimView.distanceM) : claimView.title}</span><span>{selectedClaimedCount ?? 0} claimed</span></div>
+            <div className="drop-sheet-meta"><span>{selectedClaimedCount ?? 0} claimed</span></div>
             {claimView.state !== "success" ? (
               <>
                 {claimView.state === "location-off" && (

@@ -28,6 +28,7 @@ export function TipSheet({ open, onClose, target, onNeedWallet, notify }: TipShe
   const [amount, setAmount] = useState('5');
   const [tokens, setTokens] = useState<string[]>([]);
   const [token, setToken] = useState('');
+  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
   const [tokensLoading, setTokensLoading] = useState(false);
   const [tokensError, setTokensError] = useState('');
   const [custom, setCustom] = useState('');
@@ -35,28 +36,71 @@ export function TipSheet({ open, onClose, target, onNeedWallet, notify }: TipShe
   const [done, setDone] = useState(false);
 
   const finalAmount = custom || amount;
+  const recipient = target?.address || resolvedAddress;
+
+  useEffect(() => {
+    if (!open) return;
+    setResolvedAddress(null);
+    if (!target || target.address || !target.name) return;
+    let cancelled = false;
+    void fetch(`/api/users/${encodeURIComponent(target.name)}`)
+      .then(async (response) => (response.ok ? response.json() as Promise<{ address?: string | null }> : null))
+      .then((data) => {
+        if (!cancelled && data?.address) setResolvedAddress(data.address);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [open, target]);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setTokensLoading(true);
     setTokensError('');
-    fetch('/api/drops')
-      .then(async (response) => {
+    void (async () => {
+      try {
+        const { listLocalWallets } = await import('@/lib/keystore');
+        const mine = (await listLocalWallets())[0]?.address;
+        const response = await fetch('/api/drops');
         if (!response.ok) throw new Error('Available tip tokens could not be loaded.');
-        const data = await response.json() as { drops?: Array<{ tokenSymbol?: string | null }> };
-        const available = [...new Set((data.drops ?? []).map((drop) => drop.tokenSymbol?.trim()).filter((symbol): symbol is string => Boolean(symbol)))];
-        if (!cancelled) {
-          setTokens(available);
-          setToken((current) => available.includes(current) ? current : available[0] ?? '');
+        const data = await response.json() as { drops?: Array<{ tokenSymbol?: string | null; tokenAddress?: string | null; tokenDecimals?: number | null }> };
+        const bySymbol = new Map<string, { address: string; decimals: number }>();
+        for (const drop of data.drops ?? []) {
+          const symbol = drop.tokenSymbol?.trim();
+          if (!symbol || !drop.tokenAddress || bySymbol.has(symbol)) continue;
+          bySymbol.set(symbol, { address: drop.tokenAddress, decimals: drop.tokenDecimals ?? 18 });
         }
-      })
-      .catch((error: unknown) => {
+        const held: string[] = [];
+        if (mine && bySymbol.size > 0) {
+          const { createPublicClient, http, formatUnits } = await import('viem');
+          const { celoSepolia } = await import('viem/chains');
+          const { CELO_SEPOLIA, ERC20_ABI } = await import('@/lib/chain');
+          const client = createPublicClient({ chain: celoSepolia, transport: http(CELO_SEPOLIA.rpcUrl, { timeout: 8_000 }) });
+          const balances = await Promise.all([...bySymbol.entries()].map(async ([symbol, tokenInfo]) => {
+            try {
+              const raw = await client.readContract({
+                address: tokenInfo.address as `0x${string}`,
+                abi: ERC20_ABI,
+                functionName: 'balanceOf',
+                args: [mine as `0x${string}`],
+              });
+              return Number(formatUnits(raw, tokenInfo.decimals)) > 0 ? symbol : null;
+            } catch {
+              return null;
+            }
+          }));
+          held.push(...balances.filter((symbol): symbol is string => Boolean(symbol)));
+        }
+        if (!cancelled) {
+          setTokens(held);
+          setToken((current) => held.includes(current) ? current : held[0] ?? '');
+        }
+      } catch (error: unknown) {
         if (!cancelled) setTokensError(error instanceof Error ? error.message : 'Available tip tokens could not be loaded.');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setTokensLoading(false);
-      });
+      }
+    })();
     return () => { cancelled = true; };
   }, [open]);
 
@@ -85,15 +129,15 @@ export function TipSheet({ open, onClose, target, onNeedWallet, notify }: TipShe
         notify('Create a passkey wallet to tip.');
         return;
       }
-      if (!target.address) throw new Error('This person does not have a wallet address yet.');
-      if (myAddress.toLowerCase() === target.address.toLowerCase()) throw new Error('You cannot tip your own wallet.');
+      if (!recipient) throw new Error('This person cannot receive a tip until a wallet is linked.');
+      if (myAddress.toLowerCase() === recipient.toLowerCase()) throw new Error('You cannot tip your own wallet.');
       if (!token) throw new Error('There are no tip tokens available in the city yet.');
       const res = await fetch('/api/tips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fromAddress: myAddress,
-          toAddress: target.address,
+          toAddress: recipient,
           tokenSymbol: token,
           amount: finalAmount,
         }),
@@ -121,7 +165,7 @@ export function TipSheet({ open, onClose, target, onNeedWallet, notify }: TipShe
       <div className="tip-body">
         <div className="tip-target">
           <div className={`marker-avatar tone-${target.color}`}><img src={dicebearAvatarUrl(target.name, avatarBackgroundForColor(target.color))} alt="" /></div>
-          <span>{target.address ? `${target.name} · ${target.address.slice(0, 6)}…${target.address.slice(-4)}` : `${target.name} · wallet address unavailable`}</span>
+          <span>{recipient ? `${target.name} · ${recipient.slice(0, 6)}…${recipient.slice(-4)}` : `${target.name} · no wallet linked yet`}</span>
         </div>
 
         {done ? (
@@ -169,16 +213,16 @@ export function TipSheet({ open, onClose, target, onNeedWallet, notify }: TipShe
                   </button>
                 ))}
               </div>
-            ) : <p className="tip-note">No tip tokens are available in the city yet.</p>}
+            ) : <p className="tip-note">You don&apos;t hold a token you can tip with yet.</p>}
 
-            <Button type="button" disabled={sending || !finalAmount || !token || !target.address || tokensLoading || Boolean(tokensError)} onClick={send}>
+            <Button type="button" disabled={sending || !finalAmount || !token || !recipient || tokensLoading || Boolean(tokensError)} onClick={send}>
               {sending ? (
                 <><span className="spinner" /> Sending…</>
               ) : (
                 `Tip ${finalAmount} ${token}`
               )}
             </Button>
-            {!target.address && <p className="tip-note">This profile cannot receive a tip until a wallet is linked.</p>}
+            {!recipient && <p className="tip-note">This profile cannot receive a tip until a wallet is linked.</p>}
           </>
         )}
       </div>

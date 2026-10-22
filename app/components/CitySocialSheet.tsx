@@ -18,6 +18,9 @@ import type { Hex } from 'viem';
 import type { LocalWallet } from '@/lib/keystore';
 import { getUnlockedPrivateKey, getUnlockedWallet, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
 import { useUnlockedKey } from '../hooks/useUnlockedKey';
+import { formatDistance } from '@/lib/geo';
+import { friendlyError } from '@/lib/friendly-error';
+import { MediaPicker } from './MediaPicker';
 
 export type SocialView = 'feed' | 'chat' | 'people';
 export type FeedProfileStatus = 'checking' | 'signed-out' | 'wallet-needed' | 'ready' | 'error';
@@ -31,17 +34,43 @@ type FeedComment = {
   createdAt: string;
 };
 
+type FeedReaction = { emoji: string; userId: string };
 type FeedBroadcast = {
   id: string;
   text: string;
+  mediaUrl?: string | null;
   userId: string;
   username: string | null;
   avatarUrl: string | null;
   createdAt: string;
+  updatedAt?: string;
   likes: number;
   liked: boolean;
   comments: FeedComment[];
+  reactions?: FeedReaction[];
 };
+
+const REACTIONS = ['🔥', '👀', '💜'];
+
+function countLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function awayLabel(km: number) {
+  if (!Number.isFinite(km) || km <= 0) return 'Nearby';
+  return `${formatDistance(km * 1000)} away`;
+}
+
+function PostText({ text, onTag }: { text: string; onTag?: (tag: string) => void }) {
+  const parts = text.split(/(#[a-z0-9_]+)/gi);
+  return (
+    <p className="broadcast-copy">
+      {parts.map((part, index) => part.startsWith('#') ? (
+        <button key={`${part}-${index}`} type="button" className="post-tag" onClick={() => onTag?.(part.slice(1))}>{part}</button>
+      ) : <span key={`${part}-${index}`}>{part}</span>)}
+    </p>
+  );
+}
 
 interface CitySocialSheetProps {
   open: boolean;
@@ -58,6 +87,8 @@ interface CitySocialSheetProps {
   onTip: (name: string, initials: string, color: string, address?: string) => void;
   startChatAddress?: string | null;
   onStartChatHandled?: () => void;
+  onOpenHashtag?: (tag: string) => void;
+  onStoriesChanged?: () => void;
 }
 
 type PresenceUser = {
@@ -96,7 +127,7 @@ function initialsFor(username: string) {
     .join('') || username.slice(0, 2).toUpperCase();
 }
 
-export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress, onStartChatHandled }: CitySocialSheetProps) {
+export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress, onStartChatHandled, onOpenHashtag, onStoriesChanged }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
   const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
@@ -110,6 +141,9 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [broadcastSaving, setBroadcastSaving] = useState(false);
   const [pendingBroadcastId, setPendingBroadcastId] = useState<string | null>(null);
   const [broadcastDraft, setBroadcastDraft] = useState('');
+  const [broadcastMedia, setBroadcastMedia] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [commentingId, setCommentingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -442,16 +476,109 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       const response = await fetch('/api/broadcasts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userAddress, text: broadcastDraft }),
+        body: JSON.stringify({ userAddress, text: broadcastDraft, mediaUrl: broadcastMedia }),
       });
       const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
       if (!response.ok || !data.broadcast) throw new Error(data.error || 'Broadcast could not be saved.');
       setBroadcasts((items) => [data.broadcast!, ...items.filter((item) => item.id !== data.broadcast!.id)]);
       setBroadcastDraft('');
+      setBroadcastMedia(null);
     } catch (error) {
       setFeedError(error instanceof Error ? error.message : 'Broadcast could not be saved.');
     } finally {
       setBroadcastSaving(false);
+    }
+  }
+
+  async function shareStory() {
+    const content = broadcastDraft.trim();
+    if (!content && !broadcastMedia) return;
+    if (profileStatus !== 'ready' || !userAddress) {
+      onRequestProfile();
+      return;
+    }
+    setBroadcastSaving(true);
+    setFeedError('');
+    try {
+      const response = await fetch('/api/stories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, content: content || 'A moment in the city', mediaUrl: broadcastMedia }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Story could not be posted.');
+      setBroadcastDraft('');
+      setBroadcastMedia(null);
+      onStoriesChanged?.();
+      onNotify('Story posted for the city.');
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : 'Story could not be posted.');
+    } finally {
+      setBroadcastSaving(false);
+    }
+  }
+
+  async function toggleReaction(broadcastId: string, emoji: string) {
+    if (profileStatus !== 'ready' || !userAddress) {
+      onRequestProfile();
+      return;
+    }
+    setPendingBroadcastId(broadcastId);
+    try {
+      const response = await fetch(`/api/broadcasts/${encodeURIComponent(broadcastId)}/reactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, emoji }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Reaction could not be saved.');
+      setFeedRetry((count) => count + 1);
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : 'Reaction could not be saved.');
+    } finally {
+      setPendingBroadcastId(null);
+    }
+  }
+
+  async function saveEdit(broadcastId: string) {
+    const text = editDraft.trim();
+    if (!text || !userAddress) return;
+    setPendingBroadcastId(broadcastId);
+    setFeedError('');
+    try {
+      const response = await fetch(`/api/broadcasts/${encodeURIComponent(broadcastId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, text }),
+      });
+      const data = await response.json() as { error?: string; broadcast?: { text: string; updatedAt?: string } };
+      if (!response.ok) throw new Error(data.error || 'Post could not be edited.');
+      setBroadcasts((items) => items.map((item) => item.id === broadcastId ? { ...item, text, updatedAt: data.broadcast?.updatedAt } : item));
+      setEditingId(null);
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : 'Post could not be edited.');
+    } finally {
+      setPendingBroadcastId(null);
+    }
+  }
+
+  async function deletePost(broadcastId: string) {
+    if (!userAddress) return;
+    setPendingBroadcastId(broadcastId);
+    setFeedError('');
+    try {
+      const response = await fetch(`/api/broadcasts/${encodeURIComponent(broadcastId)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Post could not be deleted.');
+      setBroadcasts((items) => items.filter((item) => item.id !== broadcastId));
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : 'Post could not be deleted.');
+    } finally {
+      setPendingBroadcastId(null);
     }
   }
 
@@ -514,12 +641,14 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
             <form className="broadcast-composer" onSubmit={sendBroadcast}>
               <span className="broadcast-composer-avatar">{avatarSrc ? <img src={avatarSrc} alt="" /> : 'Y'}</span>
               <textarea value={broadcastDraft} onChange={(event) => setBroadcastDraft(event.target.value.slice(0, 240))} placeholder="What's happening around you?" rows={2} aria-label="Write a city broadcast" />
-              <div className="broadcast-composer-bottom"><small>{broadcastDraft.length}/240 · saved to the city feed</small><Button type="submit" disabled={!broadcastDraft.trim() || broadcastSaving}><RadioIcon /> {broadcastSaving ? 'Saving…' : 'Broadcast'}</Button></div>
+              <MediaPicker selectedMedia={broadcastMedia} onMediaSelect={(url) => setBroadcastMedia(url)} onRemove={() => setBroadcastMedia(null)} />
+              <div className="broadcast-composer-bottom"><small>{broadcastDraft.length}/240 · saved to the city feed</small><Button type="button" variant="outline" disabled={broadcastSaving || (!broadcastDraft.trim() && !broadcastMedia)} onClick={() => void shareStory()}>Story</Button><Button type="submit" disabled={!broadcastDraft.trim() || broadcastSaving}><RadioIcon /> {broadcastSaving ? 'Saving…' : 'Broadcast'}</Button></div>
             </form>
           ) : (
             <div className="feed-profile-gate">
               <strong>{profileStatus === 'checking' ? 'Checking your profile…' : profileStatus === 'wallet-needed' ? 'Your account is signed in' : profileStatus === 'error' ? 'Profile check failed' : 'Sign in to join the conversation'}</strong>
               <p>{profileStatus === 'checking' ? 'Your account is needed to post, like, or comment.' : profileStatus === 'wallet-needed' ? 'A wallet on this device is needed before you can post.' : profileStatus === 'error' ? 'Open your profile to retry.' : 'Use the same sign-in as your profile.'}</p>
+              {profileStatus === 'wallet-needed' && <Button type="button" onClick={onConnectWallet}>Set up wallet</Button>}
               {profileStatus !== 'checking' && profileStatus !== 'wallet-needed' && <Button type="button" onClick={onRequestProfile}>Open your profile</Button>}
             </div>
           )}
@@ -532,10 +661,24 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
             return (
             <article className="broadcast-card" key={broadcast.id}>
               <header><span className="broadcast-composer-avatar">{authorAvatar ? <img src={authorAvatar} alt="" /> : author.slice(0, 1).toUpperCase()}</span><span><strong>{author}</strong><small>{timeAgo(Date.parse(broadcast.createdAt))}</small></span><span className="broadcast-pulse" title="Shared with the city" /></header>
-              <p className="broadcast-copy">{broadcast.text}</p>
+              {editingId === broadcast.id ? (
+                <form className="broadcast-comment-form" onSubmit={(event) => { event.preventDefault(); void saveEdit(broadcast.id); }}>
+                  <input value={editDraft} onChange={(event) => setEditDraft(event.target.value.slice(0, 240))} aria-label="Edit post" />
+                  <button type="submit" disabled={!editDraft.trim()} aria-label="Save edit">Save</button>
+                </form>
+              ) : <PostText text={broadcast.text} onTag={onOpenHashtag} />}
+              {broadcast.mediaUrl && <img className="broadcast-media" src={broadcast.mediaUrl} alt="" />}
+              {broadcast.updatedAt && broadcast.updatedAt !== broadcast.createdAt && <small className="chat-demo-note">Edited</small>}
               <div className="broadcast-actions">
                 <button className={broadcast.liked ? 'is-liked' : ''} onClick={() => void toggleLike(broadcast.id)} disabled={pendingBroadcastId === broadcast.id} aria-label={broadcast.liked ? 'Unlike broadcast' : 'Like broadcast'}><Heart size={15} fill={broadcast.liked ? 'currentColor' : 'none'} /> {broadcast.likes}</button>
-                <button onClick={() => setCommentingId(commentingId === broadcast.id ? null : broadcast.id)}><MessageCircle size={15} /> {broadcast.comments.length} comments</button>
+                <button onClick={() => setCommentingId(commentingId === broadcast.id ? null : broadcast.id)}><MessageCircle size={15} /> {countLabel(broadcast.comments.length, 'comment', 'comments')}</button>
+                {REACTIONS.map((emoji) => {
+                  const count = (broadcast.reactions ?? []).filter((reaction) => reaction.emoji === emoji).length;
+                  const mine = (broadcast.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.userId === `user_${userAddress?.toLowerCase()}`);
+                  return <button key={emoji} type="button" className={mine ? 'is-liked' : ''} onClick={() => void toggleReaction(broadcast.id, emoji)} aria-label={`React ${emoji}`}>{emoji} {count || ''}</button>;
+                })}
+                {isOwn && <button type="button" onClick={() => { setEditingId(broadcast.id); setEditDraft(broadcast.text); }}>Edit</button>}
+                {isOwn && <button type="button" onClick={() => void deletePost(broadcast.id)}>Delete</button>}
                 <span className="broadcast-radius">CITY FEED</span>
               </div>
               {broadcast.comments.map((comment) => <p className="broadcast-comment" key={comment.id}><strong>{comment.username && !comment.username.startsWith('user_') ? comment.username : comment.userId === `user_${userAddress?.toLowerCase()}` ? 'You' : 'Someone'}</strong> {comment.text}</p>)}
@@ -562,7 +705,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
             return (
               <article className="people-item" key={person.userId}>
                 <span className={`people-avatar tone-${tone}`}><img src={person.avatarUrl ?? dicebearAvatarUrl(person.username, avatarBackgroundForColor(tone))} alt={`${person.username}'s avatar`} /><i /></span>
-                <div className="people-copy"><strong>{person.username}</strong><span>{person.status}</span><small><MapPin size={11} /> {person.distance} km away</small></div>
+                <div className="people-copy"><strong>{person.username}</strong><span>{person.status}</span><small><MapPin size={11} /> {awayLabel(person.distance)}</small></div>
                 <Button type="button" onClick={() => void toggleFollow(person)} aria-label={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`} title={`${following.has(person.userId) ? 'Unfollow' : 'Follow'} ${person.username}`}>
                   {following.has(person.userId) ? 'Following' : '+ Follow'}
                 </Button>
@@ -646,8 +789,14 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
                 ))}
               </div>
             </>
-          ) : xmtp.status === 'connecting' || (xmtp.status === 'idle' && Boolean(sessionKey)) ? (
-            <div className="xmtp-state"><BrandLoader /><strong>Signing you into messages</strong><p>Your DEVCITY wallet signs this on this device.</p></div>
+          ) : xmtp.status === 'error' ? (
+            <div className="xmtp-state">
+              <strong>Messages didn&apos;t sign in</strong>
+              <p>{friendlyError(xmtp.error, 'The inbox could not connect. Try again in a moment.')}</p>
+              <Button type="button" onClick={() => { setChatActionError(''); xmtp.resetStatus(); }}>Try again</Button>
+            </div>
+          ) : xmtp.status === 'connecting' ? (
+            <div className="xmtp-state"><BrandLoader /><strong>Signing you into messages</strong><p>Your DEVCITY wallet signs this on this device. This usually takes a few seconds.</p></div>
           ) : xmtp.status !== 'ready' ? (
             <InboxSignIn
               loading={inboxWalletLoading || profileStatus === 'checking'}

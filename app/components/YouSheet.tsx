@@ -140,8 +140,7 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
   const [retrySession, setRetrySession] = useState(0);
   const [verified, setVerified] = useState(false);
   const [verifyConfigured, setVerifyConfigured] = useState(false);
-  const [verifyCallback, setVerifyCallback] = useState('/api/webhooks/self');
-  const [verifyMode, setVerifyMode] = useState<'test' | 'live'>('test');
+  const [serverActivity, setServerActivity] = useState<Array<{ id: string; kind: string; text: string }>>([]);
   const [verifyError, setVerifyError] = useState('');
   const [startingVerify, setStartingVerify] = useState(false);
   const [selfQr, setSelfQr] = useState<SelfLegacyQrConfig | null>(null);
@@ -185,12 +184,23 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
         if (!active || !response.ok) return;
         setVerified(Boolean(body.verified));
         setVerifyConfigured(Boolean(body.configured));
-        setVerifyCallback(body.callbackPath || '/api/webhooks/self');
-        setVerifyMode(body.mode === 'live' ? 'live' : 'test');
       })
       .catch(() => {
         if (active) setVerifyError('Could not load verification.');
       });
+    return () => { active = false; };
+  }, [open, sessionUser]);
+
+  useEffect(() => {
+    if (!open || !sessionUser) return;
+    let active = true;
+    void import('@/lib/keystore').then(({ listLocalWallets }) => listLocalWallets()).then(async (wallets) => {
+      const address = wallets[0]?.address;
+      if (!address) return;
+      const response = await fetch(`/api/activity?userAddress=${encodeURIComponent(address)}`);
+      const data = await response.json().catch(() => ({})) as { activity?: Array<{ id: string; kind: string; text: string }> };
+      if (active && response.ok) setServerActivity(data.activity ?? []);
+    }).catch(() => undefined);
     return () => { active = false; };
   }, [open, sessionUser]);
 
@@ -251,7 +261,6 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
         clearSelfCheck();
         return;
       }
-      if (body.callbackPath) setVerifyCallback(body.callbackPath);
       if (!response.ok || !body.userDefinedData || !body.userId || !body.endpoint || !body.scope || !body.endpointType || !body.logo || !body.returnUrl) {
         setVerifyConfigured(false);
         setSelfQr(null);
@@ -317,7 +326,12 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
             </div>
           )}
           <Button type="button" onClick={onOpenWallet}><Wallet size={17} /> Open wallet to sign in</Button>
-          <DevTestAccountPanel onChanged={() => setRetrySession((attempt) => attempt + 1)} />
+          {process.env.NODE_ENV === 'development' && (
+            <details className="profile-disclosure">
+              <summary>Local test account</summary>
+              <DevTestAccountPanel onChanged={() => setRetrySession((attempt) => attempt + 1)} />
+            </details>
+          )}
         </div>
       ) : (
         <div className="you-profile">
@@ -343,7 +357,7 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
             </Button>
           )}
           {!verified && !verifyConfigured && (
-            <p className="profile-verify-note">Self sends the proof to {verifyCallback}. It needs the public address https://devcity.fun/api/webhooks/self.</p>
+            <p className="profile-verify-note">Verification is not available in this session yet. You can still use the map, feed, and wallet.</p>
           )}
           {verifyError && <p className="avatar-upload-error" role="alert">{verifyError}</p>}
           {selfQr && !verified && (
@@ -372,7 +386,7 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
               <div><span className="profile-section-kicker">YOUR CITY CALENDAR</span><h3 id="profile-events-title">My events</h3></div>
               <span className="profile-count">{savedEvents.length}</span>
             </div>
-            <p className="profile-device-note">Your going and attended list is saved on this device.</p>
+            <p className="profile-device-note">I&apos;m going is saved to your account. A copy also stays on this device.</p>
             {savedEvents.length > 0 ? (
               <div className="profile-event-list">
                 {savedEvents.map((event) => (
@@ -424,7 +438,10 @@ export function YouSheet({ open, onClose, onOpenWallet, onOpenNotifications }: Y
                       </li>
                     ))}
                   </ul>
-                  <p className="profile-local-note">Activity is stored on this device.</p>
+                  <p className="profile-local-note">{serverActivity.length > 0 ? 'Recent activity from your account is included below the list on this device.' : 'Activity on this device. Account activity appears when this wallet has some.'}</p>
+                  {serverActivity.map((item) => (
+                    <p className="broadcast-comment" key={item.id}><strong>{item.kind}</strong> {item.text}</p>
+                  ))}
                 </>
               ) : (
                 <div className="profile-empty-activity">

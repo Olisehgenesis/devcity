@@ -10,7 +10,11 @@ interface SearchSheetProps {
   open: boolean;
   onClose: () => void;
   onMessageUser?: (address: string, username: string) => void;
+  onOpenUser?: (username: string) => void;
+  initialQuery?: string;
 }
+
+type TagPost = { id: string; text: string; username: string | null; likes: number; comments: number };
 
 type SearchTab = 'all' | 'users' | 'broadcasts' | 'events' | 'hashtags';
 
@@ -22,17 +26,43 @@ const TABS: { id: SearchTab; label: string; icon: any }[] = [
   { id: 'hashtags', label: 'Tags', icon: Hash },
 ];
 
-export function SearchSheet({ open, onClose, onMessageUser }: SearchSheetProps) {
+export function SearchSheet({ open, onClose, onMessageUser, onOpenUser, initialQuery = '' }: SearchSheetProps) {
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<SearchTab>('all');
+  const [tags, setTags] = useState<Array<{ tag: string; usageCount: number }>>([]);
+  const [tagPosts, setTagPosts] = useState<{ tag: string; posts: TagPost[] } | null>(null);
+  const [tagError, setTagError] = useState('');
   const { search, results, loading, error, clearResults } = useSearch();
 
   useEffect(() => {
     if (!open) {
       setQuery('');
+      setTagPosts(null);
+      setTagError('');
       clearResults();
+      return;
     }
-  }, [open, clearResults]);
+    if (initialQuery) setQuery(initialQuery);
+    void fetch('/api/hashtags?limit=8')
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { hashtags?: Array<{ tag: string; usageCount: number }> } | null) => {
+        setTags(data?.hashtags ?? []);
+      })
+      .catch(() => undefined);
+  }, [open, clearResults, initialQuery]);
+
+  async function openTag(tag: string) {
+    setTagError('');
+    setTagPosts(null);
+    setActiveTab('hashtags');
+    const response = await fetch(`/api/hashtags/${encodeURIComponent(tag)}`);
+    const data = await response.json().catch(() => ({})) as { error?: string; broadcasts?: TagPost[] };
+    if (!response.ok) {
+      setTagError(data.error || 'No posts use that tag yet.');
+      return;
+    }
+    setTagPosts({ tag, posts: data.broadcasts ?? [] });
+  }
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
@@ -104,10 +134,10 @@ export function SearchSheet({ open, onClose, onMessageUser }: SearchSheetProps) 
                         ) : (
                           <div className="search-avatar-placeholder">{user.username?.slice(0, 2) || '??'}</div>
                         )}
-                        <div className="search-item-content">
+                        <button type="button" className="search-item-content" onClick={() => user.username && onOpenUser?.(user.username)}>
                           <strong>{user.username || user.name || 'Anonymous'}</strong>
                           <span>{user.walletAddress ? `${user.walletAddress.slice(0, 8)}…` : 'No wallet linked'}</span>
-                        </div>
+                        </button>
                         {user.walletAddress && onMessageUser && (
                           <Button
                             type="button"
@@ -177,9 +207,9 @@ export function SearchSheet({ open, onClose, onMessageUser }: SearchSheetProps) 
                 ) : (
                   <div className="search-hashtags">
                     {tabResults.hashtags.map((tag) => (
-                      <span key={tag} className="search-hashtag">
+                      <button key={tag} type="button" className="search-hashtag" onClick={() => void openTag(tag)}>
                         #{tag}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -197,9 +227,30 @@ export function SearchSheet({ open, onClose, onMessageUser }: SearchSheetProps) 
           </div>
         )}
 
+        {tagError && <p className="search-error" role="alert">{tagError}</p>}
+        {tagPosts && (
+          <div className="search-section">
+            <h3>#{tagPosts.tag}</h3>
+            {tagPosts.posts.length === 0 ? <p className="search-empty">No posts use that tag yet.</p> : (
+              <ul className="search-list">
+                {tagPosts.posts.map((post) => (
+                  <li key={post.id} className="search-item"><div className="search-item-content"><p>{post.text}</p><span className="search-meta">By {post.username || 'Someone'} · {post.likes} likes</span></div></li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {!loading && !error && query.length < 2 && (
           <div className="search-prompt">
             <p>Type at least 2 characters to search</p>
+            {tags.length > 0 && (
+              <div className="search-hashtags">
+                {tags.map((tag) => (
+                  <button key={tag.tag} type="button" className="search-hashtag" onClick={() => void openTag(tag.tag)}>#{tag.tag}</button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

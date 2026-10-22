@@ -8,6 +8,7 @@ import { useBalance, useReadContract } from 'wagmi';
 import { privateKeyToAccount } from 'viem/accounts';
 import { authClient } from '@/lib/auth-client';
 import { normalizeUsername } from '@/lib/usernames';
+import { friendlyError, withTimeout } from '@/lib/friendly-error';
 import { clearUnlockedWallet, getUnlockedPrivateKey, rememberUnlockedWallet } from '@/lib/unlocked-wallet';
 import {
   createEOA,
@@ -38,6 +39,11 @@ import { WalletTipTab } from './wallet/WalletTipTab';
 import { WalletSettings } from './wallet/WalletSettings';
 import { WalletReceive } from './wallet/WalletReceive';
 import { WalletActivity } from './wallet/WalletActivity';
+import { WalletAssetsTab } from './wallet/WalletAssetsTab';
+import { WalletDropTab } from './wallet/WalletDropTab';
+import { WalletOverview } from './wallet/WalletOverview';
+import { WalletTokenTab } from './wallet/WalletTokenTab';
+import { WalletTradeTab } from './wallet/WalletTradeTab';
 import { WalletTokenDetail } from './wallet/WalletTokenDetail';
 import { WalletTokenTools } from './WalletTokenTools';
 import { useCityStore } from '../lib/city-store';
@@ -70,6 +76,13 @@ interface SessionUser {
   id: string;
   name?: string | null;
   email?: string | null;
+  username?: string | null;
+}
+
+function handleFromIdentity(value?: string | null): string | null {
+  if (!value) return null;
+  const stripped = value.trim().toLowerCase().replace(/\.devcity\.fun$/, '');
+  return normalizeUsername(stripped);
 }
 
 type WalletScreen =
@@ -82,7 +95,12 @@ type WalletScreen =
   | { id: 'token'; token: HeldTokenView }
   | { id: 'settings' }
   | { id: 'activity' }
-  | { id: 'drops' };
+  | { id: 'drops' }
+  | { id: 'assets' }
+  | { id: 'overview' }
+  | { id: 'fund' }
+  | { id: 'launch' }
+  | { id: 'trade' };
 
 interface PasskeyWalletProps {
   onSessionChange?: (user: SessionUser | null) => void;
@@ -153,7 +171,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
       });
     })();
   }, [addr, avatarImageData, avatarMode, avatarSeed, user?.id]);
-  const handle = normalizeUsername(username) ?? normalizeUsername(user?.name ?? '') ?? 'city-explorer';
+  const sessionHandle = handleFromIdentity(user?.username) ?? handleFromIdentity(user?.name);
+  const handle = normalizeUsername(username) ?? sessionHandle ?? 'city-explorer';
 
   useEffect(() => {
     if (!showSignup) return;
@@ -282,6 +301,14 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
     if (existing) setUnlockedKey(existing);
   }, [wallet?.address]);
 
+  useEffect(() => {
+    if (!wallet || !sessionHandle || sessionHandle === 'city-explorer') return;
+    if (wallet.name !== 'city-explorer.devcity.fun') return;
+    const next = { ...wallet, name: `${sessionHandle}.devcity.fun` };
+    void saveLocalWallet(next);
+    setWallet(next);
+  }, [sessionHandle, wallet]);
+
   async function resolveWalletForUser(uid: string, username?: string | null) {
     const matched = await walletForUser(uid, username);
     if (matched) {
@@ -356,19 +383,19 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
         throw new Error('That username is already taken. Choose another one.');
       }
 
-      const result = await authClient.passkey.addPasskey({
+      const result = await withTimeout(authClient.passkey.addPasskey({
         name: `${normalized}.devcity.fun`,
         context: normalized,
         createSession: true,
-      });
-      if (result.error) throw new Error(result.error.message || 'Could not create account');
+      }), 45_000, 'The passkey prompt closed. Try again.');
+      if (result.error) throw new Error(friendlyError(result.error.message, 'Could not create account'));
       clearUnlockedWallet();
       setWallet(null);
       setUnlockedKey(null);
       await refreshSession();
       window.dispatchEvent(new Event('devcity-session-changed'));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Could not create account');
+      setError(friendlyError(e, 'Could not create account'));
     } finally {
       setAuthAction(null);
     }
@@ -393,6 +420,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
       };
       await saveLocalWallet(local);
       setWallet(local);
+      setUnlockedKey(privateKey);
+      rememberUnlockedWallet(address, privateKey);
       // A brand-new wallet is not recoverable until it is backed up.
       setPhase('backup-required');
       setError('');
@@ -545,15 +574,15 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
                 setError('');
                 setAuthAction('sign-in');
                 try {
-                  const result = await authClient.signIn.passkey();
-                  if (result.error) throw new Error(result.error.message || 'Passkey sign-in failed');
+                  const result = await withTimeout(authClient.signIn.passkey(), 45_000, 'The passkey prompt closed. Try again.');
+                  if (result.error) throw new Error(friendlyError(result.error.message, 'Passkey sign-in failed'));
                   clearUnlockedWallet();
                   setWallet(null);
                   setUnlockedKey(null);
                   await refreshSession();
                   window.dispatchEvent(new Event('devcity-session-changed'));
                 } catch (e: unknown) {
-                  setError(e instanceof Error ? e.message : 'Passkey sign-in failed');
+                  setError(friendlyError(e, 'Passkey sign-in failed'));
                 } finally {
                   setAuthAction(null);
                 }
@@ -667,6 +696,10 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
         >
           Continue to wallet
         </Button>
+        <Button type="button" variant="outline" disabled={backupSaving} onClick={() => setPhase('ready')}>
+          Skip for now
+        </Button>
+        <p className="you-note">You can save the encrypted backup later from wallet settings. Without it, this device is the only copy.</p>
         {error && <p className="you-error">{error}</p>}
         </section>
       </div>
@@ -691,7 +724,7 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
     USDC: stableBalances.USDC != null ? stableBalances.USDC.toFixed(2) : null,
     USDm: stableBalances.USDm != null ? stableBalances.USDm.toFixed(4) : null,
   };
-  const accountName = wallet?.name || user?.name || 'Wallet';
+  const accountName = sessionHandle ? `${sessionHandle}.devcity.fun` : (wallet?.name && wallet.name !== 'city-explorer.devcity.fun' ? wallet.name : user?.name || 'Wallet');
   const avatarSrc = avatarMode === 'upload' && avatarImageData
     ? avatarImageData
     : dicebearAvatarUrl(avatarSeed || accountName);
@@ -706,8 +739,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
       ? [{ symbol: 'USDC', name: 'USD Coin', amount: stableBalances.USDC, status: holdingStatus.USDC, price: usdPrices.USDC ?? null }]
       : []),
   ];
-  const flow = screen.id === 'send' || screen.id === 'tip' || screen.id === 'receive' || screen.id === 'swap' || screen.id === 'token' || screen.id === 'profile';
-  const nav: WalletNav = screen.id === 'activity' || screen.id === 'swap' || screen.id === 'settings' || screen.id === 'drops' ? screen.id : 'home';
+  const flow = screen.id === 'send' || screen.id === 'tip' || screen.id === 'receive' || screen.id === 'swap' || screen.id === 'token' || screen.id === 'profile' || screen.id === 'fund' || screen.id === 'launch';
+  const nav: WalletNav = screen.id === 'activity' || screen.id === 'swap' || screen.id === 'settings' || screen.id === 'drops' || screen.id === 'assets' || screen.id === 'overview' || screen.id === 'trade' ? screen.id : 'home';
   const pageTitle = screen.id === 'token' ? screen.token.symbol
     : screen.id === 'send' || screen.id === 'tip' ? 'Send'
     : screen.id === 'receive' ? 'Receive'
@@ -716,6 +749,11 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
     : screen.id === 'settings' ? 'Settings'
     : screen.id === 'activity' ? 'Activity'
     : screen.id === 'drops' ? 'Badges & drops'
+    : screen.id === 'assets' ? 'Assets'
+    : screen.id === 'overview' ? 'Overview'
+    : screen.id === 'fund' ? 'Fund a drop'
+    : screen.id === 'launch' ? 'Token'
+    : screen.id === 'trade' ? 'Trading'
     : 'Wallet';
   async function downloadExport() {
     if (!wallet) return;
@@ -823,6 +861,8 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
             { id: 'activity', label: 'Activity', onClick: () => setScreen({ id: 'activity' }) },
             { id: 'drops', label: 'Badges & drops', onClick: () => setScreen({ id: 'drops' }) },
             ...(onCreateDrop ? [{ id: 'create-drop', label: 'Create a drop', onClick: () => onCreateDrop() }] : []),
+            { id: 'fund-drop', label: 'Fund a drop', onClick: () => setScreen({ id: 'fund' }) },
+            { id: 'launch-token', label: 'Token tools', onClick: () => setScreen({ id: 'launch' }) },
             { id: 'settings', label: 'Settings', onClick: () => setScreen({ id: 'settings' }) },
           ]}
           onAddToken={() => setImportSignal((value) => value + 1)}
@@ -945,6 +985,72 @@ export function PasskeyWallet({ onSessionChange, onSessionReady, onNotify, onClo
             )}
           />
         </>
+      )}
+
+      {screen.id === 'assets' && (
+        <WalletAssetsTab
+          wallet={wallet}
+          username={sessionHandle || user?.name || handle}
+          chainId={chainId}
+          chainLabel={chainLabel}
+          stableBalances={{
+            USDT: stableBalances.USDT ?? 0,
+            USDC: stableBalances.USDC ?? 0,
+            USDm: stableBalances.USDm ?? 0,
+          }}
+          profileToken={profileToken}
+          unlockedKey={unlockedKey}
+          onUnlockKey={setUnlockedKey}
+          onTokensChange={onImportedTokensChange}
+          notify={onNotify}
+        />
+      )}
+
+      {screen.id === 'overview' && (
+        <WalletOverview
+          chainLabel={chainLabel}
+          name={accountName}
+          address={wallet.address}
+          celoBalance={celoLabel || '0'}
+          usdBalance={usdBalance}
+          balanceLoading={balanceLoading}
+          onSend={() => setScreen({ id: 'send' })}
+          onReceive={() => setScreen({ id: 'receive' })}
+          onSwap={() => setScreen({ id: 'swap' })}
+          onDrop={() => setScreen({ id: 'fund' })}
+          onActivity={() => setScreen({ id: 'activity' })}
+          onSettings={() => setScreen({ id: 'settings' })}
+          onSignOut={() => { void leaveAccount(); }}
+        />
+      )}
+
+      {screen.id === 'fund' && (
+        <WalletDropTab
+          address={wallet.address}
+          pinProtected={wallet.pinProtected}
+          unlockedKey={unlockedKey}
+          fees={fees}
+          importedTokens={importedTokens}
+          notify={onNotify}
+        />
+      )}
+
+      {screen.id === 'launch' && (
+        <WalletTokenTab
+          address={wallet.address}
+          pinProtected={wallet.pinProtected}
+          unlockedKey={unlockedKey}
+          handle={sessionHandle || handle}
+          handleTicker={(sessionHandle || handle).replace(/[^a-z0-9]/gi, '').slice(0, 6).toUpperCase() || 'CITY'}
+          notify={onNotify}
+        />
+      )}
+
+      {screen.id === 'trade' && (
+        <div className="wallet-action-panel">
+          <p className="you-note">Swap signs with this passkey wallet. The trading form uses a browser wallet when one is connected.</p>
+          <WalletTradeTab />
+        </div>
       )}
 
       {screen.id === 'activity' && (

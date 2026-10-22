@@ -1,6 +1,29 @@
 # DEVCITY26 Feature Implementation Tracker
 
-**Last Updated:** 2026-10-14 16:20 UTC
+**Last Updated:** 2026-10-22
+
+## Current wiring
+
+These entry points are in the city UI. Older rows below that still say "Complete" without a screen were API-only until this pass.
+
+Wired:
+- Search opens from the top bar and the city hub. Hashtag chips load `/api/hashtags` and `/api/hashtags/[tag]`. Post tags open search.
+- Stories load from `/api/stories` into a map rail and the feed composer can publish one.
+- City hub → People opens the people view. The map also follows `/api/presence/stream` and posts `/api/presence/update` while location sharing is on.
+- Wallet screens: Assets, Overview, Token tools, and a Trading view. Swap still signs with the passkey wallet. The Trading view uses a connected browser wallet.
+- Feed posts can attach media, react, and edit or delete within the server window.
+- Event cards call `/api/events/[id]/rsvp` and `/api/events/[id]/chat`.
+- `/api/activity` shows on your profile. `/api/game/leaderboard` shows on the leaderboard.
+- A localhost-only test CELO button calls `/api/dev/faucet`.
+
+Left as they are:
+- `WalletTradeTab` cannot sign with the passkey key. It stays a browser-wallet screen, and Swap remains the passkey trade.
+- `PushButton` is a visual spare. Map actions stay on the shared `Button`.
+- `DevLocationPanel` is an unused developer tool.
+- Self verification still needs a configured public callback. The profile does not show the webhook path.
+- On-chain claim, send, and swap still need a funded wallet and a registered drop. The screens no longer block before that step.
+- The dev faucet returns an error when this machine has no faucet key. The button only appears on localhost.
+- Replies, mentions, drafts, rich text, and an explore feed were never built. They stay planned.
 **Project:** Location-based social app for Devcon Mumbai with blockchain integration
 
 ---

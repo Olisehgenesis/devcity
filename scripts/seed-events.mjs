@@ -150,10 +150,14 @@ function hashSeed(str) {
   return Math.abs(h);
 }
 
+const DEVCON_VENUE = { lat: 19.0669, lng: 72.8685 };
+
 function geocode(raw) {
   const location = raw.location || '';
   const venue = VENUE_COORDS.find((v) => v.match.test(location));
   if (venue) return { lat: venue.lat, lng: venue.lng };
+  // Official Devcon days are at Jio World Centre, BKC — not a jittered city center.
+  if (raw.category === 'devcon' || /^devcon 8\b/i.test(raw.name || '')) return DEVCON_VENUE;
 
   const base = REGION_FALLBACK[raw.region] || REGION_FALLBACK.mumbai;
   // Spread city-level events deterministically within ~0.06° (~6km) of the center.

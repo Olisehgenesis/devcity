@@ -3,6 +3,12 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+const DEVCON_VENUE = { lat: 19.0669, lng: 72.8685 };
+
+function officialDevcon(event: { name: string; category: string | null }) {
+  return event.category === 'devcon' || /^devcon 8\b/i.test(event.name);
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -22,6 +28,13 @@ export async function POST(request: Request) {
         source: 'devcity',
         latitude: Number.isFinite(lat) ? lat : null,
         longitude: Number.isFinite(lng) ? lng : null,
+        startDate: (() => {
+          if (!body.startDate) return null;
+          const parsed = new Date(String(body.startDate));
+          return Number.isNaN(parsed.getTime()) ? null : parsed;
+        })(),
+        startTime: body.startTime ? String(body.startTime) : null,
+        endTime: body.endTime ? String(body.endTime) : null,
       },
     });
     return NextResponse.json({ event }, { status: 201 });
@@ -49,10 +62,10 @@ export async function GET() {
         category: event.category,
         kind: event.kind,
         region: event.region,
-        location: event.location,
         imageUrl: event.imageUrl,
-        latitude: event.latitude,
-        longitude: event.longitude,
+        latitude: officialDevcon(event) ? DEVCON_VENUE.lat : event.latitude,
+        longitude: officialDevcon(event) ? DEVCON_VENUE.lng : event.longitude,
+        location: officialDevcon(event) ? 'Jio World Centre, BKC' : event.location,
         online: event.online,
         startDate: event.startDate,
         endDate: event.endDate,

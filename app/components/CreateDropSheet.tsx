@@ -128,6 +128,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const pinRef = useRef<MapLibreMarker | null>(null);
+  const placePinRef = useRef<(lng: number, lat: number) => void>(() => {});
   const geocodeAbort = useRef<AbortController | null>(null);
 
   const chainId = ACTIVE_CHAIN.id;
@@ -225,15 +226,20 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
 
     const placePin = (lng: number, lat: number) => {
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
       const existing = pinRef.current;
-      const marker = existing ?? new maplibregl.Marker({ draggable: true, color: '#22c55e' }).addTo(map);
+      const marker = existing ?? new maplibregl.Marker({ draggable: true, color: '#D01265' });
       marker.setLngLat([lng, lat]);
+      if (!existing) {
+        marker.addTo(map);
+        marker.on('dragend', () => {
+          const pos = marker.getLngLat();
+          void applyLocation(pos.lng, pos.lat);
+        });
+      }
       pinRef.current = marker;
-      marker.on('dragend', () => {
-        const pos = marker.getLngLat();
-        applyLocation(pos.lng, pos.lat);
-      });
     };
+    placePinRef.current = placePin;
 
     const applyLocation = async (lng: number, lat: number) => {
       setLocation((prev) => ({ lat, lng, name: prev?.name ?? 'Selected location' }));
@@ -242,7 +248,10 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
     };
 
     map.on('load', () => {
-      if (initialLocation) placePin(initialLocation.lng, initialLocation.lat);
+      if (initialLocation) {
+        placePin(initialLocation.lng, initialLocation.lat);
+        void applyLocation(initialLocation.lng, initialLocation.lat);
+      }
     });
     map.on('click', (e) => {
       placePin(e.lngLat.lng, e.lngLat.lat);
@@ -278,7 +287,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
     const lng = Number(result.lon);
     setLocation({ lat, lng, name: result.display_name });
     mapRef.current?.flyTo({ center: [lng, lat], zoom: 15, duration: 700 });
-    if (pinRef.current) pinRef.current.setLngLat([lng, lat]);
+    placePinRef.current(lng, lat);
     setSearchResults([]);
     setSearchTerm('');
   };
@@ -296,7 +305,7 @@ export function CreateDropSheet({ open, onClose, walletAddress, initialLocation,
         const lng = coords.longitude;
         setLocation({ lat, lng, name: 'Your location' });
         mapRef.current?.flyTo({ center: [lng, lat], zoom: 15, duration: 700 });
-        if (pinRef.current) pinRef.current.setLngLat([lng, lat]);
+        placePinRef.current(lng, lat);
         const result = await nominatimReverse(lat, lng);
         setLocation({ lat, lng, name: result?.display_name ?? 'Your location' });
         setLocating(false);

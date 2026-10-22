@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Hex } from 'viem';
 import { Button } from '@/components/ui/button';
 import { writeFeePreference } from '@/lib/fee-preference';
@@ -48,6 +48,10 @@ export function WalletSettings({
   browserWallet,
 }: WalletSettingsProps) {
   const [copied, setCopied] = useState(false);
+  const [localHost, setLocalHost] = useState(false);
+  useEffect(() => {
+    setLocalHost(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  }, []);
   const [saveError, setSaveError] = useState('');
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const choices: FeeChoice[] = [
@@ -138,6 +142,24 @@ export function WalletSettings({
         <Button type="button" variant="outline" disabled={exporting} onClick={onExport}>
           {exporting ? 'Preparing…' : 'Download my data'}
         </Button>
+        {localHost && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void fetch('/api/dev/faucet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirm: true, address }),
+              }).then(async (response) => {
+                const data = await response.json().catch(() => ({})) as { message?: string; error?: string };
+                notify?.(data.message || data.error || (response.ok ? 'Faucet request sent.' : 'The test faucet could not send CELO.'));
+              }).catch(() => notify?.('The test faucet could not send CELO.'));
+            }}
+          >
+            Request test CELO
+          </Button>
+        )}
       </section>
 
       {browserWallet && (

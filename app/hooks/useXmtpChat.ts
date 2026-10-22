@@ -16,7 +16,10 @@ import {
   type Signer,
 } from '@xmtp/browser-sdk';
 import { CHAIN } from '@/lib/chain';
+import { friendlyError, withTimeout } from '@/lib/friendly-error';
 import { prepareChatImage } from '../lib/compress-image';
+
+const CONNECT_TIMEOUT_MS = 20_000;
 
 export type MessageDelivery = 'sending' | 'sent' | 'failed';
 
@@ -177,8 +180,16 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       const xmtpEnv = process.env.NEXT_PUBLIC_XMTP_ENV === 'production' ? 'production' : 'dev';
       // v7 already registers text, attachment, remote attachment, reply, reaction, and transaction reference.
       const clientOptions = { env: xmtpEnv, disableAutoRegister: false };
-      created = await Client.create(signer, clientOptions);
-      await refreshThreads(created);
+      created = await withTimeout(
+        Client.create(signer, clientOptions),
+        CONNECT_TIMEOUT_MS,
+        'Messages took too long to sign in. Check your connection and try again.',
+      );
+      await withTimeout(
+        refreshThreads(created),
+        CONNECT_TIMEOUT_MS,
+        'Messages signed in, but the inbox did not load. Try again.',
+      );
       const activeClient = created;
       const stream = await activeClient.conversations.streamAllMessages({
         consentStates: VISIBLE_CONSENT,
@@ -197,8 +208,9 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
       setStatus('ready');
     } catch (cause) {
       created?.close();
+      if (clientRef.current === created) clientRef.current = null;
       setStatus('error');
-      setError(cause instanceof Error ? cause.message : 'XMTP could not connect.');
+      setError(friendlyError(cause, 'Messages could not sign in. Try again.'));
     }
     })();
     connectLockRef.current = run;
@@ -229,17 +241,28 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
   }, [address, chainId, connector, connectWithSigner, walletClient]);
 
   const connectWithLocalWallet = useCallback(async (privateKey: Hex, expectedAddress: string) => {
-    const account = privateKeyToAccount(privateKey);
-    if (account.address.toLowerCase() !== expectedAddress.toLowerCase()) {
-      throw new Error('This key does not match the wallet saved to your passkey account.');
+    try {
+      const account = privateKeyToAccount(privateKey);
+      if (account.address.toLowerCase() !== expectedAddress.toLowerCase()) {
+        throw new Error('This key does not match the wallet saved to your passkey account.');
+      }
+      const signer: Signer = {
+        type: 'EOA',
+        getIdentifier: () => ({ identifier: account.address, identifierKind: IdentifierKind.Ethereum }),
+        signMessage: async (message) => hexToBytes(await account.signMessage({ message })),
+      };
+      await connectWithSigner(signer, account.address);
+    } catch (cause) {
+      setStatus('error');
+      setError(friendlyError(cause, 'Messages could not sign in. Try again.'));
+      throw cause;
     }
-    const signer: Signer = {
-      type: 'EOA',
-      getIdentifier: () => ({ identifier: account.address, identifierKind: IdentifierKind.Ethereum }),
-      signMessage: async (message) => hexToBytes(await account.signMessage({ message })),
-    };
-    await connectWithSigner(signer, account.address);
   }, [connectWithSigner]);
+
+  const resetStatus = useCallback(() => {
+    setStatus('idle');
+    setError('');
+  }, []);
 
   useEffect(() => {
     if (!enabled || !client || !activeThreadId) {
@@ -370,6 +393,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
     sending,
     connect,
     connectWithLocalWallet,
+    resetStatus,
     startConversation,
     sendText,
     retryMessage,
@@ -389,6 +413,7 @@ export function useXmtpChat(enabled: boolean, notifyIncoming: (message: string) 
     sending,
     connect,
     connectWithLocalWallet,
+    resetStatus,
     startConversation,
     sendText,
     retryMessage,

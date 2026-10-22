@@ -432,6 +432,7 @@ export async function nearbyPresence(lat: number, lng: number, radiusKm: number)
         visibility: presence.visibility,
         lat: coords.lat,
         lng: coords.lng,
+        walletAddress: presence.user.walletAddress,
         distance: Math.round(distance * 1000) / 1000,
         lastUpdated: toIso(presence.lastUpdated),
       };
