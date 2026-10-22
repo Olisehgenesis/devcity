@@ -2,7 +2,7 @@
 
 import { useNotifications, type Notification } from '../hooks/useNotifications';
 import { Sheet } from './Sheet';
-import { Bell, CheckCheck, MessageCircle, Heart, UsersRound, Gift, Calendar } from 'lucide-react';
+import { AtSign, Bell, CheckCheck, MessageCircle, Heart, UsersRound, Gift, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { timeAgo } from '../lib/city-store';
 
@@ -10,6 +10,7 @@ interface NotificationSheetProps {
   open: boolean;
   userAddress: string | null;
   onClose: () => void;
+  onOpen?: (notification: Notification) => void;
 }
 
 const ICONS: Record<string, any> = {
@@ -20,14 +21,19 @@ const ICONS: Record<string, any> = {
   follow: UsersRound,
   event_update: Calendar,
   drop_claimed: Gift,
+  mention: AtSign,
+  reply: MessageCircle,
 };
 
-function NotificationItem({ notification, onMarkAsRead }: { notification: Notification; onMarkAsRead: (id: string) => void }) {
+function NotificationItem({ notification, onMarkAsRead, onOpen }: { notification: Notification; onMarkAsRead: (id: string) => void; onOpen?: (notification: Notification) => void }) {
   const Icon = ICONS[notification.type] || Bell;
   return (
     <button
       className={`gsheet-row gsheet-notif${notification.read ? '' : ' is-unread'}`}
-      onClick={() => !notification.read && onMarkAsRead(notification.id)}
+      onClick={() => {
+        if (!notification.read) onMarkAsRead(notification.id);
+        onOpen?.(notification);
+      }}
     >
       <span className="gsheet-notif-icon"><Icon size={17} /></span>
       <div className="gsheet-copy">
@@ -40,7 +46,7 @@ function NotificationItem({ notification, onMarkAsRead }: { notification: Notifi
   );
 }
 
-export function NotificationSheet({ open, userAddress, onClose }: NotificationSheetProps) {
+export function NotificationSheet({ open, userAddress, onClose, onOpen }: NotificationSheetProps) {
   const { notifications, unreadCount, loading, error, markAsRead, markAllAsRead } = useNotifications(userAddress);
 
   return (
@@ -64,7 +70,7 @@ export function NotificationSheet({ open, userAddress, onClose }: NotificationSh
           </div>
         ) : (
           notifications.map((notification) => (
-            <NotificationItem key={notification.id} notification={notification} onMarkAsRead={markAsRead} />
+            <NotificationItem key={notification.id} notification={notification} onMarkAsRead={markAsRead} onOpen={onOpen} />
           ))
         )}
       </div>

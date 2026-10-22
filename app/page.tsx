@@ -13,6 +13,7 @@ import {
   Heart,
   LocateFixed,
   MapPin,
+  Compass,
   MapPinOff,
   MessageCircle,
   Plus,
@@ -1684,6 +1685,7 @@ export default function CityHome() {
                   <span className="city-hub-label">City hub</span>
                   <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); setSearchSeed(""); setSearchSheetOpen(true); }}><Search size={16} /> Search</button>
                   <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets("social"); setActiveTab("feed"); setSocialView("people"); }}><UsersRound size={16} /> People</button>
+                  <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets("social"); setActiveTab("feed"); setSocialView("explore"); }}><Compass size={16} /> Explore</button>
                   <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets(); setTrendingOpen(true); }}><TrendingUp size={16} /> Trending</button>
                   <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets(); setLeaderboardOpen(true); }}><Trophy size={16} /> Leaderboard</button>
                   <button className="create-menu-item" role="menuitem" onClick={() => { setCityMenuOpen(false); closeSheets(); setSuggestedOpen(true); }}><UsersRound size={16} /> Who to follow</button>
@@ -1880,6 +1882,8 @@ export default function CityHome() {
         onStartChatHandled={() => setStartChatAddress(null)}
         onOpenHashtag={(tag) => { setSearchSeed(tag.startsWith("#") ? tag : `#${tag}`); setSearchSheetOpen(true); }}
         onStoriesChanged={() => { void loadStories(); }}
+        onChangeView={(next) => { setSocialView(next); if (next === "feed" || next === "explore" || next === "people") setActiveTab("feed"); }}
+        onOpenUser={openPublicProfile}
       />
       <TipSheet
         open={tipTarget !== null}
@@ -1899,7 +1903,24 @@ export default function CityHome() {
         onMessage={(address, username) => { setPublicHandle(null); messageUser(address, username); }}
         onTip={(name, address) => { setPublicHandle(null); closeSheets("tip"); setTipTarget({ name, initials: name.slice(0, 1), color: "coral", address }); }}
       />
-      <NotificationSheet open={notificationsOpen} userAddress={feedUserAddress} onClose={() => setNotificationsOpen(false)} />
+      <NotificationSheet
+        open={notificationsOpen}
+        userAddress={feedUserAddress}
+        onClose={() => setNotificationsOpen(false)}
+        onOpen={(notification) => {
+          const data = (notification.data ?? {}) as { actorHandle?: string | null; broadcastId?: string | null };
+          setNotificationsOpen(false);
+          if (typeof data.actorHandle === "string" && data.actorHandle) {
+            openPublicProfile(data.actorHandle);
+            return;
+          }
+          if (data.broadcastId) {
+            closeSheets("social");
+            setActiveTab("feed");
+            setSocialView("feed");
+          }
+        }}
+      />
       <SuggestedUsersSheet
         open={suggestedOpen}
         userAddress={feedUserAddress}

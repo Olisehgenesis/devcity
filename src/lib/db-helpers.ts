@@ -10,6 +10,8 @@ import { claimOutOfRangeMessage, parseClaimCoordinate } from './claim-eligibilit
 import { CELO_SEPOLIA } from './chain';
 import { ApiError } from './api-error';
 import { normalizeWalletAddress } from './wallet-address';
+import { parseMentions } from './mentions';
+import { normalizeUsername } from './usernames';
 
 export { ApiError };
 
@@ -459,6 +461,33 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 // Broadcasts
 // ---------------------------------------------------------------------------
 
+function serializeComment(comment: any) {
+  return {
+    id: comment.id,
+    text: comment.text,
+    userId: comment.userId,
+    username: comment.user?.username ?? null,
+    avatarUrl: comment.user?.avatarUrl ?? null,
+    createdAt: toIso(comment.createdAt),
+    parentId: comment.parentId ?? null,
+    replyCount: comment._count?.replies ?? comment.replies?.length ?? 0,
+  };
+}
+
+function broadcastInclude(viewerUserId?: string | null) {
+  return {
+    user: true,
+    _count: { select: { broadcastLikes: true, broadcastComments: true } },
+    broadcastLikes: viewerUserId ? { where: { userId: viewerUserId } } : false,
+    broadcastComments: {
+      where: { parentId: null },
+      include: { user: true, _count: { select: { replies: true } } },
+      orderBy: { createdAt: 'asc' as const },
+    },
+    broadcastReactions: { include: { user: true } },
+  };
+}
+
 export function serializeBroadcast(broadcast: any, viewerUserId?: string | null) {
   return {
     id: broadcast.id,
@@ -468,18 +497,12 @@ export function serializeBroadcast(broadcast: any, viewerUserId?: string | null)
     username: broadcast.user?.username ?? null,
     avatarUrl: broadcast.user?.avatarUrl ?? null,
     createdAt: toIso(broadcast.createdAt),
+    updatedAt: toIso(broadcast.updatedAt),
     likes: broadcast._count?.broadcastLikes ?? broadcast.broadcastLikes?.length ?? 0,
     liked: viewerUserId
       ? (broadcast.broadcastLikes?.some((like: { userId: string }) => like.userId === viewerUserId) ?? false)
       : false,
-    comments: (broadcast.broadcastComments ?? []).map((c: any) => ({
-      id: c.id,
-      text: c.text,
-      userId: c.userId,
-      username: c.user?.username ?? null,
-      avatarUrl: c.user?.avatarUrl ?? null,
-      createdAt: toIso(c.createdAt),
-    })),
+    comments: (broadcast.broadcastComments ?? []).filter((comment: { parentId?: string | null }) => !comment.parentId).map(serializeComment),
     reactions: (broadcast.broadcastReactions ?? []).map((r: any) => ({
       id: r.id,
       emoji: r.emoji,
@@ -490,16 +513,50 @@ export function serializeBroadcast(broadcast: any, viewerUserId?: string | null)
   };
 }
 
+async function loadBroadcast(id: string, viewerUserId?: string | null) {
+  return prisma.broadcast.findUnique({
+    where: { id },
+    include: broadcastInclude(viewerUserId),
+  });
+}
+
+async function notifyAboutText(text: string, actor: { id: string; username: string | null }, extra: { broadcastId: string; commentId?: string; replyToUserId?: string | null }) {
+  const handles = parseMentions(text).slice(0, 8);
+  const mentioned = handles.length
+    ? await prisma.user.findMany({ where: { username: { in: handles, mode: 'insensitive' } } })
+    : [];
+  const actorName = actor.username || 'Someone';
+  const seen = new Set<string>([actor.id]);
+  for (const person of mentioned) {
+    if (seen.has(person.id)) continue;
+    seen.add(person.id);
+    await prisma.notification.create({
+      data: {
+        userId: person.id,
+        type: 'mention',
+        title: `${actorName} mentioned you`,
+        body: text.slice(0, 180),
+        data: { broadcastId: extra.broadcastId, commentId: extra.commentId ?? null, actorHandle: actor.username },
+      },
+    });
+  }
+  if (extra.replyToUserId && !seen.has(extra.replyToUserId)) {
+    await prisma.notification.create({
+      data: {
+        userId: extra.replyToUserId,
+        type: 'reply',
+        title: `${actorName} replied to you`,
+        body: text.slice(0, 180),
+        data: { broadcastId: extra.broadcastId, commentId: extra.commentId ?? null, actorHandle: actor.username },
+      },
+    });
+  }
+}
+
 export async function listBroadcasts(viewerAddress?: string) {
   const viewer = viewerAddress ? await getOrCreateUser(viewerAddress) : null;
   const broadcasts = await prisma.broadcast.findMany({
-    include: {
-      user: true,
-      _count: { select: { broadcastLikes: true, broadcastComments: true } },
-      broadcastLikes: viewer ? { where: { userId: viewer.id } } : false,
-      broadcastComments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
-      broadcastReactions: { include: { user: true } },
-    },
+    include: broadcastInclude(viewer?.id),
     orderBy: { createdAt: 'desc' },
     take: 50,
   });
@@ -521,8 +578,10 @@ export async function createBroadcast(userAddress: string, text: string, mediaUr
 
   const broadcast = await prisma.broadcast.create({
     data: { userId: user.id, text: trimmed, mediaUrl: mediaUrl || null },
-    include: { user: true, broadcastLikes: true, broadcastComments: { include: { user: true } } },
+    include: broadcastInclude(user.id),
   });
+
+  await notifyAboutText(trimmed, user, { broadcastId: broadcast.id });
 
   await prisma.activity.create({
     data: {
@@ -555,19 +614,11 @@ export async function toggleLike(broadcastId: string, userAddress: string) {
     });
   }
 
-  const updated = await prisma.broadcast.findUnique({
-    where: { id: broadcastId },
-    include: {
-      user: true,
-      _count: { select: { broadcastLikes: true, broadcastComments: true } },
-      broadcastLikes: { where: { userId: user.id } },
-      broadcastComments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
-    },
-  });
+  const updated = await loadBroadcast(broadcastId, user.id);
   return serializeBroadcast(updated, user.id);
 }
 
-export async function addComment(broadcastId: string, userAddress: string, text: string) {
+export async function addComment(broadcastId: string, userAddress: string, text: string, parentId?: string | null) {
   const user = await getOrCreateUser(userAddress);
   const trimmed = text.trim().slice(0, 240);
   if (!trimmed) throw new ApiError(400, 'text is required');
@@ -575,20 +626,125 @@ export async function addComment(broadcastId: string, userAddress: string, text:
   const broadcast = await prisma.broadcast.findUnique({ where: { id: broadcastId } });
   if (!broadcast) throw new ApiError(404, 'Broadcast not found');
 
-  await prisma.broadcastComment.create({
-    data: { broadcastId, userId: user.id, text: trimmed },
+  const parent = parentId
+    ? await prisma.broadcastComment.findUnique({ where: { id: parentId } })
+    : null;
+  if (parentId && (!parent || parent.broadcastId !== broadcastId || parent.parentId)) {
+    throw new ApiError(400, 'Reply to the original comment.');
+  }
+
+  const comment = await prisma.broadcastComment.create({
+    data: { broadcastId, userId: user.id, text: trimmed, parentId: parent?.id ?? null },
+  });
+  await notifyAboutText(trimmed, user, {
+    broadcastId,
+    commentId: comment.id,
+    replyToUserId: parent?.userId,
   });
 
-  const updated = await prisma.broadcast.findUnique({
-    where: { id: broadcastId },
-    include: {
-      user: true,
-      _count: { select: { broadcastLikes: true, broadcastComments: true } },
-      broadcastLikes: { where: { userId: user.id } },
-      broadcastComments: { include: { user: true }, orderBy: { createdAt: 'asc' } },
-    },
-  });
+  const updated = await loadBroadcast(broadcastId, user.id);
   return serializeBroadcast(updated, user.id);
+}
+
+export async function listReplies(broadcastId: string, commentId: string) {
+  const comment = await prisma.broadcastComment.findUnique({
+    where: { id: commentId },
+    include: { user: true, _count: { select: { replies: true } } },
+  });
+  if (!comment || comment.broadcastId !== broadcastId || comment.parentId) {
+    throw new ApiError(404, 'That comment is not on this post.');
+  }
+  const replies = await prisma.broadcastComment.findMany({
+    where: { parentId: comment.id },
+    include: { user: true, _count: { select: { replies: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+  return { comment: serializeComment(comment), replies: replies.map(serializeComment) };
+}
+
+export async function listDrafts(userAddress: string) {
+  const user = await getOrCreateUser(userAddress);
+  const drafts = await prisma.broadcastDraft.findMany({
+    where: { userId: user.id },
+    orderBy: { updatedAt: 'desc' },
+    take: 20,
+  });
+  return drafts.map(serializeDraft);
+}
+
+export async function saveDraft(userAddress: string, text: string, mediaUrl?: string | null, id?: string | null) {
+  const user = await getOrCreateUser(userAddress);
+  const trimmed = text.trim().slice(0, 240);
+  if (!trimmed && !mediaUrl) throw new ApiError(400, 'A draft needs text or a photo.');
+  if (id) {
+    const existing = await prisma.broadcastDraft.findUnique({ where: { id } });
+    if (!existing || existing.userId !== user.id) throw new ApiError(404, 'Draft not found.');
+    const draft = await prisma.broadcastDraft.update({
+      where: { id },
+      data: { text: trimmed, mediaUrl: mediaUrl || null },
+    });
+    return serializeDraft(draft);
+  }
+  const draft = await prisma.broadcastDraft.create({
+    data: { userId: user.id, text: trimmed, mediaUrl: mediaUrl || null },
+  });
+  return serializeDraft(draft);
+}
+
+export async function deleteDraft(userAddress: string, id: string) {
+  const user = await getOrCreateUser(userAddress);
+  const existing = await prisma.broadcastDraft.findUnique({ where: { id } });
+  if (!existing || existing.userId !== user.id) throw new ApiError(404, 'Draft not found.');
+  await prisma.broadcastDraft.delete({ where: { id } });
+}
+
+function serializeDraft(draft: { id: string; text: string; mediaUrl: string | null; updatedAt: Date }) {
+  return { id: draft.id, text: draft.text, mediaUrl: draft.mediaUrl, updatedAt: toIso(draft.updatedAt) };
+}
+
+export async function listExplore(viewerAddress?: string) {
+  const viewer = viewerAddress ? await prisma.user.findFirst({ where: { walletAddress: { equals: viewerAddress, mode: 'insensitive' } } }) : null;
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const recent = await prisma.broadcast.findMany({
+    where: { createdAt: { gte: since } },
+    include: broadcastInclude(viewer?.id),
+    orderBy: { createdAt: 'desc' },
+    take: 40,
+  });
+  const ranked = [...recent].sort((a, b) => {
+    const score = (item: { _count?: { broadcastLikes?: number; broadcastComments?: number } }) =>
+      (item._count?.broadcastLikes ?? 0) + (item._count?.broadcastComments ?? 0);
+    return score(b) - score(a);
+  });
+  const posts = (ranked.length ? ranked : await prisma.broadcast.findMany({
+    include: broadcastInclude(viewer?.id),
+    orderBy: { createdAt: 'desc' },
+    take: 12,
+  })).slice(0, 12);
+  const hashtags = await prisma.hashtag.findMany({ orderBy: { usageCount: 'desc' }, take: 8 });
+  const people = await prisma.user.findMany({
+    where: {
+      username: { not: null },
+      ...(viewer ? { id: { not: viewer.id } } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 8,
+    select: { id: true, username: true, avatarUrl: true, walletAddress: true, createdAt: true },
+  });
+  return {
+    posts: posts.map((post) => serializeBroadcast(post, viewer?.id)),
+    hashtags: hashtags.map((tag) => ({ tag: tag.tag, usageCount: tag.usageCount })),
+    people: people.flatMap((person) => {
+      const username = person.username ? normalizeUsername(person.username) : null;
+      if (!username) return [];
+      return [{
+        id: person.id,
+        username,
+        avatarUrl: person.avatarUrl,
+        address: person.walletAddress,
+      }];
+    }),
+  };
 }
 
 // ---------------------------------------------------------------------------

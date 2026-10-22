@@ -21,8 +21,9 @@ import { useUnlockedKey } from '../hooks/useUnlockedKey';
 import { formatDistance } from '@/lib/geo';
 import { friendlyError } from '@/lib/friendly-error';
 import { MediaPicker } from './MediaPicker';
+import { MentionComposer } from './MentionComposer';
 
-export type SocialView = 'feed' | 'chat' | 'people';
+export type SocialView = 'feed' | 'chat' | 'people' | 'explore';
 export type FeedProfileStatus = 'checking' | 'signed-out' | 'wallet-needed' | 'ready' | 'error';
 
 type FeedComment = {
@@ -32,6 +33,7 @@ type FeedComment = {
   username: string | null;
   avatarUrl: string | null;
   createdAt: string;
+  replyCount?: number;
 };
 
 type FeedReaction = { emoji: string; userId: string };
@@ -61,13 +63,19 @@ function awayLabel(km: number) {
   return `${formatDistance(km * 1000)} away`;
 }
 
-function PostText({ text, onTag }: { text: string; onTag?: (tag: string) => void }) {
-  const parts = text.split(/(#[a-z0-9_]+)/gi);
+function PostText({ text, onTag, onMention }: { text: string; onTag?: (tag: string) => void; onMention?: (handle: string) => void }) {
+  const parts = text.split(/(#[a-z0-9_]+|@[a-z0-9](?:[a-z0-9-]{0,22}[a-z0-9])?)/gi);
   return (
     <p className="broadcast-copy">
-      {parts.map((part, index) => part.startsWith('#') ? (
-        <button key={`${part}-${index}`} type="button" className="post-tag" onClick={() => onTag?.(part.slice(1))}>{part}</button>
-      ) : <span key={`${part}-${index}`}>{part}</span>)}
+      {parts.map((part, index) => {
+        if (part.startsWith('#') && part.length > 1) {
+          return <button key={`${part}-${index}`} type="button" className="post-tag" onClick={() => onTag?.(part.slice(1))}>{part}</button>;
+        }
+        if (part.startsWith('@') && part.length > 3) {
+          return <button key={`${part}-${index}`} type="button" className="mention-link" onClick={() => onMention?.(part.slice(1))}>{part}</button>;
+        }
+        return <span key={`${part}-${index}`}>{part}</span>;
+      })}
     </p>
   );
 }
@@ -89,6 +97,8 @@ interface CitySocialSheetProps {
   onStartChatHandled?: () => void;
   onOpenHashtag?: (tag: string) => void;
   onStoriesChanged?: () => void;
+  onChangeView?: (view: SocialView) => void;
+  onOpenUser?: (username: string) => void;
 }
 
 type PresenceUser = {
@@ -127,7 +137,7 @@ function initialsFor(username: string) {
     .join('') || username.slice(0, 2).toUpperCase();
 }
 
-export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress, onStartChatHandled, onOpenHashtag, onStoriesChanged }: CitySocialSheetProps) {
+export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddress, onRequestProfile, onNotify, onConnectWallet, onEnableNotifications, notificationsEnabled, onClose, onTip, startChatAddress, onStartChatHandled, onOpenHashtag, onStoriesChanged, onChangeView, onOpenUser }: CitySocialSheetProps) {
   const [query, setQuery] = useState('');
   const [nearbyPeople, setNearbyPeople] = useState<PresenceUser[]>([]);
   const [following, setFollowing] = useState<Set<string>>(new Set());
@@ -142,6 +152,18 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
   const [pendingBroadcastId, setPendingBroadcastId] = useState<string | null>(null);
   const [broadcastDraft, setBroadcastDraft] = useState('');
   const [broadcastMedia, setBroadcastMedia] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Array<{ id: string; text: string; mediaUrl: string | null; updatedAt: string | null }>>([]);
+  const [commentThreadId, setCommentThreadId] = useState<string | null>(null);
+  const [threadReplies, setThreadReplies] = useState<FeedComment[]>([]);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [explorePosts, setExplorePosts] = useState<FeedBroadcast[]>([]);
+  const [exploreTags, setExploreTags] = useState<Array<{ tag: string; usageCount: number }>>([]);
+  const [explorePeople, setExplorePeople] = useState<Array<{ id: string; username: string | null; avatarUrl: string | null }>>([]);
+  const [exploreLoading, setExploreLoading] = useState(false);
+  const draftIdRef = useRef<string | null>(null);
+  const composerDirty = useRef(false);
+  const draftChain = useRef(Promise.resolve());
+  const latestComposer = useRef({ text: '', media: null as string | null });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
@@ -256,6 +278,58 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
 
     return () => controller.abort();
   }, [open, view, userAddress, feedRetry]);
+
+  useEffect(() => {
+    if (!open || !userAddress || profileStatus !== 'ready') return;
+    void fetch(`/api/drafts?userAddress=${encodeURIComponent(userAddress)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { drafts?: Array<{ id: string; text: string; mediaUrl: string | null; updatedAt: string | null }> } | null) => {
+        if (data?.drafts) setDrafts(data.drafts);
+      })
+      .catch(() => undefined);
+  }, [open, userAddress, profileStatus]);
+
+  latestComposer.current = { text: broadcastDraft, media: broadcastMedia };
+
+  useEffect(() => {
+    if (!open || view !== 'feed' || profileStatus !== 'ready' || !userAddress || !composerDirty.current) return;
+    if (!broadcastDraft.trim() && !broadcastMedia) return;
+    const timer = window.setTimeout(() => {
+      draftChain.current = draftChain.current.then(async () => {
+        if (!composerDirty.current) return;
+        const text = latestComposer.current.text;
+        const media = latestComposer.current.media;
+        if (!text.trim() && !media) return;
+        const response = await fetch(draftIdRef.current ? `/api/drafts/${encodeURIComponent(draftIdRef.current)}` : '/api/drafts', {
+          method: draftIdRef.current ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userAddress, text, mediaUrl: media }),
+        });
+        const data = await response.json().catch(() => ({})) as { draft?: { id: string; text: string; mediaUrl: string | null; updatedAt: string | null } };
+        if (!response.ok || !data.draft) return;
+        draftIdRef.current = data.draft.id;
+        setDrafts((items) => [data.draft!, ...items.filter((item) => item.id !== data.draft!.id)]);
+      }).catch(() => undefined);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [broadcastDraft, broadcastMedia, open, view, profileStatus, userAddress]);
+
+  useEffect(() => {
+    if (!open || view !== 'explore') return;
+    const controller = new AbortController();
+    setExploreLoading(true);
+    const params = userAddress ? `?userAddress=${encodeURIComponent(userAddress)}` : '';
+    void fetch(`/api/explore${params}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { posts?: FeedBroadcast[]; hashtags?: Array<{ tag: string; usageCount: number }>; people?: Array<{ id: string; username: string | null; avatarUrl: string | null }> } | null) => {
+        setExplorePosts(data?.posts ?? []);
+        setExploreTags(data?.hashtags ?? []);
+        setExplorePeople(data?.people ?? []);
+      })
+      .catch(() => undefined)
+      .finally(() => { if (!controller.signal.aborted) setExploreLoading(false); });
+    return () => controller.abort();
+  }, [open, view, userAddress]);
 
   useEffect(() => {
     if (!open || view !== 'people') return;
@@ -391,7 +465,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     })();
     return () => { cancelled = true; };
   }, [resolveInbox, threadKey, xmtpStatus]);
-  const title = view === 'feed' ? 'Around the city' : view === 'people' ? 'People nearby' : thread ? shortInbox(thread.peerInboxId) : 'Your chats';
+  const title = view === 'feed' ? 'Around the city' : view === 'explore' ? 'Explore' : view === 'people' ? 'People nearby' : thread ? shortInbox(thread.peerInboxId) : 'Your chats';
   const signedIn = profileStatus === 'ready' || profileStatus === 'wallet-needed';
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
@@ -481,6 +555,12 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
       if (!response.ok || !data.broadcast) throw new Error(data.error || 'Broadcast could not be saved.');
       setBroadcasts((items) => [data.broadcast!, ...items.filter((item) => item.id !== data.broadcast!.id)]);
+      if (draftIdRef.current) {
+        void fetch(`/api/drafts/${encodeURIComponent(draftIdRef.current)}?userAddress=${encodeURIComponent(userAddress)}`, { method: 'DELETE' });
+        setDrafts((items) => items.filter((item) => item.id !== draftIdRef.current));
+        draftIdRef.current = null;
+      }
+      composerDirty.current = false;
       setBroadcastDraft('');
       setBroadcastMedia(null);
     } catch (error) {
@@ -553,7 +633,9 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       });
       const data = await response.json() as { error?: string; broadcast?: { text: string; updatedAt?: string } };
       if (!response.ok) throw new Error(data.error || 'Post could not be edited.');
-      setBroadcasts((items) => items.map((item) => item.id === broadcastId ? { ...item, text, updatedAt: data.broadcast?.updatedAt } : item));
+      const patch = (item: FeedBroadcast) => item.id === broadcastId ? { ...item, text, updatedAt: data.broadcast?.updatedAt } : item;
+      setBroadcasts((items) => items.map(patch));
+      setExplorePosts((items) => items.map(patch));
       setEditingId(null);
     } catch (error) {
       setFeedError(error instanceof Error ? error.message : 'Post could not be edited.');
@@ -575,6 +657,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error || 'Post could not be deleted.');
       setBroadcasts((items) => items.filter((item) => item.id !== broadcastId));
+      setExplorePosts((items) => items.filter((item) => item.id !== broadcastId));
     } catch (error) {
       setFeedError(error instanceof Error ? error.message : 'Post could not be deleted.');
     } finally {
@@ -598,6 +681,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
       if (!response.ok || !data.broadcast) throw new Error(data.error || 'Like could not be saved.');
       setBroadcasts((items) => items.map((item) => item.id === broadcastId ? data.broadcast! : item));
+      setExplorePosts((items) => items.map((item) => item.id === broadcastId ? data.broadcast! : item));
     } catch (error) {
       setFeedError(error instanceof Error ? error.message : 'Like could not be saved.');
     } finally {
@@ -624,6 +708,7 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
       const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
       if (!response.ok || !data.broadcast) throw new Error(data.error || 'Comment could not be saved.');
       setBroadcasts((items) => items.map((item) => item.id === broadcastId ? data.broadcast! : item));
+      setExplorePosts((items) => items.map((item) => item.id === broadcastId ? data.broadcast! : item));
       setCommentDrafts((drafts) => ({ ...drafts, [broadcastId]: '' }));
     } catch (error) {
       setFeedError(error instanceof Error ? error.message : 'Comment could not be saved.');
@@ -632,17 +717,201 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
     }
   }
 
+  async function saveDraftNow() {
+    if (!userAddress || (!broadcastDraft.trim() && !broadcastMedia)) return;
+    composerDirty.current = true;
+    const response = await fetch(draftIdRef.current ? `/api/drafts/${encodeURIComponent(draftIdRef.current)}` : '/api/drafts', {
+      method: draftIdRef.current ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userAddress, text: broadcastDraft, mediaUrl: broadcastMedia }),
+    });
+    const data = await response.json().catch(() => ({})) as { draft?: { id: string; text: string; mediaUrl: string | null; updatedAt: string | null }; error?: string };
+    if (!response.ok || !data.draft) {
+      setFeedError(data.error || 'Draft could not be saved.');
+      return;
+    }
+    draftIdRef.current = data.draft.id;
+    setDrafts((items) => [data.draft!, ...items.filter((item) => item.id !== data.draft!.id)]);
+    onNotify('Draft saved.');
+  }
+
+  async function removeDraft(id: string) {
+    if (!userAddress) return;
+    await fetch(`/api/drafts/${encodeURIComponent(id)}?userAddress=${encodeURIComponent(userAddress)}`, { method: 'DELETE' });
+    setDrafts((items) => items.filter((item) => item.id !== id));
+    if (draftIdRef.current === id) {
+      draftIdRef.current = null;
+      composerDirty.current = false;
+      setBroadcastDraft('');
+      setBroadcastMedia(null);
+    }
+  }
+
+  function resumeDraft(draft: { id: string; text: string; mediaUrl: string | null }) {
+    draftIdRef.current = draft.id;
+    composerDirty.current = false;
+    setBroadcastDraft(draft.text);
+    setBroadcastMedia(draft.mediaUrl);
+    onChangeView?.('feed');
+  }
+
+  async function openThread(broadcastId: string, commentId: string) {
+    if (commentThreadId === commentId) {
+      setCommentThreadId(null);
+      return;
+    }
+    setCommentThreadId(commentId);
+    setReplyDraft('');
+    const response = await fetch(`/api/broadcasts/${encodeURIComponent(broadcastId)}/comments/${encodeURIComponent(commentId)}`);
+    const data = await response.json().catch(() => ({})) as { replies?: FeedComment[]; error?: string };
+    if (!response.ok) {
+      setFeedError(data.error || 'Could not open that thread.');
+      return;
+    }
+    setThreadReplies(data.replies ?? []);
+  }
+
+  async function sendReply(event: FormEvent<HTMLFormElement>, broadcastId: string, commentId: string) {
+    event.preventDefault();
+    const text = replyDraft.trim();
+    if (!text) return;
+    if (profileStatus !== 'ready' || !userAddress) {
+      onRequestProfile();
+      return;
+    }
+    setPendingBroadcastId(commentId);
+    try {
+      const response = await fetch(`/api/broadcasts/${encodeURIComponent(broadcastId)}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, text, parentId: commentId }),
+      });
+      const data = await response.json() as { broadcast?: FeedBroadcast; error?: string };
+      if (!response.ok || !data.broadcast) throw new Error(data.error || 'Reply could not be saved.');
+      setBroadcasts((items) => items.map((item) => item.id === broadcastId ? data.broadcast! : item));
+      setExplorePosts((items) => items.map((item) => item.id === broadcastId ? data.broadcast! : item));
+      setReplyDraft('');
+      const thread = await fetch(`/api/broadcasts/${encodeURIComponent(broadcastId)}/comments/${encodeURIComponent(commentId)}`);
+      const threadData = await thread.json() as { replies?: FeedComment[] };
+      setThreadReplies(threadData.replies ?? []);
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : 'Reply could not be saved.');
+    } finally {
+      setPendingBroadcastId(null);
+    }
+  }
+
+  function commentName(comment: FeedComment) {
+    if (comment.username && !comment.username.startsWith('user_')) return comment.username;
+    if (userAddress && comment.userId === `user_${userAddress.toLowerCase()}`) return 'You';
+    return 'Someone';
+  }
+
+  const feedSwitch = (
+    <div className="feed-switch" role="tablist" aria-label="City feeds">
+      <button type="button" role="tab" aria-selected={view === 'feed'} className={view === 'feed' ? 'is-selected' : ''} onClick={() => onChangeView?.('feed')}>City</button>
+      <button type="button" role="tab" aria-selected={view === 'explore'} className={view === 'explore' ? 'is-selected' : ''} onClick={() => onChangeView?.('explore')}>Explore</button>
+    </div>
+  );
+
+  function renderComments(broadcast: FeedBroadcast) {
+    return (
+      <>
+        {broadcast.comments.map((comment) => (
+          <div className="broadcast-comment" key={comment.id}>
+            <p><strong>{comment.username && !comment.username.startsWith('user_') ? <button type="button" className="mention-link" onClick={() => onOpenUser?.(comment.username!)}>{commentName(comment)}</button> : commentName(comment)}</strong> </p>
+            <PostText text={comment.text} onTag={onOpenHashtag} onMention={onOpenUser} />
+            <button type="button" className="comment-replies" onClick={() => void openThread(broadcast.id, comment.id)}>{countLabel(comment.replyCount ?? 0, 'reply', 'replies')}</button>
+            {commentThreadId === comment.id && (
+              <div className="comment-thread">
+                {threadReplies.map((reply) => (
+                  <div key={reply.id} className="comment-reply">
+                    <strong>{reply.username && !reply.username.startsWith('user_') ? <button type="button" className="mention-link" onClick={() => onOpenUser?.(reply.username!)}>{commentName(reply)}</button> : commentName(reply)}</strong>
+                    <PostText text={reply.text} onTag={onOpenHashtag} onMention={onOpenUser} />
+                  </div>
+                ))}
+                {threadReplies.length === 0 && <p className="event-slot-meta">No replies yet.</p>}
+                <form className="broadcast-comment-form" onSubmit={(event) => void sendReply(event, broadcast.id, comment.id)}>
+                  <MentionComposer multiline={false} value={replyDraft} onChange={setReplyDraft} placeholder="Write a reply" label="Write a reply" />
+                  <button type="submit" disabled={!replyDraft.trim() || pendingBroadcastId === comment.id} aria-label="Post reply"><Send size={14} /></button>
+                </form>
+              </div>
+            )}
+          </div>
+        ))}
+      </>
+    );
+  }
+
+  function conversationCount(broadcast: FeedBroadcast) {
+    return broadcast.comments.reduce((total, comment) => total + 1 + (comment.replyCount ?? 0), 0);
+  }
+
+  function renderBroadcast(broadcast: FeedBroadcast) {
+    const isOwn = !!userAddress && broadcast.userId === `user_${userAddress.toLowerCase()}`;
+    const author = isOwn ? 'You' : broadcast.username && !broadcast.username.startsWith('user_') ? broadcast.username : 'Someone';
+    const authorAvatar = broadcast.avatarUrl || (isOwn ? avatarSrc : undefined);
+    const named = Boolean(broadcast.username && !broadcast.username.startsWith('user_') && !isOwn);
+    return (
+      <article className="broadcast-card" key={broadcast.id}>
+        <header>
+          <span className="broadcast-composer-avatar">{authorAvatar ? <img src={authorAvatar} alt="" /> : author.slice(0, 1).toUpperCase()}</span>
+          <span>
+            <strong>{named ? <button type="button" className="mention-link" onClick={() => onOpenUser?.(broadcast.username!)}>{author}</button> : author}</strong>
+            <small>{timeAgo(Date.parse(broadcast.createdAt))}</small>
+          </span>
+          <span className="broadcast-pulse" title="Shared with the city" />
+        </header>
+        {editingId === broadcast.id ? (
+          <form className="broadcast-comment-form" onSubmit={(event) => { event.preventDefault(); void saveEdit(broadcast.id); }}>
+            <input value={editDraft} onChange={(event) => setEditDraft(event.target.value.slice(0, 240))} aria-label="Edit post" />
+            <button type="submit" disabled={!editDraft.trim()} aria-label="Save edit">Save</button>
+          </form>
+        ) : <PostText text={broadcast.text} onTag={onOpenHashtag} onMention={onOpenUser} />}
+        {broadcast.mediaUrl && <img className="broadcast-media" src={broadcast.mediaUrl} alt="" />}
+        {broadcast.updatedAt && broadcast.updatedAt !== broadcast.createdAt && <small className="chat-demo-note">Edited</small>}
+        <div className="broadcast-actions">
+          <button className={broadcast.liked ? 'is-liked' : ''} onClick={() => void toggleLike(broadcast.id)} disabled={pendingBroadcastId === broadcast.id} aria-label={broadcast.liked ? 'Unlike broadcast' : 'Like broadcast'}><Heart size={15} fill={broadcast.liked ? 'currentColor' : 'none'} /> {broadcast.likes}</button>
+          <button onClick={() => setCommentingId(commentingId === broadcast.id ? null : broadcast.id)}><MessageCircle size={15} /> {countLabel(conversationCount(broadcast), 'comment', 'comments')}</button>
+          {REACTIONS.map((emoji) => {
+            const count = (broadcast.reactions ?? []).filter((reaction) => reaction.emoji === emoji).length;
+            const mine = (broadcast.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.userId === `user_${userAddress?.toLowerCase()}`);
+            return <button key={emoji} type="button" className={mine ? 'is-liked' : ''} onClick={() => void toggleReaction(broadcast.id, emoji)} aria-label={`React ${emoji}`}>{emoji} {count || ''}</button>;
+          })}
+          {isOwn && <button type="button" onClick={() => { setEditingId(broadcast.id); setEditDraft(broadcast.text); }}>Edit</button>}
+          {isOwn && <button type="button" onClick={() => void deletePost(broadcast.id)}>Delete</button>}
+          <span className="broadcast-radius">CITY FEED</span>
+        </div>
+        {renderComments(broadcast)}
+        {commentingId === broadcast.id && (
+          <form className="broadcast-comment-form" onSubmit={(event) => sendBroadcastComment(event, broadcast.id)}>
+            <MentionComposer multiline={false} value={commentDrafts[broadcast.id] ?? ''} onChange={(next) => setCommentDrafts((drafts) => ({ ...drafts, [broadcast.id]: next }))} placeholder="Add a comment" label="Add a comment" />
+            <button type="submit" disabled={!commentDrafts[broadcast.id]?.trim() || pendingBroadcastId === broadcast.id} aria-label="Post comment"><Send size={14} /></button>
+          </form>
+        )}
+      </article>
+    );
+  }
+
   return (
     <Sheet open={open && view !== null} onClose={onClose} title={title} size="page" keepNav>
       {view === 'feed' && (
         <div className="social-feed">
+          {feedSwitch}
           <div className="social-live-line"><span className="live-dot" /> City feed</div>
           {profileStatus === 'ready' ? (
             <form className="broadcast-composer" onSubmit={sendBroadcast}>
               <span className="broadcast-composer-avatar">{avatarSrc ? <img src={avatarSrc} alt="" /> : 'Y'}</span>
-              <textarea value={broadcastDraft} onChange={(event) => setBroadcastDraft(event.target.value.slice(0, 240))} placeholder="What's happening around you?" rows={2} aria-label="Write a city broadcast" />
-              <MediaPicker selectedMedia={broadcastMedia} onMediaSelect={(url) => setBroadcastMedia(url)} onRemove={() => setBroadcastMedia(null)} />
-              <div className="broadcast-composer-bottom"><small>{broadcastDraft.length}/240 · saved to the city feed</small><Button type="button" variant="outline" disabled={broadcastSaving || (!broadcastDraft.trim() && !broadcastMedia)} onClick={() => void shareStory()}>Story</Button><Button type="submit" disabled={!broadcastDraft.trim() || broadcastSaving}><RadioIcon /> {broadcastSaving ? 'Saving…' : 'Broadcast'}</Button></div>
+              <MentionComposer value={broadcastDraft} onChange={(next) => { composerDirty.current = true; setBroadcastDraft(next); }} placeholder="What's happening around you?" label="Write a city broadcast" />
+              <MediaPicker selectedMedia={broadcastMedia} onMediaSelect={(url) => { composerDirty.current = true; setBroadcastMedia(url); }} onRemove={() => { composerDirty.current = true; setBroadcastMedia(null); }} />
+              <div className="broadcast-composer-bottom">
+                <small>{broadcastDraft.length}/240</small>
+                <div className="broadcast-composer-actions">
+                  <Button type="button" variant="outline" disabled={!broadcastDraft.trim() && !broadcastMedia} onClick={() => void saveDraftNow()}>Save draft</Button>
+                  <Button type="button" variant="outline" disabled={broadcastSaving || (!broadcastDraft.trim() && !broadcastMedia)} onClick={() => void shareStory()}>Story</Button>
+                  <Button type="submit" disabled={!broadcastDraft.trim() || broadcastSaving}><RadioIcon /> {broadcastSaving ? 'Saving…' : 'Broadcast'}</Button>
+                </div>
+              </div>
             </form>
           ) : (
             <div className="feed-profile-gate">
@@ -652,46 +921,50 @@ export function CitySocialSheet({ open, view, avatarSrc, profileStatus, userAddr
               {profileStatus !== 'checking' && profileStatus !== 'wallet-needed' && <Button type="button" onClick={onRequestProfile}>Open your profile</Button>}
             </div>
           )}
+          {profileStatus === 'ready' && drafts.length > 0 && (
+            <div className="draft-list" aria-label="Saved drafts">
+              {drafts.map((item) => (
+                <div className="draft-chip" key={item.id}>
+                  <button type="button" onClick={() => resumeDraft(item)}>{item.text.trim().slice(0, 42) || 'Photo draft'}</button>
+                  <button type="button" onClick={() => void removeDraft(item.id)} aria-label="Delete draft">×</button>
+                </div>
+              ))}
+            </div>
+          )}
           {feedError && <p className="feed-error" role="alert">{feedError}{broadcasts.length === 0 && <Button type="button" variant="outline" onClick={() => setFeedRetry((count) => count + 1)}>Try again</Button>}</p>}
           {feedLoading && broadcasts.length === 0 && <p className="social-empty" role="status">Loading the city feed…</p>}
-          {broadcasts.map((broadcast) => {
-            const isOwn = !!userAddress && broadcast.userId === `user_${userAddress.toLowerCase()}`;
-            const author = isOwn ? 'You' : broadcast.username && !broadcast.username.startsWith('user_') ? broadcast.username : 'Someone';
-            const authorAvatar = broadcast.avatarUrl || (isOwn ? avatarSrc : undefined);
-            return (
-            <article className="broadcast-card" key={broadcast.id}>
-              <header><span className="broadcast-composer-avatar">{authorAvatar ? <img src={authorAvatar} alt="" /> : author.slice(0, 1).toUpperCase()}</span><span><strong>{author}</strong><small>{timeAgo(Date.parse(broadcast.createdAt))}</small></span><span className="broadcast-pulse" title="Shared with the city" /></header>
-              {editingId === broadcast.id ? (
-                <form className="broadcast-comment-form" onSubmit={(event) => { event.preventDefault(); void saveEdit(broadcast.id); }}>
-                  <input value={editDraft} onChange={(event) => setEditDraft(event.target.value.slice(0, 240))} aria-label="Edit post" />
-                  <button type="submit" disabled={!editDraft.trim()} aria-label="Save edit">Save</button>
-                </form>
-              ) : <PostText text={broadcast.text} onTag={onOpenHashtag} />}
-              {broadcast.mediaUrl && <img className="broadcast-media" src={broadcast.mediaUrl} alt="" />}
-              {broadcast.updatedAt && broadcast.updatedAt !== broadcast.createdAt && <small className="chat-demo-note">Edited</small>}
-              <div className="broadcast-actions">
-                <button className={broadcast.liked ? 'is-liked' : ''} onClick={() => void toggleLike(broadcast.id)} disabled={pendingBroadcastId === broadcast.id} aria-label={broadcast.liked ? 'Unlike broadcast' : 'Like broadcast'}><Heart size={15} fill={broadcast.liked ? 'currentColor' : 'none'} /> {broadcast.likes}</button>
-                <button onClick={() => setCommentingId(commentingId === broadcast.id ? null : broadcast.id)}><MessageCircle size={15} /> {countLabel(broadcast.comments.length, 'comment', 'comments')}</button>
-                {REACTIONS.map((emoji) => {
-                  const count = (broadcast.reactions ?? []).filter((reaction) => reaction.emoji === emoji).length;
-                  const mine = (broadcast.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.userId === `user_${userAddress?.toLowerCase()}`);
-                  return <button key={emoji} type="button" className={mine ? 'is-liked' : ''} onClick={() => void toggleReaction(broadcast.id, emoji)} aria-label={`React ${emoji}`}>{emoji} {count || ''}</button>;
-                })}
-                {isOwn && <button type="button" onClick={() => { setEditingId(broadcast.id); setEditDraft(broadcast.text); }}>Edit</button>}
-                {isOwn && <button type="button" onClick={() => void deletePost(broadcast.id)}>Delete</button>}
-                <span className="broadcast-radius">CITY FEED</span>
-              </div>
-              {broadcast.comments.map((comment) => <p className="broadcast-comment" key={comment.id}><strong>{comment.username && !comment.username.startsWith('user_') ? comment.username : comment.userId === `user_${userAddress?.toLowerCase()}` ? 'You' : 'Someone'}</strong> {comment.text}</p>)}
-              {commentingId === broadcast.id && <form className="broadcast-comment-form" onSubmit={(event) => sendBroadcastComment(event, broadcast.id)}>
-                <input value={commentDrafts[broadcast.id] ?? ''} onChange={(event) => setCommentDrafts((drafts) => ({ ...drafts, [broadcast.id]: event.target.value.slice(0, 240) }))} placeholder="Add a comment" aria-label="Add a comment" />
-                <button type="submit" disabled={!commentDrafts[broadcast.id]?.trim() || pendingBroadcastId === broadcast.id} aria-label="Post comment"><Send size={14} /></button>
-              </form>}
-            </article>
-          );
-          })}
+          {broadcasts.map((broadcast) => renderBroadcast(broadcast))}
           {!feedLoading && !feedError && broadcasts.length === 0 && (
             <p className="social-empty">No broadcasts yet. Be the first to share what&apos;s happening.</p>
           )}
+          <Button type="button" variant="outline" onClick={onClose}><MapPin size={15} /> Back to the map</Button>
+        </div>
+      )}
+
+      {view === 'explore' && (
+        <div className="social-feed social-explore">
+          {feedSwitch}
+          <p className="social-section-label">HASHTAGS</p>
+          <div className="explore-tags">
+            {exploreTags.map((tag) => (
+              <button key={tag.tag} type="button" className="filter-chip" onClick={() => onOpenHashtag?.(tag.tag)}>#{tag.tag}</button>
+            ))}
+          </div>
+          {exploreTags.length === 0 && !exploreLoading && <p className="social-empty">No hashtags yet.</p>}
+          <p className="social-section-label">NEW PEOPLE</p>
+          <div className="explore-people">
+            {explorePeople.filter((person) => person.username).map((person) => (
+              <button key={person.id} type="button" className="explore-person" onClick={() => onOpenUser?.(person.username!)}>
+                <span className="broadcast-composer-avatar">{person.avatarUrl ? <img src={person.avatarUrl} alt="" /> : person.username!.slice(0, 1).toUpperCase()}</span>
+                <strong>@{person.username}</strong>
+              </button>
+            ))}
+          </div>
+          {explorePeople.length === 0 && !exploreLoading && <p className="social-empty">No new people yet.</p>}
+          <p className="social-section-label">POPULAR THIS WEEK</p>
+          {exploreLoading && explorePosts.length === 0 && <p className="social-empty" role="status">Looking around the city…</p>}
+          {explorePosts.map((broadcast) => renderBroadcast(broadcast))}
+          {!exploreLoading && explorePosts.length === 0 && <p className="social-empty">Nothing trending yet. Share something on the city feed.</p>}
           <Button type="button" variant="outline" onClick={onClose}><MapPin size={15} /> Back to the map</Button>
         </div>
       )}

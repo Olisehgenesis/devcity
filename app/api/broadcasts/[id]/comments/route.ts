@@ -5,7 +5,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const body = await request.json();
-    const broadcast = await addComment(id, body.userAddress, body.text);
+    const broadcast = await addComment(id, body.userAddress, body.text, body.parentId);
     return NextResponse.json({ broadcast }, { status: 201 });
   } catch (err) {
     if (err instanceof ApiError) {

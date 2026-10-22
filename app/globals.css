@@ -164,6 +164,39 @@ h1, h2, h3, .city-intro > strong, .hud-line strong { font-family: var(--font-dis
 .broadcast-comment-form input { min-width: 0; flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); font-size: 11px; }
 .broadcast-comment-form button { display: grid; place-items: center; width: 32px; border-radius: 9px; background: var(--surface); color: var(--ink); }
 .broadcast-comment-form button:disabled { opacity: .45; }
+.broadcast-composer-bottom { grid-column: 1 / -1; flex-wrap: wrap; }
+.broadcast-composer-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.comment-thread .broadcast-comment-form { margin-left: 0; }
+.broadcast-composer .mention-field { grid-column: 2; min-width: 0; }
+.broadcast-composer .media-picker { grid-column: 1 / -1; margin-bottom: 0; }
+.broadcast-composer .media-upload-zone { padding: 12px; }
+.feed-switch { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.feed-switch button { height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink); font-size: 12px; font-weight: 800; }
+.feed-switch button.is-selected { background: #D01265; border-color: #D01265; color: #fff; }
+.mention-field { position: relative; min-width: 0; flex: 1; }
+.mention-field textarea,
+.mention-field input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13px; }
+.mention-field textarea { min-height: 72px; resize: vertical; }
+.mention-field textarea::placeholder,
+.mention-field input::placeholder { color: var(--muted); }
+.broadcast-comment-form .mention-field input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 11px; }
+.mention-menu { position: absolute; z-index: 6; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); box-shadow: 0 8px 24px rgba(26, 16, 40, .12); }
+.mention-menu button,
+.broadcast-comment-form .mention-menu button { display: block; width: 100%; height: auto; padding: 8px 10px; border-radius: 8px; background: transparent; color: #D01265; font-size: 13px; font-weight: 800; text-align: left; }
+.mention-link { padding: 0; border: 0; background: transparent; color: #D01265; font-weight: 800; }
+.comment-replies { margin-top: 4px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; font-weight: 750; }
+.comment-thread { margin: 8px 0 0 12px; padding-left: 10px; border-left: 2px solid #f3d3e2; }
+.comment-reply { margin-top: 6px; color: var(--ink); }
+.comment-reply .broadcast-copy { padding: 2px 0 0; }
+.draft-list { display: flex; gap: 8px; overflow-x: auto; margin: 0 0 12px; padding-bottom: 4px; }
+.draft-chip { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; max-width: 200px; padding: 4px 4px 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
+.draft-chip button:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: transparent; color: var(--ink); font-size: 12px; font-weight: 700; }
+.draft-chip button:last-child { width: 28px; height: 28px; border-radius: 50%; background: transparent; color: var(--muted); font-size: 16px; line-height: 1; }
+.explore-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.explore-people { display: flex; gap: 10px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 4px; }
+.explore-person { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; width: 76px; background: transparent; color: var(--ink); }
+.explore-person strong { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 800; }
+.social-explore .broadcast-card { margin-top: 8px; }
 .feed-profile-gate { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 19px; background: color-mix(in srgb, var(--lime) 18%, var(--paper)); text-align: center; }
 .feed-profile-gate strong { font-size: 13px; }
 .feed-profile-gate p { max-width: 34ch; color: var(--muted); font-size: 11px; line-height: 1.45; }

@@ -44,6 +44,7 @@ model User {
   eventRsvps        EventRsvp[]
   eventMessages     EventMessage[]
   notifications     Notification[]
+  drafts            BroadcastDraft[]
 stalls            Stall[]
    booths            Booth[]
    following         Follow[]              @relation("FollowFollower")
@@ -477,17 +478,34 @@ model BroadcastLike {
 }
 
 model BroadcastComment {
-  id          String    @id @default(cuid())
+  id          String             @id @default(cuid())
   broadcastId String
   userId      String
-  text        String    @db.VarChar(240)
-  createdAt   DateTime  @default(now())
-  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId    String?
+  text        String             @db.VarChar(240)
+  createdAt   DateTime           @default(now())
+  broadcast   Broadcast          @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent      BroadcastComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies     BroadcastComment[] @relation("CommentReplies")
 
   @@index([broadcastId, createdAt])
   @@index([userId, createdAt])
+  @@index([parentId])
   @@map("broadcast_comments")
+}
+
+model BroadcastDraft {
+  id        String   @id @default(cuid())
+  userId    String
+  text      String   @db.VarChar(240)
+  mediaUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+  @@map("broadcast_drafts")
 }
 
 model BroadcastReaction {

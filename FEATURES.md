@@ -15,6 +15,9 @@ Wired:
 - Event cards call `/api/events/[id]/rsvp` and `/api/events/[id]/chat`.
 - `/api/activity` shows on your profile. `/api/game/leaderboard` shows on the leaderboard.
 - A localhost-only test CELO button calls `/api/dev/faucet`.
+- Feed comments have one-level replies, with a reply count and a thread under the comment. Replies, comments, and posts accept `@handle` mentions. Typing `@` shows people from `/api/mentions`. A mention renders as a link to `/u/<handle>` and notifies that person. Replies notify the comment author. Both show in the notifications sheet.
+- Unfinished posts save on the server for the signed-in wallet (`/api/drafts`), including an automatic save while typing and a Save draft button. The composer lists those drafts so they can be resumed or deleted. Publishing a post removes the draft it came from.
+- City hub → Explore, and the City / Explore switch on the feed, open `/api/explore`: popular posts from the last week, hashtags, and new people.
 
 Left as they are:
 - `WalletTradeTab` cannot sign with the passkey key. It stays a browser-wallet screen, and Swap remains the passkey trade.
@@ -23,7 +26,8 @@ Left as they are:
 - Self verification still needs a configured public callback. The profile does not show the webhook path.
 - On-chain claim, send, and swap still need a funded wallet and a registered drop. The screens no longer block before that step.
 - The dev faucet returns an error when this machine has no faucet key. The button only appears on localhost.
-- Replies, mentions, drafts, rich text, and an explore feed were never built. They stay planned.
+- Rich text formatting for posts was never built. It stays planned.
+
 **Project:** Location-based social app for Devcon Mumbai with blockchain integration
 
 ---
@@ -77,13 +81,16 @@ This document tracks all features being implemented for DEVCITY26. Each feature 
 - **Notes:** Toggle behavior (add/remove same emoji), grouped by emoji in response
 
 ### Content Replies/Threads
-- **Status:** ⏳ Planned
+- **Status:** ✅ Complete
 - **Priority:** 🟡 High
 - **Description:** Enable threaded replies to broadcasts and comments
 - **Implementation Files:**
-  - `prisma/schema.prisma` (ADD: parentId to BroadcastComment)
-  - `src/lib/db-helpers.ts` (UPDATE: addComment to support threads)
-  - `app/components/CommentThread.tsx` (NEW)
+  - `prisma/schema.prisma` (ADD: parentId to BroadcastComment) ✅
+  - `prisma/migrations/20261022060000_social_replies_drafts` ✅
+  - `src/lib/db-helpers.ts` (UPDATE: addComment, listReplies) ✅
+  - `app/api/broadcasts/[id]/comments/route.ts` ✅
+  - `app/api/broadcasts/[id]/comments/[commentId]/route.ts` ✅
+  - `app/components/CitySocialSheet.tsx` ✅
 - **Dependencies:** None
 - **Database Changes:**
   ```prisma
@@ -96,14 +103,16 @@ This document tracks all features being implemented for DEVCITY26. Each feature 
   ```
 
 ### User Mentions
-- **Status:** ⏳ Planned
+- **Status:** ✅ Complete
 - **Priority:** 🟢 Medium
-- **Description:** Allow @mentioning users in broadcasts and comments
+- **Description:** Allow @mentioning users in broadcasts, comments, and replies
 - **Implementation Files:**
-  - `app/components/MentionInput.tsx` (NEW)
-  - `app/api/usernames/search/route.ts` (NEW)
-  - `src/lib/mentions.ts` (NEW)
+  - `app/components/MentionComposer.tsx` ✅
+  - `app/api/mentions/route.ts` ✅
+  - `src/lib/mentions.ts` ✅
+  - `src/lib/mentions.test.ts` ✅
 - **Dependencies:** User search functionality
+- **Notes:** Mentions link to `/u/<handle>` and create a `mention` notification. A reply also creates a `reply` notification for the comment author.
 
 ### Hashtags
 - **Status:** ✅ Complete
@@ -170,13 +179,16 @@ This document tracks all features being implemented for DEVCITY26. Each feature 
 - **Dependencies:** Follow system, presence data
 
 ### Explore Feed
-- **Status:** ⏳ Planned
+- **Status:** ✅ Complete
 - **Priority:** 🟢 Medium
-- **Description:** Non-map-based content discovery feed
+- **Description:** Discover popular posts, hashtags, and new people beyond the city feed
 - **Implementation Files:**
-  - `app/feed/page.tsx` (NEW)
-  - `app/components/FeedCard.tsx` (NEW)
+  - `app/api/explore/route.ts` ✅
+  - `src/lib/db-helpers.ts` (ADD: listExplore) ✅
+  - `app/components/CitySocialSheet.tsx` ✅
+  - `app/page.tsx` (city hub entry) ✅
 - **Dependencies:** Global search, trending
+- **Notes:** Posts from the last 7 days rank by likes plus comments. The city hub and the feed's Explore tab both open it.
 
 ---
 
@@ -209,13 +221,17 @@ This document tracks all features being implemented for DEVCITY26. Each feature 
 - **Dependencies:** None
 
 ### Draft System
-- **Status:** ⏳ Planned
+- **Status:** ✅ Complete
 - **Priority:** 🟢 Medium
-- **Description:** Save drafts of broadcasts and stories
+- **Description:** Save unfinished broadcasts for the signed-in account
 - **Implementation Files:**
-  - `src/lib/drafts.ts` (NEW - local storage with cloud sync)
-  - `app/components/DraftManager.tsx` (NEW)
-- **Dependencies:** Cloud sync for user data
+  - `prisma/schema.prisma` (ADD: BroadcastDraft) ✅
+  - `app/api/drafts/route.ts` ✅
+  - `app/api/drafts/[id]/route.ts` ✅
+  - `src/lib/db-helpers.ts` (ADD: listDrafts, saveDraft, deleteDraft) ✅
+  - `app/components/CitySocialSheet.tsx` ✅
+- **Dependencies:** The signed-in wallet address, same as the rest of the social API
+- **Notes:** Drafts live in Postgres per user. The composer auto-saves while typing and has an explicit Save draft action. Publishing deletes the draft that was resumed.
 
 ### Rich Text Formatting
 - **Status:** ⏳ Planned
@@ -643,7 +659,7 @@ This document tracks all features being implemented for DEVCITY26. Each feature 
 
 ### Phase 2 (High Priority - Week 2)
 13. ✅ Broadcast Reactions
-14. ⏳ Content Replies/Threads
+14. ✅ Content Replies/Threads
 15. ✅ Suggested Users
 16. ✅ Trending Content
 17. ✅ Post Editing
@@ -657,10 +673,10 @@ This document tracks all features being implemented for DEVCITY26. Each feature 
 25. ⏳ Empty States
 
 ### Phase 3 (Medium Priority - Week 3)
-26. ⏳ User Mentions
+26. ✅ User Mentions
 27. ✅ Hashtags
-28. ⏳ Explore Feed
-29. ⏳ Draft System
+28. ✅ Explore Feed
+29. ✅ Draft System
 30. ⏳ Attendee Discovery
 31. ⏳ NFT Support
 32. ⏳ Location History
